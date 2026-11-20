@@ -1013,8 +1013,13 @@ async function notifyCourierArrivedToCustomer(customerPhone, extraData = {}) {
   });
 }
 
-/** Буюртма тури — мижоз хабари матни учун (`orders.type`). */
-function orderTypeLabel(type) {
+/** «AVA Супермаркет» (`type: platform`, `subtype: supermarket`, эга 2026-11-21) — хабарлардаги ном, 3 тил. */
+const SUPERMARKET_LABELS = Object.freeze({ uz_Cyrl: 'AVA Супермаркет', uz_Latn: 'AVA Supermarket', ru: 'AVA Супермаркет' });
+const isSupermarketOrder = (order) => String((order && order.type) || '') === 'platform' && String((order && order.subtype) || '') === 'supermarket';
+
+/** Буюртма тури — мижоз хабари матни учун (`orders.type`; супермаркет — `subtype`). */
+function orderTypeLabel(type, subtype) {
+  if (String(type || '') === 'platform' && String(subtype || '') === 'supermarket') return SUPERMARKET_LABELS.uz_Cyrl;
   switch (String(type || '')) {
     case 'platform': return 'Улгуржи бозор';
     default: return 'Нон';
@@ -1100,7 +1105,9 @@ async function notifyPlatformStaff(orderId, order, status) {
       const isAdminRole = u.role === 'admin' || u.role === 'superadmin';
       const key = !handed ? 'platform_seller_awaiting_courier'
         : (isAdminRole ? 'platform_seller_handed_courier' : 'platform_seller_handed_courier_nolink');
-      const m = notifI18n.render(key, notifI18n.normalizeLang(u.appLang), params);
+      const lang = notifI18n.normalizeLang(u.appLang);
+      const labels = isSupermarketOrder(order) ? SUPERMARKET_LABELS : COURIER_ORDER_LABELS.platform;
+      const m = notifI18n.render(key, lang, { ...params, label: labels[lang] || labels.uz_Cyrl });
       messages.push({
         token,
         notification: { title: m.title, body: m.body },
@@ -1154,7 +1161,7 @@ async function notifyCouriersOrderReady(orderId, order) {
       if (!tokenOk(token) || seen.has(token)) continue;
       seen.add(token);
       const lang = await notifI18n.langOfPhone(db, c.id);
-      const labels = COURIER_ORDER_LABELS[type] || COURIER_ORDER_LABELS.bread;
+      const labels = isSupermarketOrder(order) ? SUPERMARKET_LABELS : (COURIER_ORDER_LABELS[type] || COURIER_ORDER_LABELS.bread);
       const km = c.distanceM == null ? '' : ` · ${(c.distanceM / 1000).toFixed(1)} ${lang === 'uz_Latn' ? 'km' : 'км'}`;
       const m = notifI18n.render('courier_new_order', lang, { label: labels[lang] || labels.uz_Cyrl, amount, dist: km });
       messages.push({
@@ -1248,7 +1255,7 @@ exports.onOrderUpdate = functions.firestore
     }
 
     const orderType = after.type || 'bread';
-    const typeLabel = orderTypeLabel(orderType);
+    const typeLabel = orderTypeLabel(orderType, after.subtype);
     // AVA дўкони (эга 2026-11-07): «курьерни кутмоқда» / «курьерга топширилди» + кузатиш ҳаволаси,
     // мижоз тилида (3 тил). Курьер олганда икки йўл ҳам `status: in_delivery` + `courier_picked` ёзади.
     const platformKey = platformCourierStepKey(orderType, status);
@@ -1368,7 +1375,7 @@ exports.onOrderCreate = functions.firestore
     if (isBusinessOrder(order)) return;
     const total = order.total || 0;
     const fmt = new Intl.NumberFormat('uz-UZ').format(total);
-    const emoji = orderType === 'platform' ? 'Ulgurji' : 'Non';
+    const emoji = isSupermarketOrder(order) ? 'AVA Supermarket' : (orderType === 'platform' ? 'Ulgurji' : 'Non');
     const title = `Yangi ${emoji} buyurtmasi`;
     const body = `${fmt} sum - ${order.userName || order.userPhone || '-'}`;
 
@@ -1427,7 +1434,7 @@ exports.onOrderCreate = functions.firestore
 
     const uid = canonicalUid(order.userPhone || order.phone || '');
     if (uid.length >= 9) {
-      const typeLabel = orderTypeLabel(orderType);
+      const typeLabel = orderTypeLabel(orderType, order.subtype);
       const receipt = formatOrderReceiptBody(order);
       try {
         // Буюртмага битта чек: триггер қайта етказилса иккинчиси ёзилмайди.

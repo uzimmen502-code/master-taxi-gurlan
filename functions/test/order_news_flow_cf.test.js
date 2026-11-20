@@ -279,6 +279,44 @@ async function main() {
     assert.ok(near[0].notification.body.startsWith('Нон ·'), near[0].notification.body);
   });
 
+  // ── N12 / N13 (эга 2026-11-21): «AVA Супермаркет» (platform + subtype supermarket) — «Улгуржи бозор» эмас ──
+  const smOrder = { ...plat, subtype: 'supermarket' };
+  await resetCouriers();
+  await check('N12 supermarket: mijoz cheki/status — «AVA Супермаркет»; admin push sarlavhasi «AVA Supermarket»; Ulgurji (subtype yo\'q) o\'zgarmagan', async () => {
+    const ref = db.collection('orders').doc('s1');
+    await ref.set(smOrder);
+    await fns.onOrderCreate.run(await ref.get(), { eventId: 'e-s1', params: { orderId: 's1' } });
+    const [p] = await orderNews('s1');
+    assert.ok(p.body.endsWith('AVA Супермаркет') && !p.body.includes('Улгуржи'), p.body);
+    const adminNew = pushOf(ADMIN_TOKEN).find((m) => m.data.type === 'new_order');
+    assert.strictEqual(adminNew.notification.title, 'Yangi AVA Supermarket buyurtmasi');
+    const cust = pushOf(TOKEN).find((m) => m.data.status === 'new');
+    assert.ok(cust.notification.body.endsWith('AVA Супермаркет'), cust.notification.body);
+    await updateOrder('s2', { ...smOrder, status: 'new' }, { status: 'accepted' }, 'evt-s2');
+    const [n] = await orderNews('s2');
+    assert.ok(n.body.includes('AVA Супермаркет') && !n.body.includes('Улгуржи'), n.body);
+    // эски Улгуржи — аввалгидек
+    const r2 = db.collection('orders').doc('s3');
+    await r2.set(plat);
+    await fns.onOrderCreate.run(await r2.get(), { eventId: 'e-s3', params: { orderId: 's3' } });
+    assert.ok((await orderNews('s3'))[0].body.endsWith('Улгуржи бозор'));
+    assert.ok(pushOf(ADMIN_TOKEN).some((m) => m.data.orderId === 's3' && m.notification.title === 'Yangi Ulgurji buyurtmasi'));
+  });
+
+  await resetCouriers();
+  await check('N13 supermarket ready → kuryer push «AVA Супермаркет · …», sotuvchi push «AVA Supermarket · №…» (admin uz_Latn); AVA do\'koni o\'zgarmagan', async () => {
+    await updateOrder('s4', { ...smOrder, ...ORDER_LOC, status: 'accepted' }, { status: 'ready' }, 'evt-s4');
+    const near = pushOf(NEAR_TOKEN);
+    assert.strictEqual(near.length, 1);
+    assert.ok(/^AVA Супермаркет · 55\s000 сўм/.test(near[0].notification.body), near[0].notification.body);
+    const a = pushOf(ADMIN_TOKEN);
+    assert.ok(a[0].notification.body.startsWith('AVA Supermarket · №S4'), a[0].notification.body);
+    assert.ok(pushOf(DISP_TOKEN)[0].notification.body.startsWith('AVA Супермаркет · №S4'), pushOf(DISP_TOKEN)[0].notification.body);
+    await updateOrder('s5', { ...plat, ...ORDER_LOC, status: 'accepted' }, { status: 'ready' }, 'evt-s5');
+    assert.ok(pushOf(ADMIN_TOKEN).some((m) => m.notification.body.startsWith("AVA do'koni · №S5")), 'AVA do\'koni matni saqlandi');
+    assert.ok(pushOf(DISP_TOKEN).some((m) => m.notification.body.startsWith('AVA дўкони · №S5')));
+  });
+
   const failed = results.filter((r) => !r).length;
   console.log(`\n${results.length - failed}/${results.length} passed`);
   process.exit(failed ? 1 : 0);

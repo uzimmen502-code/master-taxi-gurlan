@@ -30,7 +30,13 @@ class PlatformProduct {
     this.priceTiers = const [],
     this.createdAt,
     this.promoData = ProductBadgeData.empty,
+    this.supermarketGroupId = '',
   });
+
+  /// «AVA Супермаркет» гуруҳи (smGroupId, эга 2026-11-20; фақат сервер/админ ёзади). Бўш — супермаркетда эмас.
+  /// 	oFirestore*га ЁЗИЛМАЙДИ — админ формаси уни ўчириб юбормасин (update — merge).
+  final String supermarketGroupId;
+  bool get isSupermarket => supermarketGroupId.isNotEmpty;
 
   static const maxImages = 7;
   static const kindFood = 'food';
@@ -231,6 +237,7 @@ class PlatformProduct {
           ? (d['createdAt'] as Timestamp).toDate()
           : null,
       promoData: ProductBadgeData.fromMap(d),
+      supermarketGroupId: (d['smGroupId'] as String?)?.trim() ?? '',
     );
   }
 
@@ -276,6 +283,7 @@ class PlatformProduct {
       priceTiers: priceTiers ?? this.priceTiers,
       createdAt: createdAt ?? this.createdAt,
       promoData: promoData,
+      supermarketGroupId: supermarketGroupId,
     );
   }
 

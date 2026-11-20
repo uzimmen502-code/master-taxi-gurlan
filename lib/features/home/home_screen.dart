@@ -127,6 +127,7 @@ import 'widgets/home_lite_cards.dart';
 import 'widgets/service_spotlight_item.dart';
 import '../restaurants/domain/restaurants_access.dart';
 import '../markets/open_market.dart';
+import '../supermarket/screens/supermarket_home_screen.dart' show openSupermarket;
 import '../markets/data/market_taxonomy_repository.dart';
 import '../markets/domain/market_taxonomy.dart';
 import '../markets/screens/market_screen.dart';
@@ -1467,6 +1468,13 @@ class _HomeViewState extends State<_HomeView> {
         await _openWholesale(WholesaleProduct.marketChina);
       case 'cheap_products_home':
         await _openModule(HomeModulesCatalog.byId('cheap_products_home'));
+      // «AVA Супермаркет» (эга 2026-11-20): модул дарвозаси; сервер рухсати карточкани кўрсатишда.
+      case 'supermarket':
+        if (!ServiceConfigHolder.isOpenable('supermarket')) {
+          _showTezKundaSnack();
+          return;
+        }
+        await openSupermarket(context);
     }
   }
 

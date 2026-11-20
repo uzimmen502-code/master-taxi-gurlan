@@ -45,6 +45,11 @@ import '../repositories/ads_repository.dart';
 import '../utils/market_shop_items.dart';
 import '../widgets/ad_card.dart';
 import '../widgets/platform_market_card.dart';
+import '../../supermarket/screens/supermarket_home_screen.dart' show openSupermarket;
+
+/// Аралашдаги AVA маҳсулоти белгиси (lang калити): супермаркетга бириктирилган — «AVA Супермаркет»
+/// (эга 2026-11-20), бошқаси — аввалгидек «Улгуржи».
+String aralashPlatformBadgeKey(PlatformProduct p) => p.isSupermarket ? 'sm_badge' : 'wholesale_screen_title';
 
 /// [pinned] ни рўйхат бошига қўяди, айнан шу ID'ли бошқа нусхаларни олиб
 /// ташлайди (такрорланмасин). [pinned] `null` бўлса — рўйхат ўзгармайди.
@@ -694,12 +699,17 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                         itemBuilder: (_, i) {
                           final e = entries[i];
                           if (e.platform != null) {
-                            // Улгуржи маҳсулоти: тепа ўнгда «Улгуржи»; орқага — Улгуржи бозор.
+                            // «AVA Супермаркет» (эга 2026-11-20): AVA маҳсулоти Улгуржидан Супермаркетга
+                            // кўчди — Аралашда «AVA Супермаркет» белгиси билан қолади, босилса Супермаркет
+                            // гуруҳи. Супермаркетга бириктирилмаган (smGroupId йўқ) — аввалгидек «Улгуржи».
+                            final p = e.platform!;
                             return PlatformMarketCard(
-                              product: e.platform!,
+                              product: p,
                               catalog: platform,
-                              cornerBadge: context.tr('wholesale_screen_title'),
-                              onTap: () => _openWholesaleAva(e.platform!, platform),
+                              cornerBadge: context.tr(aralashPlatformBadgeKey(p)),
+                              onTap: () => p.isSupermarket
+                                  ? openSupermarket(context, initialGroupId: p.supermarketGroupId)
+                                  : _openWholesaleAva(p, platform),
                             );
                           }
                           if (e.wholesale != null) {

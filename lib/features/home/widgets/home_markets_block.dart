@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../markets/data/market_taxonomy_repository.dart';
 import '../../markets/domain/market_taxonomy.dart';
+import '../../supermarket/data/supermarket_repository.dart';
 import '../home_module_gate.dart';
 import 'home_lite_cards.dart';
 
@@ -44,6 +45,16 @@ class HomeMarketEntry {
 /// Эга тартиби (2026-11-20): Электроника, Мошина, Мол, Гўшт, Деҳқон, Маиший техника,
 /// Хизматлар, Уй-жой, Улгуржи, Хитой товарлари, Аралаш.
 const kHomeMarketEntries = <HomeMarketEntry>[
+  // «AVA Супермаркет» (эга 2026-11-20): блок ТЕПАСИДА. Дарвоза: модул ёқилган ВА сервер
+  // `getSupermarketAccess.allowed` ([visibleHomeMarkets] `supermarketAllowed`). Расм — эга берган (2026-11-20).
+  HomeMarketEntry(
+    id: 'supermarket',
+    moduleId: 'supermarket',
+    titleKey: 'home_market_supermarket_title',
+    imagePath: 'assets/images/markets/market_supermarket_v1.webp',
+    icon: Icons.local_grocery_store_rounded,
+    sloganKey: 'home_market_supermarket_slogan',
+  ),
   HomeMarketEntry(
     id: 'electronics',
     moduleId: 'electronics_market',
@@ -155,9 +166,14 @@ String taxonomyMarketSlogan(
 }
 
 /// Дарвоза бўйича кўринадиган карточкалар — [kHomeMarketEntries] тартибида.
-List<HomeMarketEntry> visibleHomeMarkets(bool Function(String moduleId) isVisible) => [
+/// Супермаркет — модул дарвозаси ВА [supermarketAllowed] (сервер рухсати) бирга.
+List<HomeMarketEntry> visibleHomeMarkets(
+  bool Function(String moduleId) isVisible, {
+  bool supermarketAllowed = false,
+}) =>
+    [
       for (final e in kHomeMarketEntries)
-        if (isVisible(e.moduleId)) e,
+        if (isVisible(e.moduleId) && (e.moduleId != 'supermarket' || supermarketAllowed)) e,
     ];
 
 class HomeMarketsBlock extends StatefulWidget {
@@ -166,7 +182,12 @@ class HomeMarketsBlock extends StatefulWidget {
     required this.onOpen,
     this.isVisible,
     this.loadTaxonomy,
+    this.loadSupermarketAccess,
   });
+
+  /// Тест учун; сукут — [SupermarketAccessCache.get] (`getSupermarketAccess`, 5 дақ кеш).
+  /// Фақат `supermarket` модули дарвозадан ўтса чақирилади (37-банд).
+  final Future<bool> Function()? loadSupermarketAccess;
 
   final void Function(HomeMarketEntry entry) onOpen;
 
@@ -182,10 +203,23 @@ class HomeMarketsBlock extends StatefulWidget {
 }
 
 class _HomeMarketsBlockState extends State<HomeMarketsBlock> {
+  bool _smAllowed = SupermarketAccessCache.cached?.allowed ?? false;
+  bool _smRequested = false;
+
   @override
   void initState() {
     super.initState();
     if (widget.loadTaxonomy != null || MarketTaxonomyRepository.cached == null) _load();
+  }
+
+  Future<void> _loadSmAccess() async {
+    try {
+      final ok = await (widget.loadSupermarketAccess?.call() ??
+          SupermarketAccessCache.get(FirebaseSupermarketApi()).then((a) => a.allowed));
+      if (mounted && ok != _smAllowed) setState(() => _smAllowed = ok);
+    } catch (e) {
+      debugPrint('[HomeMarketsBlock] SUPERMARKET_ACCESS_FAILED: $e');
+    }
   }
 
   Future<void> _load() async {
@@ -199,7 +233,13 @@ class _HomeMarketsBlockState extends State<HomeMarketsBlock> {
 
   @override
   Widget build(BuildContext context) {
-    final items = visibleHomeMarkets(widget.isVisible ?? HomeModuleGate.showInGrid);
+    final isVisible = widget.isVisible ?? HomeModuleGate.showInGrid;
+    // Сервер рухсати фақат модул дарвозадан ўтса сўралади (дарвоза кейинроқ юкланса ҳам — шу build'да).
+    if (!_smRequested && isVisible('supermarket')) {
+      _smRequested = true;
+      _loadSmAccess();
+    }
+    final items = visibleHomeMarkets(isVisible, supermarketAllowed: _smAllowed);
     if (items.isEmpty) return const SizedBox.shrink();
     return HomeLiteSection(
       key: const ValueKey('home_markets_block'),

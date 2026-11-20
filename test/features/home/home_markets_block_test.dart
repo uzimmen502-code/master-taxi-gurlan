@@ -31,8 +31,9 @@ final _taxonomy = MarketTaxonomy.fromMap({
 
 // Эга тартиби (2026-11-20): Электроника, Мошина, Мол, Гўшт, Деҳқон, Маиший техника, Хизматлар,
 // Уй-жой, Улгуржи, Хитой товарлари, Аралаш.
-const _order = ['electronics', 'auto', 'livestock', 'meat', 'farm', 'appliances', 'services', 'realty', 'wholesale', 'china', 'aralash'];
+const _order = ['supermarket', 'electronics', 'auto', 'livestock', 'meat', 'farm', 'appliances', 'services', 'realty', 'wholesale', 'china', 'aralash'];
 const _allIds = [
+  'supermarket',
   'electronics_market',
   'auto_market',
   'livestock_market',
@@ -60,6 +61,8 @@ Future<List<HomeMarketEntry>> _pump(
         child: HomeMarketsBlock(
           onOpen: opened.add,
           isVisible: isVisible,
+          // «AVA Супермаркет» (эга 2026-11-20): сервер рухсати — тестда доим бор.
+          loadSupermarketAccess: () async => true,
           loadTaxonomy: load ?? () async => _taxonomy,
         ),
       ),
@@ -73,7 +76,7 @@ void main() {
   tearDown(ServiceConfigHolder.resetForTest);
 
   group('HomeMarketsBlock', () {
-    testWidgets('ҳаммаси кўринса — 11 карточка эга тартибида (йиғилмайди)', (t) async {
+    testWidgets('ҳаммаси кўринса — 12 карточка эга тартибида (Супермаркет тепада, йиғилмайди)', (t) async {
       await t.binding.setSurfaceSize(const Size(400, 1600));
       addTearDown(() => t.binding.setSurfaceSize(null));
       await _pump(t, isVisible: (_) => true);
@@ -92,7 +95,7 @@ void main() {
       expect(_card('meat'), findsOneWidget);
       expect(_card('china'), findsOneWidget);
       expect(_card('services'), findsOneWidget);
-      for (final id in ['livestock', 'auto', 'farm', 'electronics', 'appliances', 'realty', 'wholesale', 'aralash']) {
+      for (final id in ['supermarket', 'livestock', 'auto', 'farm', 'electronics', 'appliances', 'realty', 'wholesale', 'aralash']) {
         expect(_card(id), findsNothing, reason: id);
       }
       await _pump(t, isVisible: (_) => false);

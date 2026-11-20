@@ -62,6 +62,10 @@ const List<String> kKnownModuleIds = [
   // Эга 2026-11-16: яна 2 та алоҳида бозор (таксономия v2: electronics/appliances).
   'electronics_market',
   'appliances_market',
+  // «AVA Супермаркет» (эга 2026-11-20): AVA товарлари (platform_products) — категория/гуруҳ/таклиф,
+  // ҳамён тўлови. Бош саҳифа «Бозорлар» блоки тепасида; модул ёқилган ВА getSupermarketAccess
+  // allowed бўлса кўринади (сервер: туман, босқич, синовчилар).
+  'supermarket',
 ];
 
 /// Modul mavjudlik holati — Home ekran dinamik qurishi uchun.

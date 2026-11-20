@@ -346,6 +346,8 @@ const _kServiceIcons = <String, IconData>{
   'farm_market': Icons.agriculture_rounded,
   'electronics_market': Icons.devices_rounded,
   'appliances_market': Icons.local_laundry_service_rounded,
+  // «AVA Супермаркет» (эга 2026-11-20) — плитка йўқ, «Бозорлар» карточкаси + админ рўйхати.
+  'supermarket': Icons.local_grocery_store_rounded,
 };
 
 /// PNG расм йўли — бўлмаса `null`.
@@ -433,6 +435,9 @@ Color olxTintFor(String moduleId) {
       return const Color(0xFF5B4FCF);
     case 'appliances_market':
       return const Color(0xFF0F8FB8);
+    // «AVA Супермаркет» (эга 2026-11-20) — бренд тўқ сариғи (AVA'нинг ўз дўкони).
+    case 'supermarket':
+      return AvaLight.brand;
     // ── Медиа ва ижтимоий ───────────────────────────────────────
     case 'tv_market':
       return const Color(0xFFE9497F);

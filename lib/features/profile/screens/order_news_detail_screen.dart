@@ -11,6 +11,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../restaurants/data/restaurants_repository.dart';
 import '../../restaurants/domain/courier_tracking.dart';
 import '../../restaurants/widgets/courier_info_card.dart';
+import '../../supermarket/domain/sm_order_progress.dart';
+import '../../supermarket/widgets/sm_order_progress_view.dart';
 
 /// Битта буюртма: чек + барча статус хабарлари.
 class OrderNewsDetailScreen extends StatelessWidget {
@@ -80,6 +82,15 @@ class OrderNewsDetailScreen extends StatelessWidget {
                   child: Center(child: CircularProgressIndicator()),
                 )
               else if (orderSnap.data != null) ...[
+                // «AVA Супермаркет» (эга 2026-11-20): 5 босқич — қабул → йиғилмоқда → тайёр → курьерда → етказилди.
+                if (isSupermarketOrderType(orderSnap.data!.type)) ...[
+                  SmOrderProgressView(
+                    status: orderSnap.data!.fulfillmentStatus.isNotEmpty
+                        ? orderSnap.data!.fulfillmentStatus
+                        : orderSnap.data!.status,
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 OrderReceiptView(order: orderSnap.data!),
                 // «Курьерга топширилди — кузатиш учун ҳаволага ўтинг» (эга 2026-11-07): курьер буюртмани
                 // олгандан мижозга етгунча — курьер маълумоти ва «Курьерни кузатиш» (мавжуд карточка).

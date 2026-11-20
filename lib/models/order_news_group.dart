@@ -26,6 +26,9 @@ class OrderNewsGroup {
     switch (orderType) {
       case 'bread':
         return 'bread_order';
+      // «AVA Супермаркет» (эга 2026-11-20).
+      case 'supermarket':
+        return 'sm_title';
       default:
         return 'order';
     }

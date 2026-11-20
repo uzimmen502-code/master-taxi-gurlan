@@ -1,5 +1,5 @@
 // «AVA Супермаркет» админ бўлими (1-босқич, эга 2026-11-20). Матнлар — Кирилл (админ конвенцияси).
-// Таблар: Таклифлар · Таксономия · Буюртмалар · Созламалар. Excel/CSV импорт — 2-босқич.
+// Таблар: Таклифлар · Excel импорт (2-босқич) · Таксономия · Буюртмалар (тортиш, олиш, етишмовчилик) · Созламалар.
 
 import 'dart:convert';
 
@@ -10,6 +10,9 @@ import '../../supermarket/domain/sm_offer.dart';
 import '../../supermarket/domain/sm_qty.dart';
 import '../../supermarket/domain/sm_taxonomy.dart';
 import '../services/admin_supermarket_service.dart';
+import 'supermarket_import_admin_tab.dart';
+
+export 'supermarket_import_admin_tab.dart';
 
 const _stageText = <String, String>{
   'off': 'OFF — ҳеч кимга ёпиқ',
@@ -36,16 +39,23 @@ class SupermarketAdminScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = service ?? AdminSupermarketService();
     return DefaultTabController(
-      length: 4,
+      length: 5,
       child: Column(
         children: [
           const TabBar(
             isScrollable: true,
-            tabs: [Tab(text: 'Таклифлар'), Tab(text: 'Таксономия'), Tab(text: 'Буюртмалар'), Tab(text: 'Созламалар')],
+            tabs: [
+              Tab(text: 'Таклифлар'),
+              Tab(text: 'Excel импорт'),
+              Tab(text: 'Таксономия'),
+              Tab(text: 'Буюртмалар'),
+              Tab(text: 'Созламалар'),
+            ],
           ),
           Expanded(
             child: TabBarView(children: [
               SmOffersAdminTab(service: s),
+              SmImportAdminTab(service: s),
               SmTaxonomyAdminTab(service: s),
               SmOrdersAdminTab(service: s),
               SmSettingsAdminTab(service: s),
@@ -594,6 +604,7 @@ typedef SmOrderLine = ({
   bool weighed,
   num? actualQty,
   bool removed,
+  bool shortage,
 });
 
 /// `items[{productId, name, qty, unit (кўриниш), smUnit, weighed, actualQty?, removed?{reason,...}}]`.
@@ -611,6 +622,7 @@ List<SmOrderLine> smOrderLines(Map<String, dynamic> o) {
           weighed: i['weighed'] == true,
           actualQty: i['actualQty'] is num ? i['actualQty'] as num : null,
           removed: i['removed'] != null && i['removed'] != false,
+          shortage: i['state'] == 'shortage',
         ),
   ];
 }
@@ -692,10 +704,18 @@ class _OrderCard extends StatelessWidget {
                   child: Text(
                     '${l.name} — ${l.qty} ${_unitText[l.unit] ?? l.unit}'
                     '${l.weighed ? (l.actualQty == null ? ' (тортилади)' : ' (тортилди: ${l.actualQty})') : ''}'
-                    '${l.removed ? ' — ОЛИНДИ' : ''}',
+                    '${l.removed ? ' — ОЛИНДИ' : ''}'
+                    '${l.shortage && !l.removed ? ' — ЕТИШМОВЧИЛИК: мижоз жавобини кутмоқда' : ''}',
                     style: l.removed ? const TextStyle(decoration: TextDecoration.lineThrough, color: Colors.black45) : null,
                   ),
                 ),
+                if (adjustable && !l.removed && !l.shortage)
+                  IconButton(
+                    key: ValueKey('sm_admin_shortage_${_id}_${l.productId}'),
+                    tooltip: 'Етишмовчилик (мижоз танлайди)',
+                    icon: const Icon(Icons.production_quantity_limits_outlined),
+                    onPressed: () => _shortage(context, l),
+                  ),
                 if (adjustable && !l.removed)
                   IconButton(
                     key: ValueKey('sm_admin_remove_${_id}_${l.productId}'),
@@ -779,6 +799,37 @@ class _OrderCard extends StatelessWidget {
       return;
     }
     await _run(context, () => service.settleWeights(_id, parsed));
+  }
+
+  /// Етишмовчилик: мавжуд миқдор + кўпи билан 3 та ўрнини босувчи (шу гуруҳ, сотувда, арзонидан).
+  Future<void> _shortage(BuildContext context, SmOrderLine l) async {
+    final m = ScaffoldMessenger.of(context);
+    final groupId = _groupOf(l.productId);
+    List<SmOffer> pool;
+    try {
+      final all = await service.loadOffers(SmTaxonomy.empty);
+      pool = smSortOffersAsc(all.where((o) => o.id != l.productId && o.available && (groupId.isEmpty || o.groupId == groupId)));
+    } catch (e) {
+      m.showSnackBar(SnackBar(content: Text('Таклифларни юклаб бўлмади: $e')));
+      return;
+    }
+    if (!context.mounted) return;
+    final res = await showDialog<({num available, List<String> subs})>(
+      context: context,
+      builder: (_) => SmShortageAdminDialog(line: l, pool: pool),
+    );
+    if (res == null || !context.mounted) return;
+    await _run(context, () => service.reportShortage(_id, l.productId, res.available, res.subs));
+  }
+
+  String _groupOf(String productId) {
+    final raw = order['items'];
+    if (raw is List) {
+      for (final i in raw) {
+        if (i is Map && i['productId'] == productId && i['groupId'] is String) return i['groupId'] as String;
+      }
+    }
+    return '';
   }
 
   Future<void> _run(BuildContext context, Future<void> Function() f) async {
@@ -950,4 +1001,82 @@ class _SmSettingsAdminTabState extends State<SmSettingsAdminTab> {
           decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
         ),
       );
+}
+
+/// Етишмовчилик ойнаси: мавжуд миқдор (0 ≤ x < буюртмадаги) + кўпи билан 3 та ўрнини босувчи.
+class SmShortageAdminDialog extends StatefulWidget {
+  const SmShortageAdminDialog({super.key, required this.line, required this.pool});
+
+  final SmOrderLine line;
+
+  /// Шу гуруҳдаги сотувдаги таклифлар (арзонидан).
+  final List<SmOffer> pool;
+
+  @override
+  State<SmShortageAdminDialog> createState() => _SmShortageAdminDialogState();
+}
+
+class _SmShortageAdminDialogState extends State<SmShortageAdminDialog> {
+  final _qty = TextEditingController(text: '0');
+  final _subs = <String>[];
+  List<String> _problems = const [];
+
+  @override
+  void dispose() {
+    _qty.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final v = num.tryParse(_qty.text.trim().replaceAll(',', '.'));
+    final p = smShortageAdminProblems(orderedQty: widget.line.qty, availableQty: v, substitutes: _subs);
+    if (p.isNotEmpty) {
+      setState(() => _problems = p);
+      return;
+    }
+    Navigator.pop(context, (available: v!, subs: List<String>.of(_subs)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = widget.line;
+    return AlertDialog(
+      title: Text('«${l.name}» — етишмовчилик'),
+      content: SizedBox(
+        width: 520,
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            Text('Буюртмада: ${l.qty} ${_unitText[l.unit] ?? l.unit}. Мижоз ўзи танлайди: ўрнини босувчи / камайтириш / олиб ташлаш.'),
+            const SizedBox(height: 8),
+            TextField(
+              key: const ValueKey('sm_admin_shortage_qty'),
+              controller: _qty,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(labelText: 'Мавжуд миқдор (${_unitText[l.unit] ?? l.unit})'),
+            ),
+            const SizedBox(height: 12),
+            Text('Ўрнини босувчилар (кўпи билан 3 та): ${_subs.length}/3', style: const TextStyle(fontWeight: FontWeight.w600)),
+            if (widget.pool.isEmpty) const Text('Шу гуруҳда сотувда бошқа таклиф йўқ'),
+            for (final o in widget.pool)
+              CheckboxListTile(
+                key: ValueKey('sm_admin_shortage_sub_${o.id}'),
+                dense: true,
+                value: _subs.contains(o.id),
+                onChanged: !_subs.contains(o.id) && _subs.length >= 3
+                    ? null
+                    : (v) => setState(() => v == true ? _subs.add(o.id) : _subs.remove(o.id)),
+                title: Text(o.name),
+                subtitle: Text('${formatMoney(o.price)}/${_unitText[o.unit] ?? o.unit}'),
+              ),
+            for (final p in _problems) Text(p, style: const TextStyle(color: Colors.red)),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Бекор')),
+        FilledButton(key: const ValueKey('sm_admin_shortage_confirm'), onPressed: _submit, child: const Text('Мижозга юбориш')),
+      ],
+    );
+  }
 }

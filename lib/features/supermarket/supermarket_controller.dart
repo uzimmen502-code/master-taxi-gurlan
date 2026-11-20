@@ -5,6 +5,7 @@ import '../../core/geo/geo_context.dart';
 import 'data/supermarket_repository.dart';
 import 'domain/sm_access.dart';
 import 'domain/sm_cart.dart';
+import 'domain/sm_cross_sell.dart';
 import 'domain/sm_offer.dart';
 import 'domain/sm_taxonomy.dart';
 
@@ -90,6 +91,31 @@ class SupermarketController extends ChangeNotifier {
   void removeLine(String productId) => _setCart(cart.remove(productId));
   void replaceOffer(String oldId, String newId, int qtyMilli) => _setCart(cart.replaceOffer(oldId, newId, qtyMilli));
   void clearCart() => _setCart(SmCart.empty);
+
+  /// Бир неча қаторни БИТТА ёзувда саватга қўшиш (ҳафталик сават / қайта буюртма). ФАҚАТ сават —
+  /// буюртма бермайди, сервер чақирилмайди.
+  void addLines(Iterable<SmCartLine> lines) {
+    var next = cart;
+    for (final l in lines) {
+      next = next.add(l.productId, l.qtyMilli);
+    }
+    if (!identical(next, cart)) _setCart(next);
+  }
+
+  /// «Тезкор харид»: гуруҳ → охирги танланган таклиф (шу сессияда, қурилмага ёзилмайди).
+  final Map<String, String> quickPicks = {};
+
+  SmOffer? quickSelected(String groupId) => smQuickSelected(groupId,
+      picks: quickPicks, cart: cart, offers: offers, offersByGroup: offersByGroup);
+
+  /// Танланган таклифни бир қадам қўшади ва уни гуруҳ учун эслаб қолади.
+  void quickAdd(SmOffer o, int qtyMilli) {
+    quickPicks[o.groupId] = o.id;
+    addToCart(o.id, qtyMilli);
+  }
+
+  List<SmOffer> get crossSell =>
+      smCrossSell(cart, taxonomy: taxonomy, offers: offers, offersByGroup: offersByGroup);
 
   /// Танланган туман учун рухсат ва вақтлар (расмийлаштириш). Хато — рад (хавфсиз томон).
   Future<SmAccess> refreshAccessFor(String districtId) async {

@@ -515,7 +515,12 @@ class OrderItem {
   /// Фақат ресторан буюртмасида: мижознинг шу таомга изоҳи (эски буюртмаларда йўқ — бўш).
   final String note;
 
+  /// Хом қатор (ўқиш учун): супермаркет қатори майдонлари — `productId`, `groupId`, `varietyId`, `removed`,
+  /// `state: 'shortage'` + `options` (2-босқич). Бошқа турлар уни ишлатмайди.
+  final Map<String, dynamic> raw;
+
   const OrderItem({
+    this.raw = const {},
     this.note = '',
     this.itemId = '',
     required this.name,
@@ -544,6 +549,7 @@ class OrderItem {
     final line = (m['lineTotal'] as num?)?.toInt() ?? (base + fm);
     final foodTotal = (m['total'] as num?)?.toInt() ?? 0;
     return OrderItem(
+      raw: Map<String, dynamic>.unmodifiable(m),
       note: m['note'] is String ? (m['note'] as String).trim() : '',
       itemId: (m['itemId'] ?? '') as String,
       name: m['name'] ?? '',

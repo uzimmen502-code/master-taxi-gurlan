@@ -64,12 +64,11 @@ void main() {
       expect(_k('sm_category_vegetables'), findsOneWidget);
       expect(_k('sm_category_dairy'), findsOneWidget);
       expect(c.visibleGroups(smTaxonomyFixture.category('vegetables')!).map((g) => g.id), ['onion', 'potato']);
-      for (final id in ['products', 'quick', 'weekly']) {
+      for (final id in ['products', 'quick', 'weekly', 'orders']) {
         expect(_k('sm_chip_$id'), findsOneWidget);
       }
-      await t.tap(_k('sm_chip_quick'));
-      await t.pump();
-      expect(find.text('sm_soon'), findsOneWidget, reason: '2-босқич — «тез орада»');
+      // 2-босқич (эга 2026-11-21): чиплар ишлайди — sm_stage2_test.dart.
+      expect(find.text('sm_soon_badge'), findsNothing);
       expect(find.text('1'), findsWidgets, reason: 'сават нишони');
       await t.enterText(_k('sm_search'), 'piyoz');
       await t.pump();

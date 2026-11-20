@@ -39,6 +39,12 @@ abstract class SupermarketApi {
   /// [districtId] берилса — шу туман учун (расмийлаштириш); йўқ — профиль тумани (бош саҳифа).
   Future<SmAccess> getAccess({String? districtId});
   Future<SmPlaceResult> placeOrder(Map<String, dynamic> payload);
+
+  /// Етишмовчиликда ўрнини босувчилар (бир неча `platform_products/{id}`; йўқлари ташланади).
+  Future<List<SmOffer>> loadOffersByIds(List<String> ids);
+
+  /// `respondSupermarketShortage` (2-босқич шартномаси). Хато — [SmCallError].
+  Future<void> respondShortage(Map<String, dynamic> payload);
 }
 
 class FirebaseSupermarketApi implements SupermarketApi {
@@ -92,6 +98,21 @@ class FirebaseSupermarketApi implements SupermarketApi {
   @override
   Future<SmPlaceResult> placeOrder(Map<String, dynamic> payload) async =>
       SmPlaceResult.fromMap(await _call('placeSupermarketOrder', payload));
+
+  /// Ҳар бири алоҳида `get` (≤ 3–4 та; list сўрови эмас — rules ва индекс шарт эмас).
+  @override
+  Future<List<SmOffer>> loadOffersByIds(List<String> ids) async {
+    final snaps = await Future.wait(ids.toSet().take(10).map((id) => _db.collection('platform_products').doc(id).get()));
+    return [
+      for (final s in snaps)
+        if (s.exists && s.data() != null) SmOffer.fromMap(s.id, s.data()!),
+    ];
+  }
+
+  @override
+  Future<void> respondShortage(Map<String, dynamic> payload) async {
+    await _call('respondSupermarketShortage', payload);
+  }
 }
 
 /// Модул кўриниши учун `getSupermarketAccess` кеши (бош саҳифа ҳар қайта қурилганда чақирилмасин,

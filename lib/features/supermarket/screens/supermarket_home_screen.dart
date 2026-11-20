@@ -5,6 +5,7 @@ import '../../../core/geo/geo_selector.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/formatters.dart';
+import '../data/sm_lists_repository.dart';
 import '../domain/sm_offer.dart';
 import '../domain/sm_search.dart';
 import '../domain/sm_taxonomy.dart';
@@ -13,6 +14,9 @@ import '../widgets/sm_widgets.dart';
 import 'sm_cart_screen.dart';
 import 'sm_category_screen.dart';
 import 'sm_group_screen.dart';
+import 'sm_order_history_screen.dart';
+import 'sm_quick_buy_screen.dart';
+import 'sm_weekly_screen.dart';
 
 /// Категория иконкаси: сервер `icon` калити (seed `supermarket_taxonomy_v1.json`: meat, grain, vegetable,
 /// fruit, oil, dairy, egg, drink, household) → Material иконка; номаълум — умумий.
@@ -44,9 +48,20 @@ void smOpenCart(BuildContext context, SupermarketController controller) {
 
 /// 1-экран: Супермаркет бош саҳифаси (эга 2026-11-20).
 class SupermarketHomeScreen extends StatefulWidget {
-  const SupermarketHomeScreen({super.key, this.controller, this.pickArea, this.initialGroupId});
+  const SupermarketHomeScreen({
+    super.key,
+    this.controller,
+    this.pickArea,
+    this.initialGroupId,
+    this.listsStore,
+    this.ordersLoader,
+  });
 
   final String? initialGroupId;
+
+  /// Тест учун (Ҳафталик сават / Буюртмаларим); бўлмаса — Firebase.
+  final SmListsStore? listsStore;
+  final SmOrdersLoader? ordersLoader;
 
   /// Тест учун; бўлмаса — янги контроллер (Firebase).
   final SupermarketController? controller;
@@ -98,11 +113,7 @@ class _SupermarketHomeScreenState extends State<SupermarketHomeScreen> {
     }
   }
 
-  void _soon() {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(context.tr('sm_soon'))));
-  }
+  void _push(Widget screen) => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
 
   @override
   Widget build(BuildContext context) {
@@ -166,8 +177,15 @@ class _SupermarketHomeScreenState extends State<SupermarketHomeScreen> {
                 runSpacing: 8,
                 children: [
                   _EntryChip(id: 'products', label: context.tr('sm_chip_products'), active: true, onTap: () {}),
-                  _EntryChip(id: 'quick', label: context.tr('sm_chip_quick'), soon: true, onTap: _soon),
-                  _EntryChip(id: 'weekly', label: context.tr('sm_chip_weekly'), soon: true, onTap: _soon),
+                  _EntryChip(id: 'quick', label: context.tr('sm_chip_quick'), onTap: () => _push(SmQuickBuyScreen(controller: _c))),
+                  _EntryChip(
+                      id: 'weekly',
+                      label: context.tr('sm_chip_weekly'),
+                      onTap: () => _push(SmWeeklyScreen(controller: _c, store: widget.listsStore))),
+                  _EntryChip(
+                      id: 'orders',
+                      label: context.tr('sm_chip_orders'),
+                      onTap: () => _push(SmOrderHistoryScreen(controller: _c, loader: widget.ordersLoader))),
                 ],
               ),
               const SizedBox(height: 16),
@@ -250,12 +268,11 @@ class _AddressLine extends StatelessWidget {
 }
 
 class _EntryChip extends StatelessWidget {
-  const _EntryChip({required this.id, required this.label, required this.onTap, this.active = false, this.soon = false});
+  const _EntryChip({required this.id, required this.label, required this.onTap, this.active = false});
 
   final String id;
   final String label;
   final bool active;
-  final bool soon;
   final VoidCallback onTap;
 
   @override
@@ -280,10 +297,6 @@ class _EntryChip extends StatelessWidget {
                       style: TextStyle(
                           fontSize: 15, fontWeight: FontWeight.w600, color: active ? c.brandInk : c.ink)),
                 ),
-                if (soon) ...[
-                  const SizedBox(width: 6),
-                  Text(context.tr('sm_soon_badge'), style: TextStyle(fontSize: 12, color: c.ink2)),
-                ],
               ],
             ),
           ),

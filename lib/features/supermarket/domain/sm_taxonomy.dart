@@ -36,7 +36,11 @@ class SmGroup {
     required this.stepMilli,
     required this.weighed,
     this.synonyms = const [],
+    this.pairs = const [],
   });
+
+  /// «Буни ҳам қўшасизми?» учун жуфт гуруҳлар (2-босқич шартномаси, ихтиёрий; эски ҳужжатда йўқ).
+  final List<String> pairs;
 
   final String id;
   final String categoryId;
@@ -69,6 +73,11 @@ class SmGroup {
         if (raw['synonyms'] is List)
           for (final s in raw['synonyms'] as List)
             if (s is String && s.trim().isNotEmpty) s.trim(),
+      ],
+      pairs: [
+        if (raw['pairs'] is List)
+          for (final p in (raw['pairs'] as List).toSet())
+            if (p is String && p.trim().isNotEmpty && p.trim() != id) p.trim(),
       ],
     );
   }

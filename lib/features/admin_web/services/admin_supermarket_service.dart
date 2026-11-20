@@ -10,6 +10,9 @@
 //   • `adminRemoveSupermarketLine({orderId, productId, reason})`.
 // Харид нархи — `platform_products/{id}/private/cost` (фақат админ ўқийди).
 
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
@@ -322,11 +325,155 @@ class AdminSupermarketService {
   Future<void> removeLine(String orderId, String productId, String reason) =>
       _call('adminRemoveSupermarketLine', {'orderId': orderId, 'productId': productId, 'reason': reason});
 
-  Future<void> _call(String name, Map<String, dynamic> data) async {
+  /// Етишмовчилик (2-босқич шартномаси): `adminReportSupermarketShortage({orderId, productId, availableQty,
+  /// substitutes:[offerId]})` — admin/dispatcher; мижоз ўзи танлайди (respondSupermarketShortage).
+  Future<void> reportShortage(String orderId, String productId, num availableQty, List<String> substitutes) =>
+      _call('adminReportSupermarketShortage', {
+        'orderId': orderId,
+        'productId': productId,
+        'availableQty': availableQty,
+        'substitutes': substitutes,
+      });
+
+  /// Excel импорт (2-босқич; Улгуржи импорт оқими кўзгуси). Жавоб шакли — wholesale_import билан бир хил деб
+  /// олинди (`{fileName, base64}` / `{batchId, counts, rows}` / `{status, counts, rows}`) — сервер тасдиқлаши керак.
+  Future<({String fileName, Uint8List bytes})> importTemplate() async {
+    final d = await _callData('adminSupermarketImportTemplate', const {});
+    return (
+      fileName: (d['fileName'] as String?) ?? 'ava_supermarket.xlsx',
+      bytes: base64Decode((d['base64'] as String?) ?? ''),
+    );
+  }
+
+  Future<SmImportPreview> importPreview({required String fileName, required Uint8List bytes, required String clientRequestId}) async =>
+      SmImportPreview.fromMap(await _callData(
+        'adminSupermarketImportPreview',
+        {'fileName': fileName, 'fileBase64': base64Encode(bytes), 'clientRequestId': clientRequestId},
+        timeout: const Duration(seconds: 130),
+      ));
+
+  Future<SmImportResult> importConfirm(String batchId) async => SmImportResult.fromMap(await _callData(
+        'adminSupermarketImportConfirm',
+        {'batchId': batchId},
+        timeout: const Duration(seconds: 545),
+      ));
+
+  Future<void> _call(String name, Map<String, dynamic> data) => _callData(name, data);
+
+  Future<Map<String, dynamic>> _callData(String name, Map<String, dynamic> data, {Duration? timeout}) async {
     try {
-      await _fns.httpsCallable(name).call<Object?>(data);
+      final r = await _fns
+          .httpsCallable(name, options: timeout == null ? null : HttpsCallableOptions(timeout: timeout))
+          .call<Object?>(data);
+      return r.data is Map ? Map<String, dynamic>.from(r.data as Map) : const {};
     } on FirebaseFunctionsException catch (e) {
       throw AdminSupermarketException(smAdminErrorText(name, e.code, e.details));
     }
   }
 }
+
+/// Сервер чегараси (Улгуржи импорт билан бир хил деб олинди — UNKNOWN, сервер тасдиқлайди).
+const kSmImportMaxBytes = 5 * 1024 * 1024;
+
+int _i(Object? v) => v is num ? v.toInt() : 0;
+
+/// Импорт қатори: Excel қатор рақами, калит (`productId`|`sku`|`id`), ном, амал/ҳолат, хатолар.
+class SmImportRow {
+  const SmImportRow({required this.row, required this.key, required this.title, required this.status, this.errors = const []});
+
+  final int row;
+  final String key;
+  final String title;
+  final String status;
+  final List<String> errors;
+
+  bool get isError => status == 'error' || errors.isNotEmpty;
+
+  factory SmImportRow.fromMap(Map m) => SmImportRow(
+        row: _i(m['row']),
+        key: '${m['productId'] ?? m['sku'] ?? m['id'] ?? ''}',
+        title: '${m['title'] ?? m['name'] ?? ''}',
+        status: '${m['action'] ?? m['status'] ?? ''}',
+        errors: m['errors'] is List ? [for (final e in m['errors'] as List) '$e'] : const [],
+      );
+}
+
+List<SmImportRow> _rows(Object? v) => v is List ? [for (final m in v) if (m is Map) SmImportRow.fromMap(m)] : const [];
+
+class SmImportPreview {
+  const SmImportPreview({
+    required this.batchId,
+    required this.total,
+    required this.errors,
+    required this.create,
+    required this.update,
+    required this.unchanged,
+    required this.rows,
+  });
+
+  final String batchId;
+  final int total;
+  final int errors;
+  final int create;
+  final int update;
+  final int unchanged;
+  final List<SmImportRow> rows;
+
+  bool get canConfirm => batchId.isNotEmpty && create + update > 0;
+  List<SmImportRow> get errorRows => rows.where((r) => r.isError).toList();
+
+  factory SmImportPreview.fromMap(Map<String, dynamic> d) {
+    final c = d['counts'] is Map ? d['counts'] as Map : const {};
+    return SmImportPreview(
+      batchId: '${d['batchId'] ?? ''}',
+      total: _i(c['total']),
+      errors: _i(c['errors'] ?? c['error']),
+      create: _i(c['create']),
+      update: _i(c['update']),
+      unchanged: _i(c['unchanged']),
+      rows: _rows(d['rows']),
+    );
+  }
+}
+
+class SmImportResult {
+  const SmImportResult({
+    required this.status,
+    required this.created,
+    required this.updated,
+    required this.unchanged,
+    required this.failed,
+    required this.rows,
+  });
+
+  /// `done` | `partial` (вақт тугади — «Давом эттириш» ўша batchId билан).
+  final String status;
+  final int created;
+  final int updated;
+  final int unchanged;
+  final int failed;
+  final List<SmImportRow> rows;
+
+  bool get isPartial => status == 'partial';
+  List<SmImportRow> get errorRows => rows.where((r) => r.isError).toList();
+
+  factory SmImportResult.fromMap(Map<String, dynamic> d) {
+    final c = d['counts'] is Map ? d['counts'] as Map : const {};
+    return SmImportResult(
+      status: '${d['status'] ?? ''}',
+      created: _i(c['created']),
+      updated: _i(c['updated']),
+      unchanged: _i(c['unchanged']),
+      failed: _i(c['error'] ?? c['errors']),
+      rows: _rows(d['rows']),
+    );
+  }
+}
+
+/// Етишмовчилик формаси текшируви (Кирилл матн; бўш — тўғри). Сервер ҳам текширади.
+List<String> smShortageAdminProblems({required num orderedQty, required num? availableQty, required List<String> substitutes}) => [
+      if (availableQty == null || availableQty < 0) 'Мавжуд миқдор — 0 ёки мусбат сон',
+      if (availableQty != null && availableQty >= orderedQty) 'Мавжуд миқдор буюртмадагидан кам бўлиши керак',
+      if (substitutes.length > 3) 'Ўрнини босувчи — кўпи билан 3 та',
+      if (substitutes.toSet().length != substitutes.length) 'Ўрнини босувчи такрорланмасин',
+    ];

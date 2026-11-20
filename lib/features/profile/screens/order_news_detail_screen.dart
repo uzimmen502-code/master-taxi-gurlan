@@ -14,6 +14,7 @@ import '../../restaurants/widgets/courier_info_card.dart';
 import '../../supermarket/domain/sm_order_progress.dart';
 import '../../supermarket/widgets/sm_order_cancel_bar.dart';
 import '../../supermarket/widgets/sm_order_progress_view.dart';
+import '../../supermarket/widgets/sm_shortage_panel.dart';
 
 /// Битта буюртма: чек + барча статус хабарлари.
 class OrderNewsDetailScreen extends StatelessWidget {
@@ -93,6 +94,8 @@ class OrderNewsDetailScreen extends StatelessWidget {
                   // Бекор — фақат `new` (эга 2026-11-20).
                   SmOrderCancelBar(order: orderSnap.data!),
                   const SizedBox(height: 12),
+                  // 2-босқич: етишмовчилик — ўрнини босувчи / камайтириш / олиб ташлаш (бўлмаса — ҳеч нарса).
+                  SmShortagePanel(order: orderSnap.data!),
                 ],
                 OrderReceiptView(order: orderSnap.data!),
                 // «Курьерга топширилди — кузатиш учун ҳаволага ўтинг» (эга 2026-11-07): курьер буюртмани

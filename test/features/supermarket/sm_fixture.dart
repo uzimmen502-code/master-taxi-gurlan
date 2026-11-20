@@ -119,4 +119,24 @@ class FakeSupermarketApi implements SupermarketApi {
     if (r is Exception) throw r;
     return r as SmPlaceResult;
   }
+
+  /// Етишмовчилик: ўрнини босувчилар манбаи ва `respondSupermarketShortage` чақирувлари.
+  List<SmOffer> extraOffers = const [];
+  final shortagePayloads = <Map<String, dynamic>>[];
+
+  /// Навбатдаги жавоблар: `Exception` — ташланади; бўш — муваффақият.
+  final shortageResults = <Object>[];
+
+  @override
+  Future<List<SmOffer>> loadOffersByIds(List<String> ids) async =>
+      [for (final o in [...smOffersFixture(), ...extraOffers]) if (ids.contains(o.id)) o];
+
+  @override
+  Future<void> respondShortage(Map<String, dynamic> payload) async {
+    shortagePayloads.add(payload);
+    if (shortageResults.isEmpty) return;
+    final r = shortageResults.removeAt(0);
+    if (r is Future<void>) return r;
+    if (r is Exception) throw r;
+  }
 }

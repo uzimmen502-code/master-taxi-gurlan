@@ -150,6 +150,8 @@ class SmPlaceResult {
 /// аввал ўшани кўрсатади ([SmCallError.messages]); калит — захира.
 const kSmErrorKeys = <String, String>{
   'INSUFFICIENT_BALANCE': 'sm_err_insufficient_funds',
+  // 2-босқич шартномаси (respondSupermarketShortage): ҳамён етмаса — тўлдириш кўрсатилади.
+  'INSUFFICIENT_FUNDS': 'sm_err_insufficient_funds',
   'OUT_OF_STOCK': 'sm_err_out_of_stock',
   'PRODUCT_UNAVAILABLE': 'sm_err_out_of_stock',
   'PRODUCT_NOT_FOUND': 'sm_err_out_of_stock',

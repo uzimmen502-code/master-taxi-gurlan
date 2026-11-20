@@ -201,6 +201,11 @@ check('P15 таклиф/харид нархи валидатори', () => {
   const v = sm.validateOffer({ ...o, price: 85000.5, stock: -1, smStatus: 'on', unit: 'ton', packLabel: 'x'.repeat(41), role: 'admin' });
   for (const e of ['PRICE_INVALID offer.price', 'STOCK_INVALID offer.stock', 'SM_STATUS_INVALID offer.smStatus',
     'UNIT_INVALID offer.unit', 'PACK_LABEL_INVALID offer.packLabel', 'UNKNOWN_KEY offer.role']) assert.ok(v.errors.includes(e), e);
+  assert.ok(sm.validateOffer({ ...o, packQty: 1.5, packUnit: 'l' }).ok);
+  const pv = sm.validateOffer({ ...o, packQty: 0, packUnit: 'm' });
+  assert.ok(pv.errors.includes('PACK_QTY_INVALID offer.packQty') && pv.errors.includes('PACK_UNIT_INVALID offer.packUnit'), JSON.stringify(pv.errors));
+  assert.ok(sm.validateOffer({ ...o, packQty: 2 }).errors.includes('PACK_UNIT_INVALID offer.packUnit'));
+  assert.ok(sm.validateOffer({ ...o, packUnit: 'kg' }).errors.includes('PACK_QTY_INVALID offer.packQty'));
   assert.ok(sm.validateCost({ purchasePrice: 70000, supplier: 'Бозор' }).ok);
   assert.ok(!sm.validateCost({ purchasePrice: 70000.5, supplier: 'Бозор' }).ok);
 });
@@ -215,7 +220,9 @@ check('P16 қидирув токенлари: синоним + кирилл/ло
   assert.ok(t2.includes('картофель') && t2.includes('kartoshka'));
 });
 
-check('P17 хато хабарлари — ҳар код учун 3 тил', () => {
+check('P17 хато хабарлари ва ҳамён изоҳлари — ҳар код учун 3 тил', () => {
+  for (const k of Object.keys(sm.REFUND_NOTES)) for (const l of sm.LANGS) assert.ok(sm.REFUND_NOTES[k].messages[l], `${k}.${l}`);
+  assert.deepStrictEqual([...sm.OPERATOR_ROLES], ['admin', 'superadmin', 'dispatcher']);
   for (const code of Object.keys(sm.MSG)) {
     const m = sm.messagesOf(code);
     for (const l of sm.LANGS) assert.ok(m[l] && m[l].length > 3, `${code}.${l}`);

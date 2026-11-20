@@ -66,7 +66,7 @@ async function main() {
     await assertSucceeds(adm.doc('platform_products/new2').set({ name: 'Янги', price: 5000, active: true }));
     await assertFails(adm.doc('platform_products/new3').set({ name: 'x', price: 1, smGroupId: 'beef' }));
     await assertFails(adm.doc('platform_products/new3').set({ name: 'x', price: 1, stock: 5 }));
-    for (const f of ['smGroupId', 'smStatus', 'stock', 'qtyStep', 'weighed', 'priceUpdatedAt', 'searchTokens', 'smAutoOutOfStock']) {
+    for (const f of ['smGroupId', 'smStatus', 'stock', 'qtyStep', 'weighed', 'priceUpdatedAt', 'searchTokens', 'smAutoOutOfStock', 'packQty', 'packUnit']) {
       await assertFails(adm.doc('platform_products/legacy').update({ [f]: f === 'weighed' ? true : 'x' }));
     }
     await assertSucceeds(adm.doc('platform_products/new2').delete());

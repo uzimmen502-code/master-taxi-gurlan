@@ -39,6 +39,13 @@ const PRODUCTS = 'platform_products';
 const ORDERS = 'orders';
 const IDEM = 'wallet_idempotency';
 const ADMIN_ROLES = Object.freeze(['admin', 'superadmin']);
+const OPERATOR_ROLES = Object.freeze(['admin', 'superadmin', 'dispatcher']);
+const PACK_UNITS = Object.freeze(['kg', 'l', 'piece']);
+// Ҳамён тарихи изоҳи: калит + 3 тил (note — эски клиентлар учун uz_Cyrl).
+const REFUND_NOTES = Object.freeze({
+  weigh: { key: 'sm_refund_weigh', messages: { uz_Cyrl: 'Супермаркет: тортилгандан кейинги қайтим', uz_Latn: 'Supermarket: tortilgandan keyingi qaytim', ru: 'Супермаркет: возврат после взвешивания' } },
+  remove: { key: 'sm_refund_line_removed', messages: { uz_Cyrl: 'Супермаркет: маҳсулот олинди, қайтим', uz_Latn: 'Supermarket: mahsulot olindi, qaytim', ru: 'Супермаркет: товар удалён, возврат' } },
+});
 
 const LANGS = Object.freeze(['uz_Cyrl', 'uz_Latn', 'ru']);
 const UNITS = Object.freeze(['kg', 'l', 'piece', 'pack', 'bunch']);
@@ -394,7 +401,7 @@ function validateSupermarketSettings(obj) {
 }
 
 const OFFER_KEYS = ['smGroupId', 'smVariety', 'smQuality', 'packLabel', 'unit', 'qtyStep', 'weighed', 'stock',
-  'smStatus', 'price', 'name', 'description', 'imageUrl', 'imageUrls'];
+  'smStatus', 'packQty', 'packUnit', 'price', 'name', 'description', 'imageUrl', 'imageUrls'];
 
 /** Таклиф (adminUpsertSupermarketOffer `offer`) — тоза текширув. */
 function validateOffer(o) {
@@ -414,6 +421,12 @@ function validateOffer(o) {
   if (o.unit != null && !UNITS.includes(o.unit)) err('UNIT_INVALID', 'offer.unit');
   if (o.qtyStep != null && !stepOk(o.qtyStep)) err('STEP_INVALID', 'offer.qtyStep');
   if (o.weighed != null && typeof o.weighed !== 'boolean') err('WEIGHED_INVALID', 'offer.weighed');
+  // packQty + packUnit — бирга (бирлик нархи учун, масалан 1.5 л шиша → литр нархи).
+  if (o.packQty != null || o.packUnit != null) {
+    const pm = toMilli(o.packQty);
+    if (pm == null || pm <= 0 || pm > 100000 * 1000) err('PACK_QTY_INVALID', 'offer.packQty');
+    if (!PACK_UNITS.includes(o.packUnit)) err('PACK_UNIT_INVALID', 'offer.packUnit');
+  }
   const sm = toMilli(o.stock);
   if (sm == null || sm < 0 || sm > LIMITS.stockMax * 1000) err('STOCK_INVALID', 'offer.stock');
   if (!SM_STATUSES.includes(o.smStatus)) err('SM_STATUS_INVALID', 'offer.smStatus');
@@ -560,6 +573,18 @@ function attachSupermarket(exportsObj, deps) {
       if (e instanceof HttpsError) throw fail(e.code, e.code === 'unauthenticated' ? 'UNAUTHENTICATED' : 'PERMISSION_DENIED');
       throw e;
     }
+  };
+  // Тортиш/қаторни олиш: admin + superadmin + dispatcher (эга 2026-11-20); аудитда роль сақланади.
+  const requireOperator = async (context) => {
+    let uid;
+    try {
+      uid = await requireCallerRoles(context, OPERATOR_ROLES, 'Operator role required');
+    } catch (e) {
+      if (e instanceof HttpsError) throw fail(e.code, e.code === 'unauthenticated' ? 'UNAUTHENTICATED' : 'PERMISSION_DENIED');
+      throw e;
+    }
+    const snap = await db.collection('users').doc(uid).get();
+    return { uid, role: String((snap.data() || {}).role || '') };
   };
   const rethrow = (e, action, fields) => {
     const code = (e && e.details && e.details.code) || 'INTERNAL';
@@ -737,6 +762,8 @@ function attachSupermarket(exportsObj, deps) {
           smVariety: offer.smVariety,
           smQuality: offer.smQuality || null,
           packLabel: offer.packLabel || '',
+          packQty: offer.packQty != null ? fromMilli(toMilli(offer.packQty)) : null,
+          packUnit: offer.packQty != null ? offer.packUnit : null,
           searchTokens: offerSearchTokens({
             name, variety: offer.smVariety, quality: offer.smQuality, packLabel: offer.packLabel, group, category,
           }),
@@ -963,7 +990,7 @@ function attachSupermarket(exportsObj, deps) {
   const COURIER_HOLD_FS = new Set(['courier_picked', 'arrived', 'completed', 'cancelled']);
 
   /** Умумий транзакция: қаторлар ўзгаради → қайта ҳисоб → қайтим + stock. */
-  async function adjustOrder({ orderId, actor, action, mutate, auditExtra }) {
+  async function adjustOrder({ orderId, actor, actorRole, action, mutate, auditExtra }) {
     const orderRef = db.collection(ORDERS).doc(orderId);
     return db.runTransaction(async (t) => {
       const snap = await t.get(orderRef);
@@ -1011,11 +1038,11 @@ function attachSupermarket(exportsObj, deps) {
         settlementLedger.commitBonusInTx(t, bonusCtx, {
           delta: adj.refund, kind: 'sm_adjust_refund', refType: 'order', refId: orderId,
           meta: { action, seq, chargedBefore: charged, chargedAfter: adj.next },
-          postedBy: actor, postedRole: 'admin',
+          postedBy: actor, postedRole: actorRole || 'admin',
         });
         t.set(customerRef.collection('wallet_ledger').doc(), {
           type: 'order_partial_refund', amount: adj.refund, module: 'platform', refType: 'order', refId: orderId,
-          meta: { subtype: 'supermarket', action, note: action === 'weigh' ? 'Супермаркет: тортилгандан кейинги қайтим' : 'Супермаркет: маҳсулот олинди, қайтим' },
+          meta: { subtype: 'supermarket', action, noteKey: REFUND_NOTES[action].key, messages: REFUND_NOTES[action].messages, note: REFUND_NOTES[action].messages.uz_Cyrl },
           createdAt: ts(), createdBy: action === 'weigh' ? 'adminSettleSupermarketWeights' : 'adminRemoveSupermarketLine',
         });
       }
@@ -1037,7 +1064,7 @@ function attachSupermarket(exportsObj, deps) {
         updatedAt: ts(),
       });
       t.set(db.collection(ADMIN_AUDIT).doc(), {
-        kind: action === 'weigh' ? 'supermarket_weigh_settle' : 'supermarket_line_remove', actor, target: `${ORDERS}/${orderId}`,
+        kind: action === 'weigh' ? 'supermarket_weigh_settle' : 'supermarket_line_remove', actor, actorRole, target: `${ORDERS}/${orderId}`,
         seq, chargedBefore: charged, chargedAfter: adj.next, refund: adj.refund, ...auditExtra, at: ts(),
       });
       return { changed: true, refund: adj.refund, total: adj.next, userId: String(od.userPhone || ''), weighPending };
@@ -1046,7 +1073,7 @@ function attachSupermarket(exportsObj, deps) {
 
   exportsObj.adminSettleSupermarketWeights = functions.https.onCall(async (data, context) => {
     const started = Date.now();
-    const actor = await requireAdmin(context);
+    const { uid: actor, role: actorRole } = await requireOperator(context);
     const orderId = typeof (data && data.orderId) === 'string' ? data.orderId.trim() : '';
     const raw = data && data.lines;
     if (!orderId || orderId.includes('/') || !Array.isArray(raw) || raw.length < 1 || raw.length > LIMITS.items) {
@@ -1060,7 +1087,7 @@ function attachSupermarket(exportsObj, deps) {
     let out;
     try {
       out = await adjustOrder({
-        orderId, actor, action: 'weigh',
+        orderId, actor, actorRole, action: 'weigh',
         mutate: (lines, od) => applyWeights(lines, input, Number.isInteger(od.weighHoldPercent) ? od.weighHoldPercent : 10),
         auditExtra: { lines: input.map((r) => ({ productId: r.productId, actualQty: r.actualQty })) },
       });
@@ -1072,7 +1099,7 @@ function attachSupermarket(exportsObj, deps) {
   });
 
   exportsObj.adminRemoveSupermarketLine = functions.https.onCall(async (data, context) => {
-    const actor = await requireAdmin(context);
+    const { uid: actor, role: actorRole } = await requireOperator(context);
     const orderId = typeof (data && data.orderId) === 'string' ? data.orderId.trim() : '';
     const productId = typeof (data && data.productId) === 'string' ? data.productId.trim() : '';
     const reason = typeof (data && data.reason) === 'string' ? data.reason.trim().slice(0, LIMITS.reason) : '';
@@ -1081,7 +1108,7 @@ function attachSupermarket(exportsObj, deps) {
     let out;
     try {
       out = await adjustOrder({
-        orderId, actor, action: 'remove',
+        orderId, actor, actorRole, action: 'remove',
         mutate: (lines) => {
           const idx = lines.findIndex((l) => l.productId === productId);
           if (idx < 0) return { ok: false, code: 'LINE_NOT_FOUND', details: { productId } };
@@ -1183,6 +1210,6 @@ module.exports = {
   tashkentParts, availableSlots, gateDecision, validateSupermarketTaxonomy, validateSupermarketSettings,
   validateOffer, validateCost, findGroup, offerSearchTokens, priceSupermarketOrder, applyWeights, adjustment,
   buildTaxonomyVersionDocs, isCancelled, trimDeep, messagesOf,
-  MSG, UNITS, STAGES, SM_STATUSES, LANGS, TAXONOMY_DOC, SETTINGS_DOC, HISTORY_COLLECTION, HISTORY_PREFIX,
+  MSG, UNITS, PACK_UNITS, OPERATOR_ROLES, REFUND_NOTES, STAGES, SM_STATUSES, LANGS, TAXONOMY_DOC, SETTINGS_DOC, HISTORY_COLLECTION, HISTORY_PREFIX,
   TARIFF_VERSION, UNIT_LABELS,
 };

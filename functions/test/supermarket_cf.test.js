@@ -21,6 +21,7 @@ const ADMIN = '998915000001';
 const USER = '998912000001'; // мижоз (9 хонали users ҳужжати — эски шакл)
 const POOR = '998912000002';
 const OTHER = '998912000003';
+const DISP = '998915000004';
 const ctxOf = (p) => ({ auth: { uid: `uid_${p}`, token: { phone_number: `+${p}` } } });
 const call = (name, data, who) => fns[name].run(data, who ? ctxOf(who) : {});
 
@@ -53,6 +54,7 @@ const order = (rid, items, extra = {}) => ({ clientRequestId: rid, items, addres
 async function main() {
   await clearEmulator();
   await db.doc(`users/${ADMIN}`).set({ role: 'admin' });
+  await db.doc(`users/${DISP}`).set({ role: 'dispatcher' });
   await db.doc('users/912000001').set({ role: 'user', name: 'Ali', bonusBalance: 500000, districtId: 'gurlan', regionId: 'xorazm' });
   await db.doc(`users/${POOR}`).set({ role: 'user', bonusBalance: 1000, districtId: 'gurlan' });
   await db.doc(`users/${OTHER}`).set({ role: 'user', bonusBalance: 500000, districtId: 'urganch' });
@@ -249,6 +251,25 @@ async function main() {
     const rm = await call('adminRemoveSupermarketLine', { orderId: r.orderId, productId: 'potato_1', reason: 'Йўқ' }, ADMIN);
     // қолди: 80000 + 8000 + 8800 = 96800 → қайтим 19965
     assert.deepStrictEqual([rm.refund, rm.total], [19965, 96800]);
+  });
+
+  await check('C12 dispatcher тортади/олади (аудитда роль); ҳамён изоҳи калит + 3 тил; packQty/packUnit сақланади', async () => {
+    await call('adminUpsertSupermarketOffer', { productId: 'water_15_1', offer: { smGroupId: 'drinking_water', smVariety: variety('still', 'Газсиз', 'Gazsiz', 'Без газа'), packLabel: '1.5 л', packQty: 1.5, packUnit: 'l', stock: 50, smStatus: 'active', price: 4500 } }, ADMIN);
+    const w = await get('platform_products/water_15_1');
+    assert.deepStrictEqual([w.packQty, w.packUnit], [1.5, 'l']);
+    await assert.rejects(call('adminUpsertSupermarketOffer', { productId: 'water_15_2', offer: { smGroupId: 'drinking_water', smVariety: variety('still', 'Газсиз', 'Gazsiz', 'Без газа'), stock: 1, smStatus: 'active', price: 1 } }, DISP), (e) => e.code === 'permission-denied');
+    const r = await call('placeSupermarketOrder', order('req-disp-00001', [{ productId: 'beef_lean_1', qty: 1 }, { productId: 'water_15_1', qty: 2 }]), USER);
+    const s = await call('adminSettleSupermarketWeights', { orderId: r.orderId, lines: [{ productId: 'beef_lean_1', actualQty: 0.9 }] }, DISP);
+    assert.ok(s.refund > 0);
+    const a = (await audits('supermarket_weigh_settle')).find((x) => x.target === `orders/${r.orderId}`);
+    assert.deepStrictEqual([a.actor, a.actorRole], [DISP, 'dispatcher']);
+    const rm = await call('adminRemoveSupermarketLine', { orderId: r.orderId, productId: 'water_15_1', reason: 'Тугади' }, DISP);
+    assert.ok(rm.refund > 0);
+    assert.strictEqual((await audits('supermarket_line_remove')).find((x) => x.target === `orders/${r.orderId}`).actorRole, 'dispatcher');
+    const wl = (await db.collection('users/912000001/wallet_ledger').where('refId', '==', r.orderId).get()).docs.map((d) => d.data()).filter((d) => d.type === 'order_partial_refund');
+    assert.deepStrictEqual(wl.map((d) => d.meta.noteKey).sort(), ['sm_refund_line_removed', 'sm_refund_weigh']);
+    for (const d of wl) assert.ok(d.meta.messages.uz_Latn && d.meta.messages.ru && d.meta.note === d.meta.messages.uz_Cyrl);
+    assert.strictEqual((await get(`journal_entries/bonus:sm_adjust_${r.orderId}_1`)).postedRole, 'dispatcher');
   });
 
   const passed = results.filter(Boolean).length;

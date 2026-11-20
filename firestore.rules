@@ -1879,7 +1879,7 @@ service cloud.firestore {
     // (smGroupId бор) клиент админ фақат goodsKind/sortOrder/updatedAt бўйича янгилайди (эски
     // оммавий амаллар йиқилмасин), ўчирмайди (smStatus 'hidden'). Эски ҳужжатлар — аввалгидек.
     function smServerFields() {
-      return ['smGroupId', 'smCategoryId', 'smVariety', 'smQuality', 'packLabel', 'qtyStep',
+      return ['smGroupId', 'smCategoryId', 'smVariety', 'smQuality', 'packLabel', 'packQty', 'packUnit', 'qtyStep',
               'weighed', 'stock', 'smStatus', 'smAutoOutOfStock', 'priceUpdatedAt', 'searchTokens'];
     }
     match /platform_products/{id} {

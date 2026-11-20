@@ -69,7 +69,17 @@ class _SmCheckoutScreenState extends State<SmCheckoutScreen> {
     _prefillPhone();
     // Танланган туман учун рухсат ва вақтлар — сервердан (getSupermarketAccess({districtId})).
     _refreshAccess();
+    // Битта обуна: баланс ҳам кўрсатилади, ҳам тасдиқ тугмасини бошқаради (етмаса — ўчиқ, тўлдириш тугмаси).
+    _balanceSub = _balance.listen((b) {
+      if (mounted) setState(() => _lastBalance = b);
+    });
   }
+
+  StreamSubscription<int>? _balanceSub;
+  int? _lastBalance;
+
+  /// Ҳамёнда етишмаётган сумма (баланс маълум бўлса; тахминий — якуний текширув серверда).
+  int get _shortfall => _lastBalance == null ? 0 : _c.totals.holdEstimate - _lastBalance!;
 
   void _pickDefaultDay() {
     final days = _c.access.days;
@@ -100,6 +110,7 @@ class _SmCheckoutScreenState extends State<SmCheckoutScreen> {
 
   @override
   void dispose() {
+    _balanceSub?.cancel();
     for (final t in [_mahalla, _street, _house, _landmark, _phone]) {
       t.dispose();
     }
@@ -286,12 +297,11 @@ class _SmCheckoutScreenState extends State<SmCheckoutScreen> {
             ],
           ]),
           const SizedBox(height: 12),
-          StreamBuilder<int>(
-            stream: _balance,
-            builder: (context, snap) {
-              final balance = snap.data;
+          Builder(
+            builder: (context) {
+              final balance = _lastBalance;
               final hold = t.holdEstimate;
-              final short = balance == null ? 0 : (hold - balance);
+              final short = _shortfall;
               return _Section(title: context.tr('sm_payment_wallet'), children: [
                 if (balance != null)
                   SmSumRow(label: context.tr('sm_wallet_balance'), amount: balance, valueKey: const ValueKey('sm_balance')),
@@ -339,7 +349,7 @@ class _SmCheckoutScreenState extends State<SmCheckoutScreen> {
           FilledButton(
             key: const ValueKey('sm_confirm'),
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-            onPressed: _submitting || !_formOk ? null : _submit,
+            onPressed: _submitting || !_formOk || _shortfall > 0 ? null : _submit,
             child: _submitting
                 ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5))
                 : Text(context.tr('sm_confirm'), style: const TextStyle(fontSize: 16)),

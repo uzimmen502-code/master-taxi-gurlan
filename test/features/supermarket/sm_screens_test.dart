@@ -258,6 +258,22 @@ void main() {
       await t.ensureVisible(_k('sm_topup'));
       await t.tap(_k('sm_topup'));
       expect(topUp, 11100);
+      expect(t.widget<FilledButton>(_k('sm_confirm')).onPressed, isNull, reason: 'ҳамён етмаса — тасдиқ ўчиқ');
+      expect(api.payloads, isEmpty);
+    });
+
+    testWidgets('сервер рад этса — кейинги уриниш янги калит билан', (t) async {
+      await tall(t);
+      final api = FakeSupermarketApi()
+        ..placeResults.add(const SmCallError('sm_err_insufficient_funds', 'INSUFFICIENT_BALANCE'));
+      final c = _controller(api: api, cart: SmCart.empty.add('o_red_cheap', 2000));
+      var n = 0;
+      await t.pumpWidget(_app(SmCheckoutScreen(
+        controller: c,
+        balance: Stream.value(1000000),
+        keys: IdempotencyKeys(generator: () => 'key-${++n}'),
+      )));
+      await fill(t);
       await t.ensureVisible(_k('sm_confirm'));
       await t.tap(_k('sm_confirm'));
       await t.pumpAndSettle();

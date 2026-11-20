@@ -6209,5 +6209,7 @@
   "wlt_l_partial_refund": "Buyurtmadan qaytim",
   "wlt_l_partial_refund_mod": "{module} — qaytim",
   "sm_cancel_order": "Buyurtmani bekor qiliş",
-  "sm_cancel_unavailable": "Buyurtma yiğila boşladi — endi bekor qilib bölmaydi. Savol bölsa, qöllab-quvvatlaşga yozing."
+  "sm_cancel_unavailable": "Buyurtma yiğila boşladi — endi bekor qilib bölmaydi. Savol bölsa, qöllab-quvvatlaşga yozing.",
+  "sm_refund_weigh": "Supermarket: tortilgandan keyingi qaytim",
+  "sm_refund_line_removed": "Supermarket: mahsulot olindi, qaytim"
 }

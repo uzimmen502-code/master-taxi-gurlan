@@ -51,7 +51,7 @@ const kHomeMarketEntries = <HomeMarketEntry>[
     id: 'supermarket',
     moduleId: 'supermarket',
     titleKey: 'home_market_supermarket_title',
-    imagePath: 'assets/images/markets/market_supermarket_v1.webp',
+    imagePath: 'assets/images/markets/market_supermarket_v2.webp', // v2: оқ четлар — карточка эни/бўйи ўзгарса ҳам «Онлайн Супермаркет» тўлиқ кўринади
     icon: Icons.local_grocery_store_rounded,
     sloganKey: 'home_market_supermarket_slogan',
   ),

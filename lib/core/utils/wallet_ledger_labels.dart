@@ -78,17 +78,15 @@ String walletLedgerTitle(WalletLedgerEntry e, WalletTr tr) {
   }
 }
 
-/// Сервер изоҳи (эга 2026-11-20): аввал `meta.noteMessages|messages{uz_Cyrl,uz_Latn,ru}` (жорий тил →
-/// uz_Cyrl), кейин `meta.noteKey` (lang калити, таржимаси бўлса), охири — эски `meta.note` матни.
+/// Сервер изоҳи (эга 2026-11-20; сервер 18b4ca04): аввал `meta.messages{uz_Cyrl,uz_Latn,ru}` (жорий тил →
+/// uz_Cyrl), кейин `meta.noteKey` (`sm_refund_weigh` | `sm_refund_line_removed`, lang калити), охири — эски `meta.note`.
 String walletLedgerNote(WalletLedgerEntry e, WalletTr tr, {String lang = 'uz_Cyrl'}) {
-  for (final k in const ['noteMessages', 'messages']) {
-    final m = e.meta[k];
-    if (m is Map) {
-      final own = (m[lang] ?? '').toString().trim();
-      if (own.isNotEmpty) return own;
-      final cyr = (m['uz_Cyrl'] ?? '').toString().trim();
-      if (cyr.isNotEmpty) return cyr;
-    }
+  final m = e.meta['messages'];
+  if (m is Map) {
+    final own = (m[lang] ?? '').toString().trim();
+    if (own.isNotEmpty) return own;
+    final cyr = (m['uz_Cyrl'] ?? '').toString().trim();
+    if (cyr.isNotEmpty) return cyr;
   }
   final key = (e.meta['noteKey'] ?? '').toString().trim();
   if (key.isNotEmpty) {

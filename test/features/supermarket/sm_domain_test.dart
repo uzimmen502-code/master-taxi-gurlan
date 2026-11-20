@@ -293,12 +293,20 @@ void main() {
     String tr(String k, [Map<String, String>? p]) => k == 'known_key' ? 'Таржима' : k;
     WalletLedgerEntry e(Map<String, dynamic> meta) => WalletLedgerEntry(id: 'x', type: 'order_partial_refund', amount: 1, meta: meta);
     final msgs = {'uz_Cyrl': 'Қайтим', 'uz_Latn': 'Qaytim', 'ru': 'Возврат'};
-    expect(walletLedgerNote(e({'noteMessages': msgs, 'note': 'эски'}), tr, lang: 'ru'), 'Возврат');
+    expect(walletLedgerNote(e({'messages': msgs, 'noteKey': 'known_key', 'note': 'эски'}), tr, lang: 'ru'), 'Возврат');
+    expect(walletLedgerNote(e({'noteMessages': msgs, 'note': 'эски'}), tr, lang: 'ru'), 'эски',
+        reason: 'сервер 18b4ca04: фақат messages');
+    for (final l in ['uz_Cyrl', 'uz_Latn', 'ru']) {
+      final m = jsonDecode(File('assets/lang/$l.json').readAsStringSync()) as Map<String, dynamic>;
+      for (final k in ['sm_refund_weigh', 'sm_refund_line_removed']) {
+        expect((m[k] as String?)?.isNotEmpty, isTrue, reason: '$l $k');
+      }
+    }
     expect(walletLedgerNote(e({'messages': {'uz_Cyrl': 'Қайтим'}}), tr, lang: 'uz_Latn'), 'Қайтим', reason: 'тил йўқ — uz_Cyrl');
     expect(walletLedgerNote(e({'noteKey': 'known_key', 'note': 'эски'}), tr), 'Таржима');
     expect(walletLedgerNote(e({'noteKey': 'unknown_key', 'note': 'эски'}), tr), 'эски', reason: 'таржимаси йўқ калит');
     expect(walletLedgerNote(e({'note': 'эски'}), tr), 'эски');
-    expect(walletLedgerSubtitle(e({'noteMessages': msgs}), tr, lang: 'uz_Latn'), startsWith('Qaytim'));
+    expect(walletLedgerSubtitle(e({'messages': msgs}), tr, lang: 'uz_Latn'), startsWith('Qaytim'));
   });
 
   test('мижоз бекори: супермаркетда фақат new', () {

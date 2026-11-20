@@ -1,0 +1,12 @@
+{
+ "stage": "internal",
+ "testerIds": [],
+ "districtIds": ["gurlan"],
+ "slots": [
+  { "id": "morning", "names": { "uz_Cyrl": "10:00–13:00", "uz_Latn": "10:00–13:00", "ru": "10:00–13:00" }, "startMin": 600, "endMin": 780 },
+  { "id": "afternoon", "names": { "uz_Cyrl": "14:00–17:00", "uz_Latn": "14:00–17:00", "ru": "14:00–17:00" }, "startMin": 840, "endMin": 1020 },
+  { "id": "evening", "names": { "uz_Cyrl": "18:00–21:00", "uz_Latn": "18:00–21:00", "ru": "18:00–21:00" }, "startMin": 1080, "endMin": 1260 }
+ ],
+ "cutoffMin": 60,
+ "weighHoldPercent": 10
+}

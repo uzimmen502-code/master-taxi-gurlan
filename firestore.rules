@@ -1874,10 +1874,29 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // «AVA Супермаркет» (эга 2026-11-20): `sm*` таклиф майдонлари, нарх ва stock — фақат CF
+    // `adminUpsertSupermarketOffer` (нарх аудити) / буюртма транзакциялари. Супермаркет таклифини
+    // (smGroupId бор) клиент админ фақат goodsKind/sortOrder/updatedAt бўйича янгилайди (эски
+    // оммавий амаллар йиқилмасин), ўчирмайди (smStatus 'hidden'). Эски ҳужжатлар — аввалгидек.
+    function smServerFields() {
+      return ['smGroupId', 'smCategoryId', 'smVariety', 'smQuality', 'packLabel', 'qtyStep',
+              'weighed', 'stock', 'smStatus', 'smAutoOutOfStock', 'priceUpdatedAt', 'searchTokens'];
+    }
     match /platform_products/{id} {
       allow read: if true;
-      allow create, update: if isAdmin();
-      allow delete: if isAdmin();
+      allow create: if isAdmin()
+          && !request.resource.data.keys().hasAny(smServerFields());
+      allow update: if isAdmin() && (
+          ('smGroupId' in resource.data)
+            ? request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['goodsKind', 'sortOrder', 'updatedAt'])
+            : !request.resource.data.diff(resource.data).affectedKeys().hasAny(smServerFields()));
+      allow delete: if isAdmin() && !('smGroupId' in resource.data);
+      // Харид нархи / таъминотчи — фақат админ ўқийди, ёзиш фақат CF.
+      match /private/{docId} {
+        allow read: if isAdmin();
+        allow write: if false;
+      }
     }
 
     // Глобал қидирув индекси — read:true; write фақат CF (Admin SDK).
@@ -2143,7 +2162,9 @@ service cloud.firestore {
       allow read: if docId != 'courier' && docId != 'tv_social'
           && docId != 'wallet_bot'
           && docId != 'courier_task_payout'
-          && docId != 'courier_service_fee';
+          && docId != 'courier_service_fee'
+          && (docId != 'supermarket' || isAdmin());
+      // `supermarket` — testerIds (телефонлар): мижоз ўқимайди (`getSupermarketAccess`), админ ўқийди; ёзиш фақат CF.
       // prices/app/anomaly — фақат isAdmin (олдин очиқ update бўлган).
       // `prices` ичидаги маҳаллий такси тарифи — фақат CF
       // `adminSetLocalTaxiPrices` (версия + тарих, эга қарори 2026-10-07);
@@ -2164,6 +2185,7 @@ service cloud.firestore {
           && docId != 'wholesale_orders'
           && docId != 'courier_service_fee'
           && docId != 'courier_task_payout'
+          && docId != 'supermarket'
           && (docId != 'anomaly_settings' || isSuperAdmin())
           && (
             docId != 'prices'

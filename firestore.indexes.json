@@ -1789,6 +1789,20 @@
       ]
     },
     {
+      "collectionGroup": "platform_products",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "smStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "searchTokens",
+          "arrayConfig": "CONTAINS"
+        }
+      ]
+    },
+    {
       "collectionGroup": "tv_clips",
       "queryScope": "COLLECTION",
       "fields": [

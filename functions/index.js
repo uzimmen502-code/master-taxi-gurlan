@@ -2859,6 +2859,23 @@ async function repricePlatformOrderFromCatalog(itemsIn, pricingVersion) {
           'not-found', `Маҳсулот топилмади: ${productId}`);
     }
     const d = snap.data() || {};
+    // «AVA Супермаркет» таклифи (эга 2026-11-20): фақат `placeSupermarketOrder` орқали (каср миқдор,
+    // тортиш ушлаши, stock) — эски йўл бутун сон/поғона нархи билан олмасин.
+    if (String(d.smGroupId || '').trim() !== '') {
+      console.warn(JSON.stringify({
+        action: 'placeOrderPostPaid', result: 'rejected', errorCode: 'SUPERMARKET_PRODUCT_USE_SUPERMARKET', productId,
+      }));
+      throw new functions.https.HttpsError('failed-precondition',
+          'Бу маҳсулот «AVA Супермаркет» бўлимида сотилади. Иловани янгиланг.', {
+            code: 'SUPERMARKET_PRODUCT_USE_SUPERMARKET',
+            productId,
+            messages: {
+              uz_Cyrl: 'Бу маҳсулот «AVA Супермаркет» бўлимида сотилади. Иловани янгиланг.',
+              uz_Latn: 'Bu mahsulot «AVA Supermarket» bölimida sotiladi. Ilovani yangilang.',
+              ru: 'Этот товар продаётся в разделе «AVA Супермаркет». Обновите приложение.',
+            },
+          });
+    }
     // Каталогдаги барча маҳсулотлар буюртма қилиниши мумкин (active чекловсиз).
     const unitPrice = platformPricing.unitPriceForQty(d, qty, pricingVersion);
     if (!Number.isInteger(unitPrice) || unitPrice <= 0) {

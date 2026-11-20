@@ -96,10 +96,6 @@ void main() {
       expect(homeTransportCardIds((id) => id == 'marshrut'), ['marshrut']);
       expect(kHomeTransportModuleIds.contains('yuk_intercity'), isFalse);
     });
-    test('«Бошқа хизматлар»: AVAGram · Бизнес харитаси · Электр зарядлаш (ҳар бири ўз дарвозаси)', () {
-      expect(homeMoreCardIds(_all), ['tv_market', 'business_map', 'ev_charging']);
-      expect(homeMoreCardIds((id) => id == 'ev_charging'), ['ev_charging']);
-    });
   });
 
   group('HomeLiteSection / HomeLiteCard', () {

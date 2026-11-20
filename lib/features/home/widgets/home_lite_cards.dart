@@ -224,12 +224,3 @@ List<String> homeTransportCardIds(bool Function(String moduleId) isVisible) => [
       for (final id in kHomeTransportModuleIds)
         if (isVisible(id)) id,
     ];
-
-/// «Бошқа хизматлар» (янги жойлашувда йўқ, лекин бош саҳифадан йўқолмасин): AVAGram,
-/// Бизнес харитаси, Электр зарядлаш — ҳар бири ўз дарвозаси билан.
-const kHomeMoreModuleIds = <String>['tv_market', 'business_map', 'ev_charging'];
-
-List<String> homeMoreCardIds(bool Function(String moduleId) isVisible) => [
-      for (final id in kHomeMoreModuleIds)
-        if (isVisible(id)) id,
-    ];

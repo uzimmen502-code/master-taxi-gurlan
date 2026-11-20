@@ -53,8 +53,8 @@ const _images = [
   'assets/images/home/banner_megaphone_v1.webp',
   'assets/images/ava_logo_mark.png',
   'assets/images/markets/market_electronics_v2.webp',
-  'assets/images/markets/market_auto_v2.webp',
-  'assets/images/markets/market_livestock_v2.webp',
+  'assets/images/markets/market_auto_v3.webp',
+  'assets/images/markets/market_livestock_v3.webp',
   'assets/images/markets/market_meat_v2.webp',
   'assets/images/markets/market_farm_v2.webp',
   'assets/images/markets/market_appliances_v2.webp',
@@ -62,7 +62,14 @@ const _images = [
   'assets/images/markets/market_wholesale_v2.webp',
   'assets/images/markets/market_china_v2.webp',
   'assets/images/markets/market_aralash_v2.webp',
-  'assets/images/services/service_jobs.png',
+  'assets/images/home/card_dating_v1.webp',
+  'assets/images/home/card_new_ads_v1.webp',
+  'assets/images/home/card_post_v1.webp',
+  'assets/images/home/card_pay_v1.webp',
+  'assets/images/home/card_restaurants_v1.webp',
+  'assets/images/home/card_intercity_v1.webp',
+  'assets/images/home/card_marshrut_v1.webp',
+  'assets/images/home/card_yuk_local_v1.webp',
   'assets/images/services/service_yuk_local.png',
   'assets/images/services/service_ev_charging.png',
   'assets/images/banners/banner_food.jpg',
@@ -83,29 +90,23 @@ class _Preview extends StatelessWidget {
             {String? image, IconData? icon, HomeLiteImageFit fit = HomeLiteImageFit.cover}) =>
         HomeLiteCardData(id: id, title: tr(title), caption: tr(caption), imagePath: image, icon: icon, fit: fit, onTap: () {});
     final ads = <String, HomeLiteCardData>{
-      'dating': card('dating', 'dating_short_label', 'home_lite_dating_caption', icon: Icons.favorite_rounded),
+      'dating': card('dating', 'dating_short_label', 'home_lite_dating_caption', image: 'assets/images/home/card_dating_v1.webp'),
       'ads': card('ads', 'home_section_ads', 'home_lite_ads_caption',
-          image: 'assets/images/services/service_jobs.png', fit: HomeLiteImageFit.contain),
-      'logistics': card('logistics', 'home_lite_post_title', 'home_lite_post_caption', icon: Icons.local_post_office_rounded),
-      'pay': card('pay', 'home_lite_pay_title', 'home_lite_pay_caption', icon: Icons.account_balance_wallet_rounded),
+          image: 'assets/images/home/card_new_ads_v1.webp'),
+      'logistics': card('logistics', 'home_lite_post_title', 'home_lite_post_caption', image: 'assets/images/home/card_post_v1.webp'),
+      'pay': card('pay', 'home_lite_pay_title', 'home_lite_pay_caption', image: 'assets/images/home/card_pay_v1.webp'),
       'restaurants': card('restaurants', 'home_lite_restaurants_title', 'home_lite_restaurants_caption',
-          image: 'assets/images/banners/banner_food.jpg'),
+          image: 'assets/images/home/card_restaurants_v1.webp'),
     };
     final transport = <String, HomeLiteCardData>{
       'intercity': card('intercity', 'home_module_intercity', 'home_lite_intercity_caption',
-          image: 'assets/images/banners/banner_intercity.jpg'),
+          image: 'assets/images/home/card_intercity_v1.webp'),
       'local_taxi': card('local_taxi', 'home_lite_local_taxi_title', 'home_lite_local_taxi_caption',
           image: 'assets/images/banners/banner_local_taxi.jpg'),
       'marshrut': card('marshrut', 'home_lite_marshrut_title', 'home_lite_marshrut_caption',
-          image: 'assets/images/banners/banner_marshrut.jpg'),
+          image: 'assets/images/home/card_marshrut_v1.webp'),
       'yuk_local': card('yuk_local', 'home_lite_yuk_local_title', 'home_lite_yuk_local_caption',
-          image: 'assets/images/services/service_yuk_local.png', fit: HomeLiteImageFit.contain),
-    };
-    final more = <String, HomeLiteCardData>{
-      'tv_market': card('tv_market', 'home_nav_avagram', 'home_lite_avagram_caption', icon: Icons.play_circle_fill_rounded),
-      'business_map': card('business_map', 'home_lite_business_map_title', 'home_lite_business_map_caption', icon: Icons.map_rounded),
-      'ev_charging': card('ev_charging', 'home_lite_ev_title', 'home_lite_ev_caption',
-          image: 'assets/images/services/service_ev_charging.png', fit: HomeLiteImageFit.contain),
+          image: 'assets/images/home/card_yuk_local_v1.webp'),
     };
     bool all(String _) => true;
     return Scaffold(
@@ -147,10 +148,7 @@ class _Preview extends StatelessWidget {
               title: tr('home_lite_section_transport'),
               cards: [for (final id in homeTransportCardIds(all)) transport[id]!],
             ),
-            HomeLiteSection(
-              title: tr('home_lite_section_more'),
-              cards: [for (final id in homeMoreCardIds(all)) more[id]!],
-            ),
+            // Аралаш / Янги эълонлар / EV / Бизнес / AVAGram тасмалари Firestore'дан ўқийди — бу ерда йўқ.
             const SizedBox(height: 8),
             HomeAllServicesHeader(
               items: [ServiceSpotlightItem(moduleId: 'jobs', label: 'jobs', icon: Icons.circle, onTap: () {})],

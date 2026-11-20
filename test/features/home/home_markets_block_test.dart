@@ -210,9 +210,13 @@ void main() {
       final ads = src.indexOf("ValueKey('home_section_ads_services')");
       final transport = src.indexOf("ValueKey('home_section_transport')");
       final adsStrip = src.indexOf("titleKey: 'home_section_ads'");
-      final more = src.indexOf("ValueKey('home_section_more')");
+      final aralash = src.indexOf('HomeMarketSection(');
+      final ev = src.indexOf('HomeEvSection(');
+      final biz = src.indexOf('HomeBusinessSection(');
+      final avagram = src.indexOf('HomeAvagramSection(');
       final header = src.indexOf('HomeAllServicesHeader(');
-      final all = [top, confirm, order, ticker, search, block, ads, transport, adsStrip, more, header];
+      // Эга 2026-11-20 (2-тур): Аралаш тасмаси «Бозорлар»дан кейин; EV / Бизнес / AVAGram бўлимлари аввалгидек қайтди.
+      final all = [top, confirm, order, ticker, search, block, aralash, ads, transport, adsStrip, ev, biz, avagram, header];
       expect(all.every((i) => i > 0), isTrue, reason: '$all');
       for (var i = 1; i < all.length; i++) {
         expect(all[i], greaterThan(all[i - 1]), reason: 'index $i');
@@ -223,18 +227,18 @@ void main() {
       expect(searchRe.allMatches(src).length, 1);
       expect(src.contains('items: homeRowServices(buildHomeServices('), isTrue);
     });
-    test('карточкага алмашган бўлимлар бош саҳифада йўқ; «Янги эълонлар» бўлими қолди', () {
+    test('карточкага алмашган бўлимлар йўқ; Аралаш/EV/Бизнес/AVAGram/«Янги эълонлар» бор; ресторан тасмаси бор (байроқ)', () {
+      expect(src.contains('if (kHomeShowRestaurantsStrip) ...['), isTrue);
+      expect(src.contains('const bool kHomeShowRestaurantsStrip = true;'), isTrue); // эга 2026-11-20 «б»
+      expect(src.contains('const bool kHomeShowNewAdsStrip = true;'), isTrue);
+      expect(src.contains('onOpenAd: _openMarketAd'), isTrue);
+      expect(src.contains('onAddMine: () => _openMyBusinesses()'), isTrue);
       for (final w in [
         'HomeWholesaleSection(',
         'HomeRealtySection(',
-        'HomeMarketSection(',
         'HomeDatingSection(',
-        'HomeRestaurantsSection(',
         'HomeIntercitySection(',
         'HomeYukLocalSection(',
-        'HomeEvSection(',
-        'HomeBusinessSection(',
-        'HomeAvagramSection(',
         "titleKey: 'home_section_services'",
       ]) {
         expect(src.contains(w), isFalse, reason: w);

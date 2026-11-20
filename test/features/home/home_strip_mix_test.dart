@@ -317,8 +317,7 @@ void main() {
       final rest = File('lib/features/home/widgets/home_restaurants_section.dart').readAsStringSync();
       expect(rest.contains("if (r.isHomeCook) Flexible(child: HomeRowBadge(context.tr('home_badge_home_food')))"), isTrue);
       final home = File('lib/features/home/home_screen.dart').readAsStringSync();
-      // Эга 2026-11-20: Аралаш тасмаси бош саҳифадан олинди (карточка «Аралаш бозор») — фақат «Янги эълонлар».
-      expect('onOpenShopItem: _openHomeShopItem'.allMatches(home).length, 1);
+      expect('onOpenShopItem: _openHomeShopItem'.allMatches(home).length, 2);
       final ads = File('lib/features/home/widgets/home_ads_section.dart').readAsStringSync();
       expect(ads.contains("bool get _withExtras => widget.adType == 'ad'"), isTrue);
       // Маҳсулот қатори: сарлавҳа · нарх (+бирлик) · туман (эга 2026-11-19).

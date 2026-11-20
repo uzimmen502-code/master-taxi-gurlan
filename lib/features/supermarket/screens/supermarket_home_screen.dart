@@ -14,17 +14,18 @@ import 'sm_cart_screen.dart';
 import 'sm_category_screen.dart';
 import 'sm_group_screen.dart';
 
-/// Категория иконкаси: сервер `icon` калити → Material иконка (номаълум — умумий).
+/// Категория иконкаси: сервер `icon` калити (seed `supermarket_taxonomy_v1.json`: meat, grain, vegetable,
+/// fruit, oil, dairy, egg, drink, household) → Material иконка; номаълум — умумий.
 IconData smCategoryIcon(String key) => switch (key) {
-      'vegetables' => Icons.eco_outlined,
-      'fruits' => Icons.apple_outlined,
       'meat' => Icons.kebab_dining_outlined,
-      'dairy' => Icons.egg_outlined,
-      'bakery' => Icons.bakery_dining_outlined,
-      'grocery' => Icons.rice_bowl_outlined,
-      'drinks' => Icons.local_drink_outlined,
+      'grain' => Icons.rice_bowl_outlined,
+      'vegetable' => Icons.eco_outlined,
+      'fruit' => Icons.apple_outlined,
+      'oil' => Icons.water_drop_outlined,
+      'dairy' => Icons.local_drink_outlined,
+      'egg' => Icons.egg_outlined,
+      'drink' => Icons.local_cafe_outlined,
       'household' => Icons.cleaning_services_outlined,
-      'sweets' => Icons.cake_outlined,
       _ => Icons.local_grocery_store_outlined,
     };
 

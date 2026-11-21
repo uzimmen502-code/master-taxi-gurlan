@@ -84,7 +84,18 @@ List<String> smRemindProblems(SmRemind r) => [
     ];
 
 class SmList {
-  const SmList({required this.id, required this.name, this.items = const [], this.remind = const SmRemind(), this.updatedAt});
+  const SmList({
+    required this.id,
+    required this.name,
+    this.items = const [],
+    this.remind = const SmRemind(),
+    this.updatedAt,
+    this.invalid = '',
+  });
+
+  /// Сервер-фақат `smInvalid` (муаммо коди) — бўш бўлмаса огоҳлантириш кўрсатилади.
+  /// Клиент уни ЁЗМАЙДИ ([toMap]да йўқ; `update` бошқа сервер майдонларига ҳам тегмайди).
+  final String invalid;
 
   final String id;
   final String name;
@@ -98,6 +109,7 @@ class SmList {
         items: List.unmodifiable(items ?? this.items),
         remind: remind ?? this.remind,
         updatedAt: updatedAt,
+        invalid: invalid,
       );
 
   /// Ёзиш учун (вақт майдонлари — репозиторийда `serverTimestamp`).
@@ -119,6 +131,7 @@ class SmList {
       items: List.unmodifiable(items),
       remind: SmRemind.fromMap(d['remind']),
       updatedAt: updatedAt,
+      invalid: d['smInvalid'] is String ? (d['smInvalid'] as String).trim() : (d['smInvalid'] == null || d['smInvalid'] == false ? '' : 'invalid'),
     );
   }
 

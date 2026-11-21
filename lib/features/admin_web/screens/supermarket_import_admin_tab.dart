@@ -185,20 +185,20 @@ class _SmImportAdminTabState extends State<SmImportAdminTab> {
               key: ValueKey('sm_import_err_${row.row}'),
               dense: true,
               leading: Text('#${row.row}'),
-              title: Text([row.key, row.title].where((s) => s.isNotEmpty).join(' · ')),
+              title: Text([row.key, row.title, if (row.price != null) '${row.price} сўм'].where((s) => s.isNotEmpty).toSet().join(' · ')),
               subtitle: Text(row.errors.join(', '), style: const TextStyle(color: Colors.red)),
             ),
         ],
       ];
 
   List<Widget> _previewView(SmImportPreview p) => [
-        const Text('Текширув натижаси (ҳали ҳеч нарса ёзилмади):'),
+        Text(p.duplicate ? 'Бу файл аввал текширилган — ўша натижа:' : 'Текширув натижаси (ҳали ҳеч нарса ёзилмади):'),
         const SizedBox(height: 8),
         ..._counts({
           'Жами': p.total,
+          'Тайёр': p.ready,
           'Янги': p.create,
           'Ўзгаради': p.update,
-          'Ўзгармайди': p.unchanged,
           'Хато': p.errors,
         }),
         ..._errors(p.errorRows),
@@ -218,7 +218,7 @@ class _SmImportAdminTabState extends State<SmImportAdminTab> {
         Text(r.isPartial ? 'Қисман ёзилди — давом эттиринг' : 'Импорт тугади',
             key: const ValueKey('sm_import_result'), style: const TextStyle(fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),
-        ..._counts({'Янги': r.created, 'Янгиланди': r.updated, 'Ўзгармади': r.unchanged, 'Хато': r.failed}),
+        ..._counts({'Янги': r.created, 'Янгиланди': r.updated, 'Ўзгармади': r.unchanged, 'Хато': r.failed, 'Кутилмоқда': r.pending}),
         ..._errors(r.errorRows),
         const SizedBox(height: 12),
         Wrap(spacing: 12, runSpacing: 8, children: [

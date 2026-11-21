@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
@@ -8,26 +10,33 @@ import '../../../models/order_model.dart';
 import '../../../shared/widgets/wallet_topup_ui.dart';
 import '../data/supermarket_repository.dart';
 import '../domain/sm_access.dart';
-import '../domain/sm_offer.dart';
 import '../domain/sm_qty.dart';
 import '../domain/sm_shortage.dart';
 import 'sm_widgets.dart';
 
-/// Буюртма тафсилотида етишмовчилик қаторлари (2-босқич, эга 2026-11-21): ўрнини босувчи (нарх фарқи ва
-/// ҳамёнга таъсири) / мавжуд миқдоргача камайтириш / олиб ташлаш. Юбориш пайтида ўчиқ; `clientRequestId`
-/// ҳар қатор учун БИР МАРТА ясалади ва аниқ рад бўлгунча ўзгармайди (21-банд).
+/// Буюртма тафсилотида етишмовчилик (2-босқич; сервер cd02561a, эга 2026-11-21):
+/// * `shortage.state == 'pending'` қаторлар — танлов: ўрнини босувчи (нарх фарқи, ТАХМИНИЙ ҳамёнга таъсир) /
+///   мавжуд миқдоргача камайтириш / олиб ташлаш; жавоб муддати (дақиқа) кўрсатилади;
+/// * ҳал бўлганлари — «алмаштирилди / камайтирилди / олиб ташланди» қатори.
+/// Юбориш пайтида ўчиқ; `clientRequestId` ҳар қатор учун БИР МАРТА ясалади, аниқ рад бўлгунча ўзгармайди.
 class SmShortagePanel extends StatefulWidget {
-  const SmShortagePanel({super.key, required this.order, this.api, this.keys, this.openTopUp});
+  const SmShortagePanel({super.key, required this.order, this.api, this.keys, this.openTopUp, this.now});
 
   final OrderModel order;
 
   /// Тест учун; бўлмаса — [FirebaseSupermarketApi].
   final SupermarketApi? api;
   final IdempotencyKeys? keys;
-  final void Function(BuildContext context)? openTopUp;
+
+  /// Тест учун: `shortfall` — сервер `required - balance` (номаълум — `null`).
+  final void Function(BuildContext context, int? shortfall)? openTopUp;
+  final DateTime Function()? now;
 
   static List<SmShortage> shortagesOf(OrderModel o) =>
       [for (final i in o.items) if (SmShortage.fromItem(i.raw) case final s?) s];
+
+  static List<SmShortageResolution> resolutionsOf(OrderModel o) =>
+      [for (final i in o.items) if (smShortageResolutionOf(i.raw) case final r?) r];
 
   @override
   State<SmShortagePanel> createState() => _SmShortagePanelState();
@@ -41,17 +50,72 @@ class _SmShortagePanelState extends State<SmShortagePanel> {
   @override
   Widget build(BuildContext context) {
     final list = SmShortagePanel.shortagesOf(widget.order);
-    if (list.isEmpty) return const SizedBox.shrink();
+    final done = SmShortagePanel.resolutionsOf(widget.order);
+    if (list.isEmpty && done.isEmpty) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (final s in list) ...[
-          SmShortageCard(orderId: widget.order.id, shortage: s, api: _api, keys: _keys, openTopUp: widget.openTopUp),
+          SmShortageCard(
+            orderId: widget.order.id,
+            shortage: s,
+            api: _api,
+            keys: _keys,
+            openTopUp: widget.openTopUp,
+            now: widget.now,
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (done.isNotEmpty) ...[
+          SmShortageResolutions(items: done),
           const SizedBox(height: 12),
         ],
       ],
     );
   }
+}
+
+/// Ҳал бўлган етишмовчиликлар (сервер қатор майдонлари бўйича).
+class SmShortageResolutions extends StatelessWidget {
+  const SmShortageResolutions({super.key, required this.items});
+
+  final List<SmShortageResolution> items;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ava;
+    return Container(
+      key: const ValueKey('sm_shortage_resolutions'),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: c.surface, borderRadius: BorderRadius.circular(16), border: Border.all(color: c.line)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(context.tr('sm_shortage_changes_title'), style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: c.ink)),
+          for (final (i, r) in items.indexed)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(_text(context, r), key: ValueKey('sm_shortage_resolved_$i'), style: TextStyle(fontSize: 15, color: c.ink)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _text(BuildContext context, SmShortageResolution r) => switch (r.outcome) {
+        SmShortageOutcome.substituted => context
+            .tr('sm_shortage_substituted')
+            .replaceAll('{from}', r.fromName)
+            .replaceAll('{to}', r.name)
+            .replaceAll('{old}', formatMoney(r.fromTotal))
+            .replaceAll('{new}', formatMoney(r.toTotal)),
+        SmShortageOutcome.reduced => context
+            .tr('sm_shortage_reduced')
+            .replaceAll('{name}', r.name)
+            .replaceAll('{from}', smFormatQty(r.fromQtyMilli))
+            .replaceAll('{to}', smFormatQty(r.toQtyMilli)),
+        SmShortageOutcome.removed => context.tr('sm_shortage_removed').replaceAll('{name}', r.name),
+      };
 }
 
 class SmShortageCard extends StatefulWidget {
@@ -62,35 +126,50 @@ class SmShortageCard extends StatefulWidget {
     required this.api,
     required this.keys,
     this.openTopUp,
+    this.now,
   });
 
   final String orderId;
   final SmShortage shortage;
   final SupermarketApi api;
   final IdempotencyKeys keys;
-  final void Function(BuildContext context)? openTopUp;
+  final void Function(BuildContext context, int? shortfall)? openTopUp;
+  final DateTime Function()? now;
 
   @override
   State<SmShortageCard> createState() => _SmShortageCardState();
 }
 
 class _SmShortageCardState extends State<SmShortageCard> {
-  late final Future<List<SmOffer>> _subs = widget.shortage.substitutes.isEmpty
-      ? Future.value(const <SmOffer>[])
-      : widget.api.loadOffersByIds(widget.shortage.substitutes).catchError((Object e) {
-          debugPrint('[Supermarket] SM_SHORTAGE_SUBS_FAILED: $e');
-          return const <SmOffer>[];
-        });
-
   SmShortageChoice? _choice;
-  SmOffer? _sub;
+  SmShortageSub? _sub;
   bool _busy = false;
-  bool _done = false;
+  SmShortageResult? _result;
   String? _errorKey;
   Map<String, String> _errorMessages = const {};
   bool _needTopUp = false;
+  int? _shortfall;
+
+  /// Муддат ҳисоблагичи — дақиқада бир янгиланади (чексиз эмас: виджет ёпилса тўхтайди).
+  Timer? _tick;
 
   String get _scope => 'sm_shortage:${widget.orderId}:${widget.shortage.productId}';
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.shortage.answerBy != null) {
+      _tick = Timer.periodic(const Duration(seconds: 30), (_) {
+        if (mounted) setState(() {});
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
 
   Future<void> _submit() async {
     final choice = _choice;
@@ -102,7 +181,7 @@ class _SmShortageCardState extends State<SmShortageCard> {
       _needTopUp = false;
     });
     try {
-      await widget.api.respondShortage(smShortagePayload(
+      final r = await widget.api.respondShortage(smShortagePayload(
         orderId: widget.orderId,
         shortage: widget.shortage,
         choice: choice,
@@ -110,16 +189,20 @@ class _SmShortageCardState extends State<SmShortageCard> {
         clientRequestId: widget.keys.keyFor(_scope),
       ));
       widget.keys.settled(_scope);
-      if (mounted) setState(() => _done = true);
+      _tick?.cancel();
+      if (mounted) setState(() => _result = r);
     } on SmCallError catch (e) {
       debugPrint('[Supermarket] SM_SHORTAGE_RESPOND_FAILED code=${e.code}');
       // Тармоқ хатоси — ўша калит билан қайта уриниш (иккинчи марта бажарилмайди); аниқ рад — янги калит.
       if (e.key != 'sm_err_network') widget.keys.settled(_scope);
+      final req = e.details['required'];
+      final bal = e.details['balance'];
       if (mounted) {
         setState(() {
           _errorKey = e.key;
           _errorMessages = e.messages;
           _needTopUp = e.key == 'sm_err_insufficient_funds';
+          _shortfall = req is num && bal is num && req > bal ? (req - bal).toInt() : null;
         });
       }
     } catch (e) {
@@ -135,6 +218,8 @@ class _SmShortageCardState extends State<SmShortageCard> {
     final c = context.ava;
     final s = widget.shortage;
     final lang = context.contentLang;
+    final left = smShortageMinutesLeft(s, (widget.now ?? DateTime.now)());
+    final r = _result;
     return Container(
       key: ValueKey('sm_shortage_${s.productId}'),
       padding: const EdgeInsets.all(12),
@@ -162,72 +247,67 @@ class _SmShortageCardState extends State<SmShortageCard> {
                 .replaceAll('{avail}', smFormatQty(s.availableQtyMilli)),
             style: TextStyle(fontSize: 15, color: c.ink),
           ),
-          if (_done) ...[
+          if (r == null && left != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                left > 0 ? context.tr('sm_shortage_answer_by').replaceAll('{min}', '$left') : context.tr('sm_shortage_answer_late'),
+                key: ValueKey('sm_shortage_deadline_${s.productId}'),
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: left > 0 ? c.warn : c.danger),
+              ),
+            ),
+          if (r != null) ...[
             const SizedBox(height: 8),
-            Text(context.tr('sm_shortage_done'),
+            Text(_doneText(context, r),
                 key: ValueKey('sm_shortage_done_${s.productId}'),
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.ok)),
           ] else ...[
-            FutureBuilder<List<SmOffer>>(
-              future: _subs,
-              builder: (context, snap) {
-                final subs = (snap.data ?? const <SmOffer>[]).where((o) => o.available).toList();
-                if (snap.connectionState != ConnectionState.done && s.substitutes.isNotEmpty) {
-                  return const Padding(padding: EdgeInsets.all(12), child: Center(child: CircularProgressIndicator()));
-                }
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (subs.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text(context.tr('sm_shortage_substitute'), style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.ink)),
-                      for (final o in subs)
-                        _Option(
-                          key: ValueKey('sm_shortage_sub_${o.id}'),
-                          selected: _choice == SmShortageChoice.substitute && _sub?.id == o.id,
-                          enabled: !_busy,
-                          title: [o.name, o.qualityName(lang), o.packLabel].where((x) => x.isNotEmpty).join(' · '),
-                          lines: [
-                            '${smFormatQty(smShortageSubstituteQty(s, o))} ${smUnitLabel(context, o.unit)} × '
-                                '${smPricePerUnit(context, o.price, o.unit)}',
-                            _priceDiff(context, smLineTotal(o.price, smShortageSubstituteQty(s, o)) - s.lineTotal),
-                          ],
-                          delta: smShortageWalletDelta(s, SmShortageChoice.substitute, substitute: o),
-                          onTap: () => setState(() {
-                            _choice = SmShortageChoice.substitute;
-                            _sub = o;
-                          }),
-                        ),
-                    ],
-                    const SizedBox(height: 4),
-                    if (s.canReduce)
-                      _Option(
-                        key: const ValueKey('sm_shortage_reduce'),
-                        selected: _choice == SmShortageChoice.reduce,
-                        enabled: !_busy,
-                        title: context.tr('sm_shortage_reduce').replaceAll('{avail}', smFormatQty(s.availableQtyMilli)),
-                        lines: const [],
-                        delta: smShortageWalletDelta(s, SmShortageChoice.reduce),
-                        onTap: () => setState(() {
-                          _choice = SmShortageChoice.reduce;
-                          _sub = null;
-                        }),
-                      ),
-                    _Option(
-                      key: const ValueKey('sm_shortage_remove'),
-                      selected: _choice == SmShortageChoice.remove,
-                      enabled: !_busy,
-                      title: context.tr('sm_shortage_remove'),
-                      lines: const [],
-                      delta: smShortageWalletDelta(s, SmShortageChoice.remove),
-                      onTap: () => setState(() {
-                        _choice = SmShortageChoice.remove;
-                        _sub = null;
-                      }),
-                    ),
+            if (s.substitutes.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(context.tr('sm_shortage_substitute'), style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.ink)),
+              for (final o in s.substitutes)
+                _Option(
+                  key: ValueKey('sm_shortage_sub_${o.offerId}'),
+                  selected: _choice == SmShortageChoice.substitute && _sub?.offerId == o.offerId,
+                  enabled: !_busy,
+                  title: [o.name, o.packLabel].where((x) => x.isNotEmpty).join(' · '),
+                  lines: [
+                    '${smFormatQty(smShortageSubstituteQty(s, o))} ${smUnitLabel(context, o.unit)} × '
+                        '${smPricePerUnit(context, o.price, o.unit)}',
+                    _priceDiff(context, smLineTotal(o.price, smShortageSubstituteQty(s, o)) - s.lineTotal),
                   ],
-                );
-              },
+                  delta: smShortageWalletDelta(s, SmShortageChoice.substitute, substitute: o),
+                  onTap: () => setState(() {
+                    _choice = SmShortageChoice.substitute;
+                    _sub = o;
+                  }),
+                ),
+            ],
+            const SizedBox(height: 4),
+            if (s.canReduce)
+              _Option(
+                key: const ValueKey('sm_shortage_reduce'),
+                selected: _choice == SmShortageChoice.reduce,
+                enabled: !_busy,
+                title: context.tr('sm_shortage_reduce').replaceAll('{avail}', smFormatQty(s.availableQtyMilli)),
+                lines: const [],
+                delta: smShortageWalletDelta(s, SmShortageChoice.reduce),
+                onTap: () => setState(() {
+                  _choice = SmShortageChoice.reduce;
+                  _sub = null;
+                }),
+              ),
+            _Option(
+              key: const ValueKey('sm_shortage_remove'),
+              selected: _choice == SmShortageChoice.remove,
+              enabled: !_busy,
+              title: context.tr('sm_shortage_remove'),
+              lines: const [],
+              delta: smShortageWalletDelta(s, SmShortageChoice.remove),
+              onTap: () => setState(() {
+                _choice = SmShortageChoice.remove;
+                _sub = null;
+              }),
             ),
             const SizedBox(height: 4),
             Text(context.tr('sm_shortage_estimate_note'), style: TextStyle(fontSize: 13, color: c.ink2)),
@@ -246,8 +326,8 @@ class _SmShortageCardState extends State<SmShortageCard> {
                   key: ValueKey('sm_shortage_topup_${s.productId}'),
                   style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
                   onPressed: () => widget.openTopUp != null
-                      ? widget.openTopUp!(context)
-                      : openWalletTopUp(Navigator.of(context)),
+                      ? widget.openTopUp!(context, _shortfall)
+                      : openWalletTopUp(Navigator.of(context), suggestedAmount: _shortfall),
                   child: Text(context.tr('sm_topup'), style: const TextStyle(fontSize: 16)),
                 ),
               ),
@@ -264,6 +344,14 @@ class _SmShortageCardState extends State<SmShortageCard> {
         ],
       ),
     );
+  }
+
+  /// Сервер жавоби: аниқ ечилган/қайтган сумма.
+  String _doneText(BuildContext context, SmShortageResult r) {
+    final head = context.tr('sm_shortage_done');
+    if (r.debit > 0) return '$head ${context.tr('sm_shortage_done_debit').replaceAll('{sum}', formatMoney(r.debit))}';
+    if (r.refund > 0) return '$head ${context.tr('sm_shortage_done_refund').replaceAll('{sum}', formatMoney(r.refund))}';
+    return head;
   }
 
   String _priceDiff(BuildContext context, int diff) {
@@ -289,7 +377,7 @@ class _Option extends StatelessWidget {
   final String title;
   final List<String> lines;
 
-  /// Ҳамёнга тахминий таъсир: мусбат — яна ечилади, манфий — қайтади.
+  /// Ҳамёнга ТАХМИНИЙ таъсир: мусбат — яна ечилади, манфий — қайтади.
   final int delta;
   final VoidCallback onTap;
 

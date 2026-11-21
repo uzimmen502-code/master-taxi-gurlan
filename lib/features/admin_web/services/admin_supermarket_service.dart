@@ -335,8 +335,10 @@ class AdminSupermarketService {
         'substitutes': substitutes,
       });
 
-  /// Excel импорт (2-босқич; Улгуржи импорт оқими кўзгуси). Жавоб шакли — wholesale_import билан бир хил деб
-  /// олинди (`{fileName, base64}` / `{batchId, counts, rows}` / `{status, counts, rows}`) — сервер тасдиқлаши керак.
+  /// Excel импорт (2-босқич; сервер cd02561a supermarket_import.js): template `{}` → `{fileName, base64}`;
+  /// preview `{fileName, fileBase64, clientRequestId}` → `{batchId, duplicate, counts{total,ready,errors,create,update},
+  /// rows[{row,sku,groupId,price,action,errors}]}`; confirm `{batchId}` → `{status done|partial, counts{created,updated,
+  /// unchanged,error,pending}, rows}`.
   Future<({String fileName, Uint8List bytes})> importTemplate() async {
     final d = await _callData('adminSupermarketImportTemplate', const {});
     return (
@@ -379,7 +381,18 @@ int _i(Object? v) => v is num ? v.toInt() : 0;
 
 /// Импорт қатори: Excel қатор рақами, калит (`productId`|`sku`|`id`), ном, амал/ҳолат, хатолар.
 class SmImportRow {
-  const SmImportRow({required this.row, required this.key, required this.title, required this.status, this.errors = const []});
+  const SmImportRow({
+    required this.row,
+    required this.key,
+    required this.title,
+    required this.status,
+    this.groupId = '',
+    this.price,
+    this.errors = const [],
+  });
+
+  final String groupId;
+  final int? price;
 
   final int row;
   final String key;
@@ -392,7 +405,9 @@ class SmImportRow {
   factory SmImportRow.fromMap(Map m) => SmImportRow(
         row: _i(m['row']),
         key: '${m['productId'] ?? m['sku'] ?? m['id'] ?? ''}',
-        title: '${m['title'] ?? m['name'] ?? ''}',
+        title: '${m['title'] ?? m['name'] ?? m['groupId'] ?? ''}',
+        groupId: '${m['groupId'] ?? ''}',
+        price: m['price'] is num ? (m['price'] as num).toInt() : null,
         status: '${m['action'] ?? m['status'] ?? ''}',
         errors: m['errors'] is List ? [for (final e in m['errors'] as List) '$e'] : const [],
       );
@@ -404,6 +419,8 @@ class SmImportPreview {
   const SmImportPreview({
     required this.batchId,
     required this.total,
+    this.ready = 0,
+    this.duplicate = false,
     required this.errors,
     required this.create,
     required this.update,
@@ -413,6 +430,10 @@ class SmImportPreview {
 
   final String batchId;
   final int total;
+  final int ready;
+
+  /// Ўша `clientRequestId` қайта юборилди — сервер аввалги партияни қайтарди.
+  final bool duplicate;
   final int errors;
   final int create;
   final int update;
@@ -427,6 +448,8 @@ class SmImportPreview {
     return SmImportPreview(
       batchId: '${d['batchId'] ?? ''}',
       total: _i(c['total']),
+      ready: _i(c['ready']),
+      duplicate: d['duplicate'] == true,
       errors: _i(c['errors'] ?? c['error']),
       create: _i(c['create']),
       update: _i(c['update']),
@@ -443,8 +466,12 @@ class SmImportResult {
     required this.updated,
     required this.unchanged,
     required this.failed,
+    this.pending = 0,
     required this.rows,
   });
+
+  /// Ҳали ёзилмаган (`partial` бўлса — «Давом эттириш»).
+  final int pending;
 
   /// `done` | `partial` (вақт тугади — «Давом эттириш» ўша batchId билан).
   final String status;
@@ -465,6 +492,7 @@ class SmImportResult {
       updated: _i(c['updated']),
       unchanged: _i(c['unchanged']),
       failed: _i(c['error'] ?? c['errors']),
+      pending: _i(c['pending']),
       rows: _rows(d['rows']),
     );
   }

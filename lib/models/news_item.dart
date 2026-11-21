@@ -27,6 +27,7 @@ class NewsItem {
     this.requestId = '',
     this.pushDirect = false,
     this.retractedAt,
+    this.smListId = '',
   });
 
   final String id;
@@ -80,6 +81,9 @@ class NewsItem {
   /// ўчиради. Фойдаланувчи лентасида кўрсатилмайди ва саналмайди; админ рўйхатида хира ва «Қайтариб олинган».
   /// Эски ҳужжатларда майдон йўқ → `null`.
   final DateTime? retractedAt;
+
+  /// «AVA Супермаркет» ҳафталик эслатмаси (source: sm_weekly_reminder) — қайси рўйхат. Бошқаларда бўш.
+  final String smListId;
 
   bool get isRetracted => retractedAt != null;
 
@@ -144,6 +148,7 @@ class NewsItem {
       requestId: (d['requestId'] ?? '') as String,
       pushDirect: d['pushDirect'] == true,
       retractedAt: (d['retractedAt'] as Timestamp?)?.toDate(),
+      smListId: d['smListId'] is String ? (d['smListId'] as String).trim() : '',
     );
   }
 

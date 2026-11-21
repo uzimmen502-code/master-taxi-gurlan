@@ -35,6 +35,9 @@ import '../models/active_trip.dart';
 import '../repositories/marshrut_driver_repository.dart';
 import '../repositories/rides_repository.dart';
 import '../features/profile/screens/news_hub_screen.dart';
+import '../features/profile/screens/order_news_detail_screen.dart';
+import '../features/supermarket/screens/supermarket_home_screen.dart' show openSupermarketWith;
+import '../models/order_news_group.dart';
 import '../features/china_inquiry/screens/china_inquiries_screen.dart';
 import '../features/deal_chat/deal_chat_support.dart';
 import '../features/deal_chat/screens/deal_chat_screen.dart';
@@ -64,6 +67,9 @@ import 'user_audience.dart';
 
 /// «Менинг бизнесим» буюртмаси push'ининг манзили ([PushNavigation.businessOrderPushTarget]).
 enum BusinessOrderPushTarget { courierOffer, courierRoute, seller, buyer }
+
+/// Супермаркет push мақсади (2-босқич).
+enum SmPushKind { weeklyList, orderDetail }
 
 /// FCM / local push босилганда тегишли экранга ўтиш.
 class PushNavigation {
@@ -162,6 +168,22 @@ class PushNavigation {
     }
   }
 
+  /// Супермаркет push'и: `type: sm_weekly_reminder` (+ `smListId`) → ҳафталик рўйхат (id бўш бўлса — рўйхатлар);
+  /// `type: supermarket_shortage` (+ `orderId`) → буюртма тафсилоти. ID фақат Firestore шаклида. Бошқа — `null`.
+  static ({SmPushKind kind, String id})? supermarketPushTarget(Map<String, String> data) {
+    final type = (data['type'] ?? '').trim();
+    bool ok(String v) => RegExp(r'^[A-Za-z0-9_-]{1,128}$').hasMatch(v);
+    if (type == 'sm_weekly_reminder') {
+      final id = (data['smListId'] ?? '').trim();
+      return (kind: SmPushKind.weeklyList, id: ok(id) ? id : '');
+    }
+    if (type == 'supermarket_shortage') {
+      final id = (data['orderId'] ?? '').trim();
+      return ok(id) ? (kind: SmPushKind.orderDetail, id: id) : null;
+    }
+    return null;
+  }
+
   static Future<void> handlePayload(String? payload) async {
     await handleData(decodePayload(payload));
   }
@@ -173,6 +195,21 @@ class PushNavigation {
     final type = (data['type'] ?? '').trim();
     final screen = (data['screen'] ?? '').trim();
     final tab = (data['tab'] ?? '').trim();
+
+    // «AVA Супермаркет» 2-босқич (сервер cd02561a): ҳафталик эслатма → шу рўйхат; етишмовчилик → буюртма тафсилоти.
+    final sm = supermarketPushTarget(data);
+    if (sm != null) {
+      if (sm.kind == SmPushKind.weeklyList) {
+        await openSupermarketWith(nav, initialWeeklyListId: sm.id);
+      } else {
+        await nav.push(MaterialPageRoute<void>(
+          builder: (_) => OrderNewsDetailScreen(
+            group: OrderNewsGroup(orderId: sm.id, messages: const [], orderType: 'platform'),
+          ),
+        ));
+      }
+      return;
+    }
 
     if (type == 'device_transfer_request' || screen == 'device_transfer') {
       final requestId = (data['requestId'] ?? '').trim();

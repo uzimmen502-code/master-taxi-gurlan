@@ -35,10 +35,23 @@ IconData smCategoryIcon(String key) => switch (key) {
 
 /// Супермаркетни очиш (илдиз маршрут номи билан — «Каталог» шу ергача қайтаради).
 /// [initialGroupId] — юклангач шу гуруҳ экрани очилади (Аралашдаги AVA маҳсулотидан келганда).
-Future<void> openSupermarket(BuildContext context, {SupermarketController? controller, String? initialGroupId}) {
-  return Navigator.of(context).push(MaterialPageRoute<void>(
+Future<void> openSupermarket(BuildContext context, {SupermarketController? controller, String? initialGroupId}) =>
+    openSupermarketWith(Navigator.of(context), controller: controller, initialGroupId: initialGroupId);
+
+/// [NavigatorState] орқали (push навигацияси учун). [initialWeeklyListId] — юклангач «Ҳафталик сават» ва шу рўйхат.
+Future<void> openSupermarketWith(
+  NavigatorState nav, {
+  SupermarketController? controller,
+  String? initialGroupId,
+  String? initialWeeklyListId,
+}) {
+  return nav.push(MaterialPageRoute<void>(
     settings: const RouteSettings(name: kSmHomeRouteName),
-    builder: (_) => SupermarketHomeScreen(controller: controller, initialGroupId: initialGroupId),
+    builder: (_) => SupermarketHomeScreen(
+      controller: controller,
+      initialGroupId: initialGroupId,
+      initialWeeklyListId: initialWeeklyListId,
+    ),
   ));
 }
 
@@ -53,11 +66,15 @@ class SupermarketHomeScreen extends StatefulWidget {
     this.controller,
     this.pickArea,
     this.initialGroupId,
+    this.initialWeeklyListId,
     this.listsStore,
     this.ordersLoader,
   });
 
   final String? initialGroupId;
+
+  /// Ҳафталик эслатма push'идан: юклангач шу рўйхат очилади.
+  final String? initialWeeklyListId;
 
   /// Тест учун (Ҳафталик сават / Буюртмаларим); бўлмаса — Firebase.
   final SmListsStore? listsStore;
@@ -89,6 +106,11 @@ class _SupermarketHomeScreenState extends State<SupermarketHomeScreen> {
   }
 
   void _openInitialGroup() {
+    final listId = widget.initialWeeklyListId;
+    if (mounted && listId != null && listId.isNotEmpty) {
+      _push(SmWeeklyScreen(controller: _c, store: widget.listsStore, openListId: listId));
+      return;
+    }
     final id = widget.initialGroupId;
     if (!mounted || id == null) return;
     final g = _c.taxonomy.group(id);

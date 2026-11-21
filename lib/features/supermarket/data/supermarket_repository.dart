@@ -11,13 +11,14 @@ import '../domain/sm_access.dart';
 import '../domain/sm_cart.dart';
 import '../domain/sm_offer.dart';
 import '../domain/sm_qty.dart';
+import '../domain/sm_shortage.dart';
 import '../domain/sm_taxonomy.dart';
 
 export '../domain/sm_taxonomy.dart' show smNames;
 
 /// Супермаркет сервер чақирувлари учун хато (UI калити + ички код, 25-банд).
 class SmCallError implements Exception {
-  const SmCallError(this.key, this.code, {this.messages = const {}});
+  const SmCallError(this.key, this.code, {this.messages = const {}, this.details = const {}});
 
   /// lang калити (`sm_err_*`) — захира матн.
   final String key;
@@ -27,6 +28,9 @@ class SmCallError implements Exception {
 
   /// Сервер берган дўстона матн (`details.messages`, 3 тил) — бўлса шу кўрсатилади.
   final Map<String, String> messages;
+
+  /// Хом `details` (масалан INSUFFICIENT_FUNDS: `required`, `balance`; QTY_STEP_INVALID: `step`, `maxQty`).
+  final Map<String, dynamic> details;
 
   @override
   String toString() => 'SmCallError($code)';
@@ -40,11 +44,8 @@ abstract class SupermarketApi {
   Future<SmAccess> getAccess({String? districtId});
   Future<SmPlaceResult> placeOrder(Map<String, dynamic> payload);
 
-  /// Етишмовчиликда ўрнини босувчилар (бир неча `platform_products/{id}`; йўқлари ташланади).
-  Future<List<SmOffer>> loadOffersByIds(List<String> ids);
-
-  /// `respondSupermarketShortage` (2-босқич шартномаси). Хато — [SmCallError].
-  Future<void> respondShortage(Map<String, dynamic> payload);
+  /// `respondSupermarketShortage` → `{ok, refund, debit, total, duplicate?}`. Хато — [SmCallError].
+  Future<SmShortageResult> respondShortage(Map<String, dynamic> payload);
 }
 
 class FirebaseSupermarketApi implements SupermarketApi {
@@ -85,7 +86,9 @@ class FirebaseSupermarketApi implements SupermarketApi {
       final details = e.details is Map ? e.details as Map : const {};
       final code = (details['code'] ?? e.code).toString();
       debugPrint('[Supermarket] $name failed grpc=${e.code} code=$code');
-      throw SmCallError(key, code, messages: smNames(details['messages']));
+      throw SmCallError(key, code,
+          messages: smNames(details['messages']),
+          details: {for (final e in details.entries) if (e.key is String) e.key as String: e.value});
     }
   }
 
@@ -99,20 +102,9 @@ class FirebaseSupermarketApi implements SupermarketApi {
   Future<SmPlaceResult> placeOrder(Map<String, dynamic> payload) async =>
       SmPlaceResult.fromMap(await _call('placeSupermarketOrder', payload));
 
-  /// Ҳар бири алоҳида `get` (≤ 3–4 та; list сўрови эмас — rules ва индекс шарт эмас).
   @override
-  Future<List<SmOffer>> loadOffersByIds(List<String> ids) async {
-    final snaps = await Future.wait(ids.toSet().take(10).map((id) => _db.collection('platform_products').doc(id).get()));
-    return [
-      for (final s in snaps)
-        if (s.exists && s.data() != null) SmOffer.fromMap(s.id, s.data()!),
-    ];
-  }
-
-  @override
-  Future<void> respondShortage(Map<String, dynamic> payload) async {
-    await _call('respondSupermarketShortage', payload);
-  }
+  Future<SmShortageResult> respondShortage(Map<String, dynamic> payload) async =>
+      SmShortageResult.fromMap(await _call('respondSupermarketShortage', payload));
 }
 
 /// Модул кўриниши учун `getSupermarketAccess` кеши (бош саҳифа ҳар қайта қурилганда чақирилмасин,

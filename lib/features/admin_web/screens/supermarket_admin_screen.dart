@@ -622,7 +622,8 @@ List<SmOrderLine> smOrderLines(Map<String, dynamic> o) {
           weighed: i['weighed'] == true,
           actualQty: i['actualQty'] is num ? i['actualQty'] as num : null,
           removed: i['removed'] != null && i['removed'] != false,
-          shortage: i['state'] == 'shortage',
+          // Сервер (cd02561a): `shortage{state 'pending'|'resolved'|'admin_removed', ...}`.
+          shortage: i['shortage'] is Map && (i['shortage'] as Map)['state'] == 'pending',
         ),
   ];
 }
@@ -808,7 +809,9 @@ class _OrderCard extends StatelessWidget {
     List<SmOffer> pool;
     try {
       final all = await service.loadOffers(SmTaxonomy.empty);
-      pool = smSortOffersAsc(all.where((o) => o.id != l.productId && o.available && (groupId.isEmpty || o.groupId == groupId)));
+      // Сервер: ўзи ва буюртмадаги бошқа маҳсулотлар ўрнини босувчи бўлолмайди (SUBSTITUTE_INVALID).
+      final inOrder = {for (final x in smOrderLines(order)) if (!x.removed) x.productId};
+      pool = smSortOffersAsc(all.where((o) => !inOrder.contains(o.id) && o.available && (groupId.isEmpty || o.groupId == groupId)));
     } catch (e) {
       m.showSnackBar(SnackBar(content: Text('Таклифларни юклаб бўлмади: $e')));
       return;

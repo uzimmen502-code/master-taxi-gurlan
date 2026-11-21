@@ -152,6 +152,11 @@ const kSmErrorKeys = <String, String>{
   'INSUFFICIENT_BALANCE': 'sm_err_insufficient_funds',
   // 2-босқич шартномаси (respondSupermarketShortage): ҳамён етмаса — тўлдириш кўрсатилади.
   'INSUFFICIENT_FUNDS': 'sm_err_insufficient_funds',
+  'LINE_SHORTAGE_RESOLVED': 'sm_err_shortage_resolved',
+  'LINE_NO_SHORTAGE': 'sm_err_shortage_resolved',
+  'SUBSTITUTE_INVALID': 'sm_err_substitute',
+  'LAST_LINE': 'sm_err_last_line',
+  'ORDER_STATE_LOCKED': 'sm_err_order_locked',
   'OUT_OF_STOCK': 'sm_err_out_of_stock',
   'PRODUCT_UNAVAILABLE': 'sm_err_out_of_stock',
   'PRODUCT_NOT_FOUND': 'sm_err_out_of_stock',

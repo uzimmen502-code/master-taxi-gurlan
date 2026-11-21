@@ -20,7 +20,10 @@ String smWeekdayKey(int d) => 'sm_weekday_$d';
 /// «Ҳафталик сават» (2-босқич, эга 2026-11-21): биринчи марта — «Бўш саватдан» / «Тайёр намунадан»;
 /// кейин — сақланган рўйхатлар. ҲЕЧ ҚАЧОН буюртма бермайди: фақат саватга қўшади.
 class SmWeeklyScreen extends StatefulWidget {
-  const SmWeeklyScreen({super.key, required this.controller, this.store, this.memo});
+  const SmWeeklyScreen({super.key, required this.controller, this.store, this.memo, this.openListId});
+
+  /// Push/«Хабарлар»дан (sm_weekly_reminder, smListId): юклангач шу рўйхат очилади (топилмаса — рўйхатлар).
+  final String? openListId;
 
   final SupermarketController controller;
 
@@ -37,6 +40,7 @@ class _SmWeeklyScreenState extends State<SmWeeklyScreen> {
   late final SmListPriceMemo _memo = widget.memo ?? SmListPriceMemo();
   List<SmList>? _lists;
   bool _error = false;
+  late String? _pendingOpen = widget.openListId;
 
   @override
   void initState() {
@@ -48,7 +52,18 @@ class _SmWeeklyScreenState extends State<SmWeeklyScreen> {
     setState(() => _error = false);
     try {
       final l = await _store.load();
-      if (mounted) setState(() => _lists = l);
+      if (!mounted) return;
+      setState(() => _lists = l);
+      final target = _pendingOpen;
+      _pendingOpen = null;
+      if (target != null) {
+        for (final x in l) {
+          if (x.id == target) {
+            await _open(x);
+            break;
+          }
+        }
+      }
     } catch (e) {
       debugPrint('[Supermarket] SM_LISTS_LOAD_FAILED: $e');
       if (mounted) setState(() => _error = true);
@@ -155,6 +170,9 @@ class _SmWeeklyScreenState extends State<SmWeeklyScreen> {
                         style: TextStyle(fontSize: 14, color: c.ink2)),
                     if (l.remind.enabled)
                       Text(_remindText(context, l.remind), style: TextStyle(fontSize: 14, color: c.ink2)),
+                    if (l.invalid.isNotEmpty)
+                      Text(context.tr('sm_list_invalid'),
+                          key: ValueKey('sm_weekly_invalid_${l.id}'), style: TextStyle(fontSize: 14, color: c.danger)),
                   ]),
                 ),
                 Icon(Icons.chevron_right_rounded, color: c.ink3),
@@ -343,6 +361,15 @@ class _SmSavedListScreenState extends State<SmSavedListScreen> {
           ),
           const SizedBox(height: 8),
           _NeverOrdersNote(),
+          if (_list.invalid.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              key: const ValueKey('sm_list_invalid'),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: c.dangerSoft, borderRadius: BorderRadius.circular(12)),
+              child: Text(context.tr('sm_list_invalid'), style: TextStyle(fontSize: 15, color: c.ink)),
+            ),
+          ],
           const SizedBox(height: 12),
           if (_list.remind.enabled)
             Padding(

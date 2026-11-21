@@ -22,7 +22,12 @@ import 'package:ava_gurlan/features/supermarket/screens/sm_weekly_screen.dart';
 import 'package:ava_gurlan/features/supermarket/screens/supermarket_home_screen.dart';
 import 'package:ava_gurlan/features/supermarket/supermarket_controller.dart';
 import 'package:ava_gurlan/features/supermarket/widgets/sm_shortage_panel.dart';
+import 'package:ava_gurlan/features/supermarket/domain/sm_access.dart';
+import 'package:ava_gurlan/features/supermarket/domain/sm_inbox.dart';
+import 'package:ava_gurlan/models/message_thread_group.dart';
+import 'package:ava_gurlan/models/news_item.dart';
 import 'package:ava_gurlan/models/order_model.dart';
+import 'package:ava_gurlan/services/push_navigation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -554,55 +559,87 @@ void main() {
     });
   });
 
-  group('етишмовчилик', () {
-    Map<String, dynamic> item({String state = 'shortage', Object? options}) => {
+  group('етишмовчилик (сервер cd02561a шакли)', () {
+    final t0 = DateTime(2026, 11, 21, 12, 0);
+    Map<String, dynamic> sub(String id, int price, {num step = 0.5, String unit = 'kg'}) =>
+        {'offerId': id, 'name': 'Sub $id', 'price': price, 'smUnit': unit, 'unit': 'кг', 'qtyStep': step, 'weighed': true};
+    Map<String, dynamic> item({String state = 'pending', num avail = 1, List<Map<String, dynamic>>? subs}) => {
           'productId': 'o_red_exp',
           'name': 'Қизил пиёз',
           'price': 7000,
           'qty': 2,
+          'qtyStep': 0.5,
+          'total': 14000,
           'groupId': 'onion',
-          'state': state,
-          'options': options ?? {'availableQty': 1, 'substitutes': ['o_red_cheap', 'o_white', 'o_red_exp']},
+          'shortage': {
+            'state': state,
+            'availableQty': avail,
+            'substitutes': subs ?? [sub('o_red_cheap', 5000), sub('o_white', 4000), sub('o_red_exp', 1)],
+            'reportedAtMs': t0.millisecondsSinceEpoch,
+            'answerByMs': t0.add(const Duration(minutes: 30)).millisecondsSinceEpoch,
+          },
         };
 
-    test('парс ва payload (шартнома); бошқа ҳолат — йўқ', () {
+    test('парс: фақат pending; ўринбосарлар серверникидан; муддат; payload', () {
       final s = SmShortage.fromItem(item())!;
       expect(s.qtyMilli, 2000);
       expect(s.availableQtyMilli, 1000);
-      expect(s.substitutes, ['o_red_cheap', 'o_white'], reason: 'ўзи ташланади');
+      expect(s.substitutes.map((x) => x.offerId), ['o_red_cheap', 'o_white'], reason: 'ўзи ташланади');
+      expect(s.substitutes.first.stepMilli, 500);
       expect(s.canReduce, isTrue);
-      expect(SmShortage.fromItem(item(state: 'ok')), isNull);
-      expect(SmShortage.fromItem({...item(), 'removed': {'r': 1}}), isNull);
-      expect(SmShortage.fromItem(item(options: {'availableQty': 0}))!.canReduce, isFalse);
-      final sub = offer('o_white', price: 4000, variety: 'white');
-      expect(smShortageWalletDelta(s, SmShortageChoice.substitute, substitute: sub), 8000 - 14000);
+      expect(SmShortage.fromItem(item(state: 'resolved')), isNull);
+      expect(SmShortage.fromItem(item(state: 'admin_removed')), isNull);
+      expect(SmShortage.fromItem({...item(), 'removed': {'reason': 'shortage'}}), isNull);
+      expect(SmShortage.fromItem({'productId': 'x', 'state': 'shortage', 'qty': 1}), isNull, reason: 'эски тахминий шакл ўқилмайди');
+      expect(SmShortage.fromItem(item(avail: 0))!.canReduce, isFalse);
+      expect(smShortageMinutesLeft(s, t0), 30);
+      expect(smShortageMinutesLeft(s, t0.add(const Duration(minutes: 29, seconds: 30))), 1);
+      expect(smShortageMinutesLeft(s, t0.add(const Duration(minutes: 31))), 0);
+      final w = s.substitutes[1];
+      expect(smShortageWalletDelta(s, SmShortageChoice.substitute, substitute: w), 8000 - 14000);
       expect(smShortageWalletDelta(s, SmShortageChoice.reduce), -7000);
       expect(smShortageWalletDelta(s, SmShortageChoice.remove), -14000);
-      expect(
-          smShortagePayload(orderId: 'O', shortage: s, choice: SmShortageChoice.substitute, substitute: sub, clientRequestId: 'k'),
+      expect(smShortagePayload(orderId: 'O', shortage: s, choice: SmShortageChoice.substitute, substitute: w, clientRequestId: 'k'),
           {'orderId': 'O', 'productId': 'o_red_exp', 'choice': 'substitute', 'offerId': 'o_white', 'qty': 2, 'clientRequestId': 'k'});
       expect(smShortagePayload(orderId: 'O', shortage: s, choice: SmShortageChoice.reduce, clientRequestId: 'k'),
           {'orderId': 'O', 'productId': 'o_red_exp', 'choice': 'reduce', 'qty': 1, 'clientRequestId': 'k'});
       expect(smShortagePayload(orderId: 'O', shortage: s, choice: SmShortageChoice.remove, clientRequestId: 'k'),
           {'orderId': 'O', 'productId': 'o_red_exp', 'choice': 'remove', 'clientRequestId': 'k'});
+      final r = SmShortageResult.fromMap({'ok': true, 'refund': 0, 'debit': 2600, 'total': 30000, 'duplicate': true});
+      expect((r.debit, r.refund, r.duplicate), (2600, 0, true));
     });
 
-    testWidgets('танловлар; юбориш пайтида ўчиқ; тармоқ хатосида ЎША калит; натижа', (t) async {
+    test('ҳал бўлган қаторлар: substitutedFrom / reducedFrom / removed{shortage}', () {
+      final a = smShortageResolutionOf({
+        'productId': 'o_white', 'name': 'Оқ пиёз', 'qty': 2, 'total': 8000,
+        'substitutedFrom': {'productId': 'o_red_exp', 'name': 'Қизил пиёз', 'price': 7000, 'qty': 2, 'total': 14000},
+      })!;
+      expect((a.outcome, a.fromName, a.name, a.fromTotal, a.toTotal), (SmShortageOutcome.substituted, 'Қизил пиёз', 'Оқ пиёз', 14000, 8000));
+      final b = smShortageResolutionOf({'name': 'Сут', 'qty': 1, 'total': 12000, 'reducedFrom': {'qty': 3, 'total': 36000}})!;
+      expect((b.outcome, b.fromQtyMilli, b.toQtyMilli), (SmShortageOutcome.reduced, 3000, 1000));
+      expect(smShortageResolutionOf({'name': 'X', 'qty': 1, 'removed': {'reason': 'shortage'}})!.outcome, SmShortageOutcome.removed);
+      expect(smShortageResolutionOf({'name': 'X', 'qty': 1, 'removed': {'reason': 'admin'}}), isNull);
+      expect(smShortageResolutionOf({'name': 'X', 'qty': 1}), isNull);
+    });
+
+    testWidgets('танловлар; муддат; юбориш пайтида ўчиқ; тармоқ хатосида ЎША калит; сервер суммаси', (t) async {
       await tall(t);
       final api = FakeSupermarketApi();
-      final gate = Completer<void>();
+      final gate = Completer<SmShortageResult>();
       api.shortageResults.addAll([const SmCallError('sm_err_network', 'unavailable'), gate.future]);
       var n = 0;
       final keys = IdempotencyKeys(generator: () => 'key${++n}');
       final o = _order('ORD', status: 'accepted', items: [item()]);
-      await t.pumpWidget(_app(Scaffold(body: ListView(children: [SmShortagePanel(order: o, api: api, keys: keys)]))));
+      await t.pumpWidget(_app(Scaffold(
+          body: ListView(children: [SmShortagePanel(order: o, api: api, keys: keys, now: () => t0.add(const Duration(minutes: 10)))]))));
       await t.pumpAndSettle();
-      expect(_k('sm_shortage_o_red_exp'), findsOneWidget);
       expect(_k('sm_shortage_sub_o_red_cheap'), findsOneWidget);
       expect(_k('sm_shortage_sub_o_white'), findsOneWidget);
       expect(_k('sm_shortage_reduce'), findsOneWidget);
       expect(_k('sm_shortage_remove'), findsOneWidget);
-      expect(find.text('sm_shortage_wallet_refund'), findsNWidgets(4), reason: 'иккала ўрнини босувчи арзон + камайтириш + олиш');
+      expect(find.text('sm_shortage_answer_by'), findsOneWidget);
+      expect(find.text('sm_shortage_estimate_note'), findsOneWidget, reason: '«тахминий»');
+      expect(find.text('sm_shortage_wallet_refund'), findsNWidgets(4));
       expect(t.widget<FilledButton>(_k('sm_shortage_submit_o_red_exp')).onPressed, isNull, reason: 'танлов йўқ');
       await t.tap(_k('sm_shortage_sub_o_white'));
       await t.pump();
@@ -612,35 +649,39 @@ void main() {
       await t.tap(_k('sm_shortage_submit_o_red_exp'));
       await t.pump();
       expect(t.widget<FilledButton>(_k('sm_shortage_submit_o_red_exp')).onPressed, isNull, reason: 'юбориш пайтида ўчиқ');
-      gate.complete();
+      gate.complete(const SmShortageResult(refund: 6000));
       await t.pumpAndSettle();
       expect(api.shortagePayloads.map((p) => p['clientRequestId']), ['key1', 'key1']);
       expect(api.shortagePayloads.last['offerId'], 'o_white');
-      expect(_k('sm_shortage_done_o_red_exp'), findsOneWidget);
+      expect(find.text('sm_shortage_done sm_shortage_done_refund'), findsOneWidget);
+      expect(find.text('sm_shortage_answer_by'), findsNothing);
     });
 
-    testWidgets('ҳамён етмаса — сервер матни ва тўлдириш; аниқ раддан кейин янги калит', (t) async {
+    testWidgets('INSUFFICIENT_FUNDS: сервер матни, тўлдириш (required − balance); аниқ раддан кейин янги калит', (t) async {
       await tall(t);
       final api = FakeSupermarketApi()
-        ..extraOffers = [offer('dear', price: 20000)]
         ..shortageResults.add(const SmCallError('sm_err_insufficient_funds', 'INSUFFICIENT_FUNDS',
-            messages: {'uz_Cyrl': 'Ҳамёнда маблағ етарли эмас', 'uz_Latn': 'x', 'ru': 'y'}));
+            messages: {'uz_Cyrl': 'Алмаштириш учун ҳамёнда маблағ етарли эмас.', 'uz_Latn': 'x', 'ru': 'y'},
+            details: {'required': 26000, 'balance': 10000}));
       var n = 0;
-      var topUps = 0;
+      int? topUp;
       final keys = IdempotencyKeys(generator: () => 'key${++n}');
-      final o = _order('ORD', status: 'accepted', items: [item(options: {'availableQty': 0, 'substitutes': ['dear']})]);
+      final o = _order('ORD', status: 'accepted', items: [item(avail: 0, subs: [sub('dear', 20000)])]);
       await t.pumpWidget(_app(Scaffold(
-          body: ListView(children: [SmShortagePanel(order: o, api: api, keys: keys, openTopUp: (_) => topUps++)]))));
+          body: ListView(children: [
+        SmShortagePanel(order: o, api: api, keys: keys, now: () => t0.add(const Duration(hours: 1)), openTopUp: (_, s) => topUp = s),
+      ]))));
       await t.pumpAndSettle();
-      expect(_k('sm_shortage_reduce'), findsNothing, reason: 'мавжуди 0 — камайтириш йўқ');
+      expect(_k('sm_shortage_reduce'), findsNothing, reason: 'мавжуди 0');
+      expect(find.text('sm_shortage_answer_late'), findsOneWidget);
       expect(find.text('sm_shortage_wallet_charge'), findsOneWidget);
       await t.tap(_k('sm_shortage_sub_dear'));
       await t.pump();
       await t.tap(_k('sm_shortage_submit_o_red_exp'));
       await t.pumpAndSettle();
-      expect(find.text('Ҳамёнда маблағ етарли эмас'), findsOneWidget);
+      expect(find.text('Алмаштириш учун ҳамёнда маблағ етарли эмас.'), findsOneWidget);
       await t.tap(_k('sm_shortage_topup_o_red_exp'));
-      expect(topUps, 1);
+      expect(topUp, 16000);
       await t.tap(_k('sm_shortage_remove'));
       await t.pump();
       await t.tap(_k('sm_shortage_submit_o_red_exp'));
@@ -649,9 +690,62 @@ void main() {
       expect(api.shortagePayloads.last['choice'], 'remove');
     });
 
-    testWidgets('етишмовчилик йўқ — панел бўш', (t) async {
-      await t.pumpWidget(_app(Scaffold(body: SmShortagePanel(order: _order('X', items: [item(state: '')]), api: FakeSupermarketApi()))));
+    testWidgets('ҳал бўлган — карта йўқ, ўзгаришлар рўйхати бор', (t) async {
+      final o = _order('X', items: [
+        item(state: 'resolved'),
+        {'productId': 'm1', 'name': 'Сут', 'qty': 1, 'total': 12000, 'reducedFrom': {'qty': 2, 'total': 24000}},
+      ]);
+      await t.pumpWidget(_app(Scaffold(body: ListView(children: [SmShortagePanel(order: o, api: FakeSupermarketApi())]))));
       expect(find.byType(SmShortageCard), findsNothing);
+      expect(_k('sm_shortage_resolutions'), findsOneWidget);
+      expect(find.text('sm_shortage_reduced'), findsOneWidget);
+      await t.pumpWidget(_app(Scaffold(body: SmShortagePanel(order: _order('Y', items: [{'productId': 'a', 'qty': 1}]), api: FakeSupermarketApi()))));
+      expect(_k('sm_shortage_resolutions'), findsNothing);
+    });
+
+    test('сервер хато кодлари → lang калити', () {
+      expect(smErrorKey(grpcCode: 'failed-precondition', details: {'code': 'INSUFFICIENT_FUNDS'}), 'sm_err_insufficient_funds');
+      expect(smErrorKey(grpcCode: 'failed-precondition', details: {'code': 'LINE_SHORTAGE_RESOLVED'}), 'sm_err_shortage_resolved');
+      expect(smErrorKey(grpcCode: 'failed-precondition', details: {'code': 'LINE_NO_SHORTAGE'}), 'sm_err_shortage_resolved');
+      expect(smErrorKey(grpcCode: 'invalid-argument', details: {'code': 'SUBSTITUTE_INVALID'}), 'sm_err_substitute');
+      expect(smErrorKey(grpcCode: 'invalid-argument', details: {'code': 'QTY_STEP_INVALID'}), 'sm_err_qty');
+      expect(smErrorKey(grpcCode: 'failed-precondition', details: {'code': 'OUT_OF_STOCK'}), 'sm_err_out_of_stock');
+      expect(smErrorKey(grpcCode: 'failed-precondition', details: {'code': 'LAST_LINE'}), 'sm_err_last_line');
+      expect(smErrorKey(grpcCode: 'failed-precondition', details: {'code': 'ORDER_STATE_LOCKED'}), 'sm_err_order_locked');
+      expect(smErrorKey(grpcCode: 'permission-denied', details: {'code': 'PERMISSION_DENIED'}), 'sm_err_not_allowed');
+    });
+  });
+
+  group('push / «Хабарлар» йўналиши', () {
+    test('sm_weekly_reminder → рўйхат; supermarket_shortage → буюртма; нотўғри ID — рад', () {
+      expect(PushNavigation.supermarketPushTarget({'type': 'sm_weekly_reminder', 'screen': 'supermarket', 'smListId': 'L1'}),
+          (kind: SmPushKind.weeklyList, id: 'L1'));
+      expect(PushNavigation.supermarketPushTarget({'type': 'sm_weekly_reminder', 'smListId': 'a/b'}), (kind: SmPushKind.weeklyList, id: ''));
+      expect(PushNavigation.supermarketPushTarget({'type': 'supermarket_shortage', 'screen': 'orders', 'orderId': 'ORD1', 'productId': 'p'}),
+          (kind: SmPushKind.orderDetail, id: 'ORD1'));
+      expect(PushNavigation.supermarketPushTarget({'type': 'supermarket_shortage', 'orderId': '../x'}), isNull);
+      expect(PushNavigation.supermarketPushTarget({'type': 'order_status', 'orderId': 'ORD1'}), isNull);
+    });
+
+    test('инбокс: охирги хабар ҳафталик эслатма бўлса — рўйхат id', () {
+      NewsItem news(String id, String source, {String list = '', int min = 0}) => NewsItem(
+            id: id, title: 't', body: 'b', createdAt: DateTime(2026, 11, 21, 9, min), source: source, smListId: list);
+      expect(smWeeklyReminderListId(news('1', 'sm_weekly_reminder', list: 'L7')), 'L7');
+      expect(smWeeklyReminderListId(news('1', 'sm_weekly_reminder')), '');
+      expect(smWeeklyReminderListId(news('1', 'admin_compose', list: 'L7')), isNull);
+      final g = MessageThreadGroup(
+        kind: MessageThreadKind.dialogNews, id: 'g', title: 't', subtitle: 's', lastUpdate: DateTime(2026),
+        messages: [news('1', 'sm_weekly_reminder', list: 'L1', min: 1), news('2', 'support_reply', min: 2)],
+      );
+      expect(smWeeklyReminderListId(g), isNull, reason: 'охиргиси бошқа хабар');
+      expect(smWeeklyReminderListId(null), isNull);
+    });
+
+    test('smInvalid — огоҳлантириш учун ўқилади; клиент ёзмайди', () {
+      final l = SmList.fromMap('a', {'name': 'x', 'items': [], 'smInvalid': 'REMIND_INVALID', 'remindNextAt': 1});
+      expect(l.invalid, 'REMIND_INVALID');
+      expect(l.toMap().keys, ['name', 'items', 'remind']);
+      expect(SmList.fromMap('b', {'name': 'x'}).invalid, '');
     });
   });
 
@@ -679,6 +773,7 @@ void main() {
       expect(s.previewCalls.single, ('narxlar.xlsx', 3, 'rid-1'));
       expect(find.text('Янги: 2'), findsOneWidget);
       expect(find.text('Хато: 1'), findsOneWidget);
+      expect(find.text('Тайёр: 3'), findsOneWidget);
       expect(_k('sm_import_err_5'), findsOneWidget);
       expect(find.textContaining('PRICE_INVALID'), findsOneWidget);
       await t.tap(_k('sm_import_confirm'));
@@ -724,7 +819,7 @@ void main() {
         'status': 'accepted',
         'items': [
           {'productId': 'o_red_exp', 'groupId': 'onion', 'name': 'Пиёз', 'qty': 2, 'smUnit': 'kg', 'weighed': true},
-          {'productId': 'm1', 'groupId': 'milk', 'name': 'Сут', 'qty': 1, 'smUnit': 'pack', 'state': 'shortage'},
+          {'productId': 'm1', 'groupId': 'milk', 'name': 'Сут', 'qty': 1, 'smUnit': 'pack', 'shortage': {'state': 'pending', 'availableQty': 0, 'substitutes': []}},
         ],
       };
       await t.pumpWidget(MaterialApp(home: Scaffold(body: SmOrdersAdminTab(service: s, orders: Stream.value([order])))));
@@ -774,8 +869,9 @@ void main() {
             body: ListView(children: [
               SmShortagePanel(
                 order: _order('O', status: 'accepted', items: [
-                  {'productId': 'o_red_exp', 'name': 'Қизил пиёз, Гурлан, сараланган', 'price': 7000, 'qty': 2, 'state': 'shortage',
-                    'options': {'availableQty': 1, 'substitutes': ['o_red_cheap', 'o_white']}},
+                  {'productId': 'o_red_exp', 'name': 'Қизил пиёз, Гурлан, сараланган', 'price': 7000, 'qty': 2, 'qtyStep': 0.5, 'shortage': {'state': 'pending', 'availableQty': 1, 'answerByMs': 0,
+                    'substitutes': [{'offerId': 'o_red_cheap', 'name': 'Қизил пиёз, 1-сорт, тўрда', 'price': 5000, 'smUnit': 'kg', 'qtyStep': 0.5}, {'offerId': 'o_white', 'name': 'Оқ пиёз', 'price': 4000, 'smUnit': 'kg', 'qtyStep': 0.5}]}},
+                  {'productId': 'm1', 'name': 'Сут 3,2%, 0,9 л', 'qty': 1, 'total': 12000, 'reducedFrom': {'qty': 2, 'total': 24000}},
                 ]),
                 api: FakeSupermarketApi(),
               ),
@@ -851,10 +947,11 @@ class _FakeImportAdmin extends AdminSupermarketService {
     if (failPreview) throw const AdminSupermarketException('Сервер рад этди (FILE_NOT_XLSX)');
     return SmImportPreview.fromMap({
       'batchId': 'b1',
-      'counts': {'total': 4, 'create': 2, 'update': 1, 'unchanged': 0, 'errors': 1},
+      'duplicate': false,
+      'counts': {'total': 4, 'ready': 3, 'create': 2, 'update': 1, 'errors': 1},
       'rows': [
-        {'row': 2, 'productId': 'p_a', 'title': 'Пиёз', 'action': 'create'},
-        {'row': 5, 'productId': 'p_b', 'title': 'Сут', 'action': 'error', 'errors': ['PRICE_INVALID']},
+        {'row': 2, 'sku': 'p_a', 'groupId': 'onion', 'price': 5000, 'action': 'create', 'errors': []},
+        {'row': 5, 'sku': 'p_b', 'groupId': 'milk', 'price': 0, 'action': 'error', 'errors': ['PRICE_INVALID']},
       ],
     });
   }
@@ -864,7 +961,7 @@ class _FakeImportAdmin extends AdminSupermarketService {
     confirmCalls.add(batchId);
     return SmImportResult.fromMap({
       'status': 'done',
-      'counts': {'created': 2, 'updated': 1, 'unchanged': 0, 'error': 0},
+      'counts': {'created': 2, 'updated': 1, 'unchanged': 0, 'error': 0, 'pending': 0},
       'rows': const [],
     });
   }

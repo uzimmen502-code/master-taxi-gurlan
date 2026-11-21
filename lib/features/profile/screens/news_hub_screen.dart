@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../supermarket/domain/sm_inbox.dart';
+import '../../supermarket/screens/supermarket_home_screen.dart' show openSupermarketWith;
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/formatters.dart';
@@ -231,6 +233,12 @@ class _NewsHubScreenState extends State<NewsHubScreen> {
       if (mounted) setState(() {});
     }
     if (!mounted) return;
+    // «AVA Супермаркет» ҳафталик эслатмаси (сервер cd02561a) — ўша рўйхат очилади.
+    final smList = smWeeklyReminderListId(e.payload);
+    if (smList != null) {
+      await openSupermarketWith(Navigator.of(context), initialWeeklyListId: smList);
+      return;
+    }
     final Widget? screen = switch (e.kind) {
       InboxKind.support => ChatScreen(targetPhone: _uid),
       InboxKind.deal => DealChatScreen(

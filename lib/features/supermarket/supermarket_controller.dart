@@ -121,6 +121,19 @@ class SupermarketController extends ChangeNotifier {
     }
   }
 
+  /// Саватчадан расмийлаштириш (эга 2026-11-28): ҳар таклиф миқдори саватчадагига ТЕНГ қилиб қўйилади
+  /// (қўшилмайди) — «Расмийлаштириш» қайта босилса ҳам икки баробар бўлмайди. Бошқа сават қаторлари қолади.
+  void putLines(Iterable<SmCartLine> lines, {String origin = smOriginCatalog}) {
+    var next = cart;
+    for (final l in lines) {
+      next = next.qtyOf(l.productId) > 0 ? next.setQty(l.productId, l.qtyMilli) : next.add(l.productId, l.qtyMilli);
+    }
+    if (!identical(next, cart)) {
+      _noteOrigin(origin);
+      _setCart(next);
+    }
+  }
+
   /// «Тезкор харид»: гуруҳ → охирги танланган таклиф (шу сессияда, қурилмага ёзилмайди).
   final Map<String, String> quickPicks = {};
 

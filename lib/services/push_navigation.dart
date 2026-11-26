@@ -803,12 +803,12 @@ class PushNavigation {
     final occ = holidayRouteOccasion(t);
     final occasionId = occ.isEmpty ? null : occ;
     if (route == HolidayRoute.basket || route == HolidayRoute.basketGuests || route == HolidayRoute.basketGift) {
-      // Ўз туғилган куни — совғасиз; «меҳмонлар учун» — изоҳ; «совға» — совға блоки ёқиқ.
+      // Эга 2026-11-28: ҳаммаси — ягона саватча. Ўз туғилган куни — совғасиз; «меҳмонлар учун» — шунчаки саватча;
+      // «совға» — расмийлаштиришда совға блоки ёқиқ.
       await openHolidayBasket(
         nav,
         occasionId: occasionId,
         birthday: t.kind == HolidayPushKind.self || occasionId == kHolidayKindBirthday,
-        guestsHint: route == HolidayRoute.basketGuests,
         gift: route == HolidayRoute.basketGift ? const SmHolidayCheckout(asGift: true) : null,
       );
       return;

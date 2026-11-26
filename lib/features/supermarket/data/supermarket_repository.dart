@@ -234,6 +234,7 @@ Map<String, dynamic> smHolidayOrderPayload({
   SmGift? gift,
   String occasionId = '',
   String basketId = '',
+  String origin = smOriginHoliday,
 }) =>
     {
       'clientRequestId': clientRequestId,
@@ -243,7 +244,8 @@ Map<String, dynamic> smHolidayOrderPayload({
       'address': address,
       'slotId': slotId,
       'deliveryDate': deliveryDate,
-      'origin': smOriginHoliday,
+      // Эга 2026-11-28: ҳафталик саватчадан — 'weekly' (сервер deliveryDate'ни ҳар қандай манбада қабул қилади).
+      'origin': origin == smOriginWeekly ? smOriginWeekly : smOriginHoliday,
       'useIncentive': true,
       if (gift != null) 'gift': gift.toMap(),
       if (occasionId.isNotEmpty) 'occasionId': occasionId,

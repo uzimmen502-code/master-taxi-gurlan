@@ -4,14 +4,14 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/formatters.dart';
 import '../data/sm_lists_repository.dart';
-import '../domain/sm_list.dart';
 import '../domain/sm_offer.dart';
 import '../domain/sm_qty.dart';
+import '../sm_basket_controller.dart';
 import '../supermarket_controller.dart';
 import '../widgets/sm_widgets.dart';
 import 'sm_checkout_screen.dart';
 import 'sm_group_screen.dart';
-import 'sm_weekly_screen.dart';
+import 'sm_basket_screen.dart';
 
 /// 4-экран: ягона сават (битта сотувчи — AVA). Сақланиши — [SmCartStore] (илова қайта очилганда ҳам).
 class SmCartScreen extends StatelessWidget {
@@ -23,19 +23,37 @@ class SmCartScreen extends StatelessWidget {
   final SmListsStore? listsStore;
   final SmListPriceMemo? memo;
 
-  void _saveAsWeekly(BuildContext context) {
-    Navigator.of(context).push<SmList>(MaterialPageRoute(
-      builder: (_) => SmListEditorScreen(
-        controller: controller,
-        store: listsStore ?? FirestoreSmListsStore(),
-        memo: memo ?? SmListPriceMemo(),
-        initial: SmList(
-          id: '',
-          name: context.tr('sm_weekly_default_name'),
-          items: smItemsFromCart(controller.cart, controller.offers).take(kSmListItemsMax).toList(),
-        ),
-      ),
-    ));
+  /// Эга 2026-11-28: янги рўйхат ЭМАС — саватдаги маҳсулотлар ЯГОНА «Менинг ҳафталик харид саватчам»га (миқдор
+  /// саватдагидек), кейин саватча очилади. Мижозда иккита ҳафталик сават пайдо бўлмайди.
+  Future<void> _saveAsWeekly(BuildContext context) async {
+    final store = listsStore ?? FirestoreSmListsStore();
+    final b = SmBasketController(
+      supermarket: controller,
+      store: store,
+      memo: memo,
+      saveDelay: Duration.zero,
+      defaultName: context.tr('smb_title'),
+    );
+    final messenger = ScaffoldMessenger.of(context);
+    final nav = Navigator.of(context);
+    final errText = context.tr('sm_err_save');
+    try {
+      await b.load();
+      if (b.loadError) throw StateError('SM_BASKET_LOAD_FAILED');
+      for (final l in controller.cart.lines) {
+        final o = controller.offers[l.productId];
+        if (o != null && o.isSupermarket) b.setOffer(o, l.qtyMilli);
+      }
+      await b.flush();
+      if (b.saveError) throw StateError('SM_BASKET_SAVE_FAILED');
+    } catch (e) {
+      debugPrint('[Supermarket] SM_CART_TO_BASKET_FAILED: $e');
+      messenger.showSnackBar(SnackBar(content: Text(errText)));
+      return;
+    } finally {
+      b.dispose();
+    }
+    await nav.push<void>(MaterialPageRoute(builder: (_) => SmBasketScreen(controller: controller, store: store, memo: memo)));
   }
 
   @override

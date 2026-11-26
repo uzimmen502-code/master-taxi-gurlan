@@ -3,7 +3,6 @@ import 'package:ava_gurlan/core/utils/idempotency_keys.dart';
 import 'package:ava_gurlan/features/home/controllers/home_holiday_cards.dart';
 import 'package:ava_gurlan/features/home/widgets/home_lite_cards.dart';
 import 'package:ava_gurlan/features/supermarket/data/holiday_repository.dart';
-import 'package:ava_gurlan/features/supermarket/data/sm_lists_repository.dart';
 import 'package:ava_gurlan/features/supermarket/data/supermarket_repository.dart';
 import 'package:ava_gurlan/features/supermarket/domain/sm_access.dart';
 import 'package:ava_gurlan/features/supermarket/domain/sm_cart.dart';
@@ -11,7 +10,6 @@ import 'package:ava_gurlan/features/supermarket/domain/sm_holiday.dart';
 import 'package:ava_gurlan/features/supermarket/domain/sm_inbox.dart';
 import 'package:ava_gurlan/features/supermarket/domain/sm_list.dart';
 import 'package:ava_gurlan/features/supermarket/screens/sm_checkout_screen.dart';
-import 'package:ava_gurlan/features/supermarket/screens/sm_holiday_screen.dart';
 import 'package:ava_gurlan/features/supermarket/supermarket_controller.dart';
 import 'package:ava_gurlan/models/news_item.dart';
 import 'package:ava_gurlan/models/order_model.dart';
@@ -22,45 +20,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'sm_fixture.dart';
 
 // ─── Сохта манбалар ──────────────────────────────────────────────────────────
-
-class _FakeHolidayApi implements HolidayApi {
-  _FakeHolidayApi({this.catalog = const HolidayCatalog(), this.result = const HolidayBuildResult()});
-
-  HolidayCatalog catalog;
-  HolidayBuildResult result;
-  final builds = <Map<String, Object?>>[];
-  Object? claimResult = const {'ok': false, 'result': 'skip', 'code': 'PROGRAM_OFF'};
-  int claims = 0;
-
-  @override
-  Future<HolidayCatalog> loadCatalog() async => catalog;
-
-  @override
-  Future<HolidayBuildResult> build({required String basketId, int? guests, int? budget}) async {
-    builds.add({'basketId': basketId, 'guests': guests, 'budget': budget});
-    return result;
-  }
-
-  @override
-  Future<Object?> claimRelativesBonus() async {
-    claims++;
-    return claimResult;
-  }
-}
-
-class _FakeLists implements SmListsStore {
-  _FakeLists([List<SmList>? lists]) : lists = lists ?? [];
-  final List<SmList> lists;
-
-  @override
-  Future<List<SmList>> load() async => lists;
-  @override
-  Future<String> create(SmList list) async => 'new';
-  @override
-  Future<void> update(SmList list) async {}
-  @override
-  Future<void> delete(String listId) async {}
-}
 
 Map<String, String> _n(String s) => {'uz_Cyrl': s, 'uz_Latn': '$s-lat', 'ru': '$s-ru'};
 
@@ -376,125 +335,6 @@ void main() {
   });
 
   group('экранлар', () {
-    testWidgets('байрамлар рўйхати → push id бўйича байрам дарҳол очилади, саватлар даража тартибида', (t) async {
-      final api = _FakeHolidayApi(catalog: _catalog);
-      await t.pumpWidget(_app(SmHolidayScreen(
-        controller: _controller(),
-        api: api,
-        listsStore: _FakeLists(),
-        initialOccasionId: 'birthday',
-        today: _today,
-      )));
-      await t.pumpAndSettle();
-      expect(_k('hb_basket_birthday_simple'), findsOneWidget);
-      expect(_k('hb_basket_birthday_large'), findsOneWidget);
-      expect(t.getTopLeft(_k('hb_basket_birthday_simple')).dy, lessThan(t.getTopLeft(_k('hb_basket_birthday_large')).dy));
-      await t.pageBack();
-      await t.pumpAndSettle();
-      expect(_k('hb_occasion_birthday'), findsOneWidget);
-      expect(find.text('hb_next_date'), findsOneWidget, reason: 'Янги йил санаси (калит матни)');
-    });
-
-    testWidgets('бўш каталог — изоҳ', (t) async {
-      await t.pumpWidget(_app(SmHolidayScreen(controller: _controller(), api: _FakeHolidayApi(), listsStore: _FakeLists())));
-      await t.pumpAndSettle();
-      expect(_k('hb_empty'), findsOneWidget);
-    });
-
-    testWidgets('туғилган кун: ўз саватчалари (occasionId бўйича), олдиндан буюртма ҳаволаси', (t) async {
-      var opened = 0;
-      final birthday = _catalog.occasions.first;
-      await t.pumpWidget(_app(SmOccasionScreen(
-        controller: _controller(),
-        api: _FakeHolidayApi(catalog: _catalog),
-        occasion: birthday,
-        baskets: holidayBasketsFor(_catalog.baskets, 'birthday'),
-        listsStore: _FakeLists([
-          const SmList(id: 'l1', name: 'Менинг', occasionId: 'birthday', items: [SmListItem(groupId: 'onion', qtyMilli: 1000)]),
-          const SmList(id: 'l2', name: 'Ҳафталик'),
-        ]),
-        openRestaurants: (_) => opened++,
-      )));
-      await t.pumpAndSettle();
-      expect(_k('hb_own_l1'), findsOneWidget);
-      expect(_k('hb_own_l2'), findsNothing);
-      await t.ensureVisible(_k('hb_preorder_link'));
-      await t.tap(_k('hb_preorder_link'));
-      expect(opened, 1);
-    });
-
-    testWidgets('саватча: ўзгаришлар рўйхати, розиликсиз саватга қўшилмайди; меҳмон/бюджет серверга', (t) async {
-      final api = _FakeHolidayApi(result: _build);
-      final c = _controller();
-      var checkout = 0;
-      await t.binding.setSurfaceSize(const Size(420, 2200));
-      addTearDown(() => t.binding.setSurfaceSize(null));
-      await t.pumpWidget(_app(SmHolidayBasketScreen(
-        controller: c,
-        api: api,
-        basket: holidayBasketsFor(_catalog.baskets, 'birthday').first,
-        checkout: const SmHolidayCheckout(occasionId: 'birthday', basketId: 'birthday_simple'),
-        openCheckout: (_) => checkout++,
-      )));
-      await t.pumpAndSettle();
-      expect(api.builds.single, {'basketId': 'birthday_simple', 'guests': null, 'budget': null});
-      expect(_k('hb_changes'), findsOneWidget);
-      for (var i = 0; i < 3; i++) {
-        expect(_k('hb_change_$i'), findsOneWidget);
-      }
-      expect(find.text('hb_change_swap'), findsOneWidget);
-      expect(find.text('hb_change_drop'), findsOneWidget);
-      expect(find.text('hb_change_unavailable'), findsOneWidget);
-      expect(_k('hb_line_o_red_cheap'), findsOneWidget);
-      expect(t.widget<FilledButton>(_k('hb_to_cart')).onPressed, isNull, reason: 'розилик йўқ');
-
-      await t.enterText(_k('hb_guests'), '501');
-      await t.pump();
-      expect(find.text('hb_err_guests'), findsOneWidget);
-      expect(t.widget<OutlinedButton>(_k('hb_recalc')).onPressed, isNull);
-      await t.enterText(_k('hb_guests'), '12');
-      await t.enterText(_k('hb_budget'), '22 000');
-      await t.pump();
-      await t.tap(_k('hb_recalc'));
-      await t.pumpAndSettle();
-      expect(api.builds.last, {'basketId': 'birthday_simple', 'guests': 12, 'budget': 22000});
-
-      await t.tap(_k('hb_approve'));
-      await t.pump();
-      await t.tap(_k('hb_to_cart'));
-      await t.pump();
-      expect(checkout, 1);
-      expect(c.cart.lines.map((l) => '${l.productId}:${l.qtyMilli}'), ['o_red_cheap:1500', 'p1:2000']);
-    });
-
-    testWidgets('ўзгариш йўқ — розилик сўралмайди; бюджетдан ошди — огоҳлантириш', (t) async {
-      final api = _FakeHolidayApi(
-        result: HolidayBuildResult.fromMap({
-          'lines': [
-            {'productId': 'p1', 'groupId': 'potato', 'qty': 1, 'price': 6000, 'total': 6000, 'unit': 'kg'},
-          ],
-          'goods': 6000,
-          'fee': 660,
-          'total': 6660,
-          'changes': [],
-          'budget': 1000,
-          'withinBudget': false,
-        }),
-      );
-      await t.pumpWidget(_app(SmHolidayBasketScreen(
-        controller: _controller(),
-        api: api,
-        basket: holidayBasketsFor(_catalog.baskets, 'birthday').first,
-        checkout: const SmHolidayCheckout(),
-        openCheckout: (_) {},
-      )));
-      await t.pumpAndSettle();
-      expect(_k('hb_changes'), findsNothing);
-      expect(_k('hb_over_budget'), findsOneWidget);
-      await t.ensureVisible(_k('hb_to_cart'));
-      expect(t.widget<FilledButton>(_k('hb_to_cart')).onPressed, isNotNull);
-    });
-
     testWidgets('расмийлаштириш (байрам): withDates, сана чиплари, совға текшируви, payload', (t) async {
       final api = FakeSupermarketApi(access: _datedAccess);
       final c = _controller(api: api, access: _datedAccess);
@@ -577,22 +417,6 @@ void main() {
 
   group('катта шрифт 1.5 / 320 px — overflow йўқ (байрам)', () {
     final screens = <String, Widget Function()>{
-      'occasions': () => SmHolidayScreen(controller: _controller(), api: _FakeHolidayApi(catalog: _catalog), listsStore: _FakeLists(), today: _today),
-      'occasion': () => SmOccasionScreen(
-            controller: _controller(),
-            api: _FakeHolidayApi(),
-            occasion: _catalog.occasions.first,
-            baskets: holidayBasketsFor(_catalog.baskets, 'birthday'),
-            listsStore: _FakeLists([const SmList(id: 'l1', name: 'Менинг узун номли саватчам', occasionId: 'birthday')]),
-            openRestaurants: (_) {},
-          ),
-      'basket': () => SmHolidayBasketScreen(
-            controller: _controller(),
-            api: _FakeHolidayApi(result: _build),
-            basket: holidayBasketsFor(_catalog.baskets, 'birthday').first,
-            checkout: const SmHolidayCheckout(),
-            openCheckout: (_) {},
-          ),
       'checkout': () {
         final c = _controller(api: FakeSupermarketApi(access: _datedAccess), access: _datedAccess);
         c.addToCart('p1', 1000);

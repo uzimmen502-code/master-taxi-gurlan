@@ -229,6 +229,7 @@ class _SmCheckoutScreenState extends State<SmCheckoutScreen> {
             gift: _asGift ? _gift : null,
             occasionId: h.occasionId,
             basketId: h.basketId,
+            origin: h.origin,
           )
         : smOrderPayload(
             clientRequestId: _keys.keyFor(_scope),

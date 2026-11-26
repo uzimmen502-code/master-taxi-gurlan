@@ -4,6 +4,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../data/sm_lists_repository.dart';
 import '../data/supermarket_repository.dart' show smOriginWeekly;
+import '../domain/sm_basket.dart' show kSmBasketListId;
 import '../domain/sm_list.dart';
 import '../domain/sm_offer.dart';
 import '../domain/sm_qty.dart';
@@ -18,13 +19,11 @@ import 'supermarket_home_screen.dart';
 /// Ҳафта кунлари калитлари (1 = душанба … 7 = якшанба).
 String smWeekdayKey(int d) => 'sm_weekday_$d';
 
-/// «Ҳафталик сават» (2-босқич, эга 2026-11-21): биринчи марта — «Бўш саватдан» / «Тайёр намунадан»;
-/// кейин — сақланган рўйхатлар. ҲЕЧ ҚАЧОН буюртма бермайди: фақат саватга қўшади.
-class SmWeeklyScreen extends StatefulWidget {
-  const SmWeeklyScreen({super.key, required this.controller, this.store, this.memo, this.openListId});
-
-  /// Push/«Хабарлар»дан (sm_weekly_reminder, smListId): юклангач шу рўйхат очилади (топилмаса — рўйхатлар).
-  final String? openListId;
+/// «Бошқа рўйхатларим» (эга 2026-11-28): ягона саватча ([kSmBasketListId] / танланган рўйхат) дан ташқари
+/// аввалги рўйхатлар — ўчирилмайди, очиш/таҳрир/саватга қўшиш мумкин. Янги рўйхат бу ерда яратилмайди (мижозда
+/// иккита ҳафталик сават бўлмасин). ҲЕЧ ҚАЧОН буюртма бермайди.
+class SmOtherListsScreen extends StatefulWidget {
+  const SmOtherListsScreen({super.key, required this.controller, this.store, this.memo, this.excludeId = ''});
 
   final SupermarketController controller;
 
@@ -32,16 +31,18 @@ class SmWeeklyScreen extends StatefulWidget {
   final SmListsStore? store;
   final SmListPriceMemo? memo;
 
+  /// Саватча id'си — рўйхатда кўрсатилмайди.
+  final String excludeId;
+
   @override
-  State<SmWeeklyScreen> createState() => _SmWeeklyScreenState();
+  State<SmOtherListsScreen> createState() => _SmOtherListsScreenState();
 }
 
-class _SmWeeklyScreenState extends State<SmWeeklyScreen> {
+class _SmOtherListsScreenState extends State<SmOtherListsScreen> {
   late final SmListsStore _store = widget.store ?? FirestoreSmListsStore();
   late final SmListPriceMemo _memo = widget.memo ?? SmListPriceMemo();
   List<SmList>? _lists;
   bool _error = false;
-  late String? _pendingOpen = widget.openListId;
 
   @override
   void initState() {
@@ -54,35 +55,11 @@ class _SmWeeklyScreenState extends State<SmWeeklyScreen> {
     try {
       final l = await _store.load();
       if (!mounted) return;
-      setState(() => _lists = l);
-      final target = _pendingOpen;
-      _pendingOpen = null;
-      if (target != null) {
-        for (final x in l) {
-          if (x.id == target) {
-            await _open(x);
-            break;
-          }
-        }
-      }
+      setState(() => _lists = [for (final x in l) if (x.id != widget.excludeId && x.id != kSmBasketListId) x]);
     } catch (e) {
       debugPrint('[Supermarket] SM_LISTS_LOAD_FAILED: $e');
       if (mounted) setState(() => _error = true);
     }
-  }
-
-  Future<void> _newList({required bool template}) async {
-    final items = template ? smTemplateItems(widget.controller.taxonomy) : const <SmListItem>[];
-    final saved = await Navigator.of(context).push<SmList>(MaterialPageRoute(
-      builder: (_) => SmListEditorScreen(
-        controller: widget.controller,
-        store: _store,
-        memo: _memo,
-        initial: SmList(id: '', name: context.tr('sm_weekly_default_name'), items: items),
-        existingCount: _lists?.length ?? 0,
-      ),
-    ));
-    if (saved != null) await _load();
   }
 
   Future<void> _open(SmList l) async {
@@ -99,7 +76,7 @@ class _SmWeeklyScreenState extends State<SmWeeklyScreen> {
     return Scaffold(
       backgroundColor: c.bg,
       appBar: AppBar(
-        title: Text(context.tr('sm_weekly_title')),
+        title: Text(context.tr('smb_other_title')),
         actions: [SmCartAction(controller: widget.controller, onTap: () => smOpenCart(context, widget.controller))],
       ),
       body: _error
@@ -117,86 +94,44 @@ class _SmWeeklyScreenState extends State<SmWeeklyScreen> {
               ? const Center(child: CircularProgressIndicator())
               : ListView(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                  children: lists.isEmpty ? _firstRun(context) : _saved(context, lists),
+                  children: [
+                    for (final l in lists) ...[
+                      Material(
+                        key: ValueKey('sm_weekly_list_${l.id}'),
+                        color: c.surface,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: c.line)),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () => _open(l),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Row(children: [
+                              Icon(Icons.list_alt_rounded, color: c.brandText),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                  Text(l.name, maxLines: 2, overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: c.ink)),
+                                  Text(context.tr('sm_weekly_items_count').replaceAll('{n}', '${l.items.length}'),
+                                      style: TextStyle(fontSize: 14, color: c.ink2)),
+                                  if (l.remind.enabled)
+                                    Text(_remindText(context, l.remind), style: TextStyle(fontSize: 14, color: c.ink2)),
+                                  if (l.invalid.isNotEmpty)
+                                    Text(context.tr('sm_list_invalid'),
+                                        key: ValueKey('sm_weekly_invalid_${l.id}'), style: TextStyle(fontSize: 14, color: c.danger)),
+                                ]),
+                              ),
+                              Icon(Icons.chevron_right_rounded, color: c.ink3),
+                            ]),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                    _NeverOrdersNote(),
+                  ],
                 ),
     );
-  }
-
-  List<Widget> _firstRun(BuildContext context) {
-    final c = context.ava;
-    return [
-      Text(context.tr('sm_weekly_intro'), key: const ValueKey('sm_weekly_intro'), style: TextStyle(fontSize: 16, color: c.ink)),
-      const SizedBox(height: 16),
-      _BigChoice(
-        key: const ValueKey('sm_weekly_start_empty'),
-        icon: Icons.add_shopping_cart_rounded,
-        title: context.tr('sm_weekly_start_empty'),
-        onTap: () => _newList(template: false),
-      ),
-      const SizedBox(height: 12),
-      _BigChoice(
-        key: const ValueKey('sm_weekly_start_template'),
-        icon: Icons.checklist_rounded,
-        title: context.tr('sm_weekly_start_template'),
-        subtitle: context.tr('sm_weekly_template_hint'),
-        onTap: () => _newList(template: true),
-      ),
-      const SizedBox(height: 16),
-      _NeverOrdersNote(),
-    ];
-  }
-
-  List<Widget> _saved(BuildContext context, List<SmList> lists) {
-    final c = context.ava;
-    final full = lists.length >= kSmMaxLists;
-    return [
-      for (final l in lists) ...[
-        Material(
-          key: ValueKey('sm_weekly_list_${l.id}'),
-          color: c.surface,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: c.line)),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(16),
-            onTap: () => _open(l),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(children: [
-                Icon(Icons.shopping_basket_outlined, color: c.brandText),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(l.name, maxLines: 2, overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: c.ink)),
-                    Text(context.tr('sm_weekly_items_count').replaceAll('{n}', '${l.items.length}'),
-                        style: TextStyle(fontSize: 14, color: c.ink2)),
-                    if (l.remind.enabled)
-                      Text(_remindText(context, l.remind), style: TextStyle(fontSize: 14, color: c.ink2)),
-                    if (l.invalid.isNotEmpty)
-                      Text(context.tr('sm_list_invalid'),
-                          key: ValueKey('sm_weekly_invalid_${l.id}'), style: TextStyle(fontSize: 14, color: c.danger)),
-                  ]),
-                ),
-                Icon(Icons.chevron_right_rounded, color: c.ink3),
-              ]),
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
-      ],
-      OutlinedButton.icon(
-        key: const ValueKey('sm_weekly_new'),
-        style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-        onPressed: full ? null : () => _newList(template: false),
-        icon: const Icon(Icons.add_rounded),
-        label: Text(context.tr('sm_weekly_new'), style: const TextStyle(fontSize: 16)),
-      ),
-      if (full)
-        Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Text(context.tr('sm_err_list_limit').replaceAll('{n}', '$kSmMaxLists'),
-              key: const ValueKey('sm_weekly_limit'), style: TextStyle(fontSize: 14, color: c.ink2)),
-        ),
-    ];
   }
 }
 
@@ -206,46 +141,6 @@ String _remindText(BuildContext context, SmRemind r) => context
     .replaceAll('{time}', smHhMmOf(r.minute));
 
 String smHhMmOf(int m) => '${(m ~/ 60).toString().padLeft(2, '0')}:${(m % 60).toString().padLeft(2, '0')}';
-
-class _BigChoice extends StatelessWidget {
-  const _BigChoice({super.key, required this.icon, required this.title, required this.onTap, this.subtitle});
-
-  final IconData icon;
-  final String title;
-  final String? subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.ava;
-    return Material(
-      color: c.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: c.line)),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(color: c.brandSoft, borderRadius: BorderRadius.circular(12)),
-              child: Icon(icon, color: c.brandText),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: c.ink)),
-                if (subtitle != null) Text(subtitle!, style: TextStyle(fontSize: 14, color: c.ink2)),
-              ]),
-            ),
-          ]),
-        ),
-      ),
-    );
-  }
-}
 
 class _NeverOrdersNote extends StatelessWidget {
   @override

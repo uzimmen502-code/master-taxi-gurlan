@@ -16,10 +16,10 @@ import 'sm_category_screen.dart';
 import 'sm_group_screen.dart';
 import 'sm_order_history_screen.dart';
 import 'sm_quick_buy_screen.dart';
-import 'sm_weekly_screen.dart';
+import 'sm_basket_screen.dart';
 
 /// Категория иконкаси: сервер `icon` калити (seed `supermarket_taxonomy_v1.json`: meat, grain, vegetable,
-/// fruit, oil, dairy, egg, drink, household) → Material иконка; номаълум — умумий.
+/// fruit, oil, dairy, egg, drink, household; v3 — holiday) → Material иконка; номаълум — умумий.
 IconData smCategoryIcon(String key) => switch (key) {
       'meat' => Icons.kebab_dining_outlined,
       'grain' => Icons.rice_bowl_outlined,
@@ -30,6 +30,7 @@ IconData smCategoryIcon(String key) => switch (key) {
       'egg' => Icons.egg_outlined,
       'drink' => Icons.local_cafe_outlined,
       'household' => Icons.cleaning_services_outlined,
+      'holiday' => Icons.celebration_outlined,
       _ => Icons.local_grocery_store_outlined,
     };
 
@@ -106,9 +107,10 @@ class _SupermarketHomeScreenState extends State<SupermarketHomeScreen> {
   }
 
   void _openInitialGroup() {
+    // Ҳафталик эслатма (эга 2026-11-28): ягона саватча; id бошқа рўйхатники бўлса — саватча ўша рўйхатни очади.
     final listId = widget.initialWeeklyListId;
-    if (mounted && listId != null && listId.isNotEmpty) {
-      _push(SmWeeklyScreen(controller: _c, store: widget.listsStore, openListId: listId));
+    if (mounted && listId != null) {
+      _push(SmBasketScreen(controller: _c, store: widget.listsStore, openListId: listId));
       return;
     }
     final id = widget.initialGroupId;
@@ -203,7 +205,7 @@ class _SupermarketHomeScreenState extends State<SupermarketHomeScreen> {
                   _EntryChip(
                       id: 'weekly',
                       label: context.tr('sm_chip_weekly'),
-                      onTap: () => _push(SmWeeklyScreen(controller: _c, store: widget.listsStore))),
+                      onTap: () => _push(SmBasketScreen(controller: _c, store: widget.listsStore))),
                   _EntryChip(
                       id: 'orders',
                       label: context.tr('sm_chip_orders'),

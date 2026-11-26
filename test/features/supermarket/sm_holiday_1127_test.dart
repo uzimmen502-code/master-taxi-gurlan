@@ -14,15 +14,11 @@ import 'package:ava_gurlan/features/markets/data/market_search.dart';
 import 'package:ava_gurlan/features/markets/domain/market_taxonomy.dart';
 import 'package:ava_gurlan/features/markets/screens/market_screen.dart';
 import 'package:ava_gurlan/features/markets/widgets/market_form_fields.dart';
-import 'package:ava_gurlan/features/supermarket/data/holiday_repository.dart';
-import 'package:ava_gurlan/features/supermarket/data/sm_lists_repository.dart';
 import 'package:ava_gurlan/features/supermarket/data/supermarket_repository.dart';
 import 'package:ava_gurlan/features/supermarket/domain/sm_access.dart';
 import 'package:ava_gurlan/features/supermarket/domain/sm_holiday.dart';
 import 'package:ava_gurlan/features/supermarket/domain/sm_inbox.dart';
-import 'package:ava_gurlan/features/supermarket/domain/sm_list.dart';
 import 'package:ava_gurlan/features/supermarket/screens/sm_checkout_screen.dart';
-import 'package:ava_gurlan/features/supermarket/screens/sm_holiday_screen.dart';
 import 'package:ava_gurlan/features/supermarket/supermarket_controller.dart';
 import 'package:ava_gurlan/features/tv_market/models/tv_shop.dart';
 import 'package:ava_gurlan/models/news_item.dart';
@@ -50,28 +46,6 @@ SupermarketController _controller({FakeSupermarketApi? api}) {
   c.setCatalogForTest(smTaxonomyFixture, smOffersFixture(), access: smAccessFixture);
   c.deliveryArea = const GeoArea(regionId: 'xorazm', districtId: 'gurlan', districtLabel: 'Гурлан');
   return c;
-}
-
-class _FakeHolidayApi implements HolidayApi {
-  _FakeHolidayApi(this.catalog);
-  final HolidayCatalog catalog;
-  @override
-  Future<HolidayCatalog> loadCatalog() async => catalog;
-  @override
-  Future<HolidayBuildResult> build({required String basketId, int? guests, int? budget}) async => const HolidayBuildResult();
-  @override
-  Future<Object?> claimRelativesBonus() async => const {};
-}
-
-class _FakeLists implements SmListsStore {
-  @override
-  Future<List<SmList>> load() async => const [];
-  @override
-  Future<String> create(SmList list) async => 'new';
-  @override
-  Future<void> update(SmList list) async {}
-  @override
-  Future<void> delete(String listId) async {}
 }
 
 class _FakeAdminApi implements AdminHolidayApi {
@@ -348,24 +322,6 @@ void main() {
       expect(holidayRouteOf(holidayInboxTarget(g)!), HolidayRoute.basketGuests);
     });
 
-    testWidgets('«меҳмонлар учун» — туғилган кун очилади, меҳмонлар изоҳи билан', (t) async {
-      final cat = HolidayCatalog.fromMap({
-        'occasions': [
-          {'id': 'birthday', 'names': _n('Туғилган кун'), 'kind': 'birthday'},
-        ],
-      });
-      await t.pumpWidget(_app(SmHolidayScreen(
-        controller: _controller(),
-        api: _FakeHolidayApi(cat),
-        listsStore: _FakeLists(),
-        initialOccasionId: 'birthday',
-        openBirthday: true,
-        guestsHint: true,
-      )));
-      await t.pumpAndSettle();
-      expect(_k('hb_guests_hint'), findsOneWidget);
-    });
-
     testWidgets('админ: туғилган кунда эслатмалар муҳаррири, D-7…D-3 тавсия → сақланади', (t) async {
       final api = _FakeAdminApi([
         HolidayOccasion(
@@ -499,42 +455,6 @@ void main() {
       expect(qurbonMarketActive([qurbon], 'livestock', DateTime(2027, 5, 17)), isFalse);
       expect(qurbonMarketActive([qurbon], 'meat', DateTime(2027, 5, 10)), isFalse);
       expect(qurbonMarketActive(const [], 'livestock', DateTime(2027, 5, 10)), isFalse);
-    });
-
-    testWidgets('байрам босилса саватча эмас — бозор очилади (мақсад билан)', (t) async {
-      final opened = <String>[];
-      final cat = HolidayCatalog(occasions: [qurbon]);
-      await t.pumpWidget(_app(SmHolidayScreen(
-        controller: _controller(),
-        api: _FakeHolidayApi(cat),
-        listsStore: _FakeLists(),
-        today: _today,
-        openTarget: (ctx, tg, {bool replace = false}) async {
-          opened.add('${tg.market}/${tg.initialCategory}/$replace');
-          return true;
-        },
-      )));
-      await t.pumpAndSettle();
-      await t.tap(_k('hb_occasion_qurbon_hayit'));
-      await t.pumpAndSettle();
-      expect(opened, ['livestock/sheep_goat/false']);
-      expect(find.byType(SmOccasionScreen), findsNothing);
-    });
-
-    testWidgets('push (occasionId) — бозор рўйхат ЎРНИГА очилади (replace)', (t) async {
-      final opened = <bool>[];
-      await t.pumpWidget(_app(SmHolidayScreen(
-        controller: _controller(),
-        api: _FakeHolidayApi(HolidayCatalog(occasions: [qurbon])),
-        listsStore: _FakeLists(),
-        initialOccasionId: 'qurbon_hayit',
-        openTarget: (ctx, tg, {bool replace = false}) async {
-          opened.add(replace);
-          return true;
-        },
-      )));
-      await t.pumpAndSettle();
-      expect(opened, [true]);
     });
 
     final livestock = MarketTaxonomy.fromMap({

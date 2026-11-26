@@ -18,6 +18,7 @@ import 'package:ava_gurlan/features/supermarket/screens/sm_cart_screen.dart';
 import 'package:ava_gurlan/features/supermarket/screens/sm_checkout_screen.dart';
 import 'package:ava_gurlan/features/supermarket/screens/sm_order_history_screen.dart';
 import 'package:ava_gurlan/features/supermarket/screens/sm_quick_buy_screen.dart';
+import 'package:ava_gurlan/features/supermarket/screens/sm_basket_screen.dart';
 import 'package:ava_gurlan/features/supermarket/screens/sm_weekly_screen.dart';
 import 'package:ava_gurlan/features/supermarket/screens/supermarket_home_screen.dart';
 import 'package:ava_gurlan/features/supermarket/supermarket_controller.dart';
@@ -418,23 +419,23 @@ void main() {
   });
 
   group('Ҳафталик сават — ҳеч қачон буюртма бермайди', () {
-    testWidgets('биринчи марта: икки танлов; намуна → муҳаррир → сақлаш → рўйхат', (t) async {
+    testWidgets('«Бошқа рўйхатларим»: саватчадан ташқари рўйхатлар, янги рўйхат яратилмайди (эга 2026-11-28)', (t) async {
       await tall(t);
-      final store = _FakeStore();
-      await t.pumpWidget(_app(SmWeeklyScreen(controller: _controller(), store: store)));
+      final store = _FakeStore([
+        const SmList(id: 'weekly_basket', name: 'Саватча'),
+        const SmList(id: 'L2', name: 'Эски', remind: SmRemind(enabled: true)),
+        const SmList(id: 'L3', name: 'Наврўз', occasionId: 'navruz'),
+      ]);
+      await t.pumpWidget(_app(SmOtherListsScreen(controller: _controller(), store: store, excludeId: 'L9')));
       await t.pumpAndSettle();
-      expect(_k('sm_weekly_start_empty'), findsOneWidget);
-      expect(_k('sm_weekly_start_template'), findsOneWidget);
+      expect(_k('sm_weekly_list_weekly_basket'), findsNothing, reason: 'саватча ўзи кўрсатилмайди');
+      expect(_k('sm_weekly_list_L2'), findsOneWidget);
+      expect(_k('sm_weekly_list_L3'), findsOneWidget);
       expect(_k('sm_never_orders_note'), findsOneWidget);
-      expect(find.textContaining('family'), findsNothing);
-      await t.tap(_k('sm_weekly_start_template'));
+      expect(_k('sm_weekly_new'), findsNothing);
+      await t.tap(_k('sm_weekly_list_L2'));
       await t.pumpAndSettle();
-      expect(_k('sm_list_item_0'), findsOneWidget);
-      expect(_k('sm_list_item_2'), findsOneWidget);
-      await t.tap(_k('sm_list_save'));
-      await t.pumpAndSettle();
-      expect(store.created.single.items.length, 3);
-      expect(_k('sm_weekly_list_L1'), findsOneWidget);
+      expect(find.byType(SmSavedListScreen), findsOneWidget);
     });
 
     testWidgets('«Жорий нархларда саватга қўшиш»: солиштириш → тасдиқ → ФАҚАТ сават', (t) async {
@@ -484,7 +485,7 @@ void main() {
       expect(c.cart.isEmpty, isTrue);
     });
 
-    testWidgets('саватдан «Ҳафталик сават сифатида сақлаш» — таклифлар ва миқдорлар', (t) async {
+    testWidgets('саватдан «Ҳафталик саватчамга қўшиш» — ЯГОНА саватчага (янги рўйхат эмас), кейин саватча очилади', (t) async {
       await tall(t);
       final store = _FakeStore();
       final c = _controller(cart: SmCart.empty.add('o_red_cheap', 1500).add('m1', 2000));
@@ -493,12 +494,20 @@ void main() {
       await t.ensureVisible(_k('sm_cart_save_weekly'));
       await t.tap(_k('sm_cart_save_weekly'));
       await t.pumpAndSettle();
-      await t.tap(_k('sm_list_save'));
-      await t.pumpAndSettle();
+      expect(store.created.single.id, 'weekly_basket');
       expect(store.created.single.toMap()['items'], [
         {'groupId': 'onion', 'varietyId': 'red', 'offerId': 'o_red_cheap', 'qty': 1.5},
         {'groupId': 'milk', 'offerId': 'm1', 'qty': 2},
       ]);
+      expect(find.byType(SmBasketScreen), findsOneWidget);
+      // Иккинчи марта — ўша саватча янгиланади (иккинчи рўйхат пайдо бўлмайди).
+      await t.pageBack();
+      await t.pumpAndSettle();
+      await t.ensureVisible(_k('sm_cart_save_weekly'));
+      await t.tap(_k('sm_cart_save_weekly'));
+      await t.pumpAndSettle();
+      expect(store.created, hasLength(1));
+      expect(store.lists, hasLength(1));
     });
 
     testWidgets('бош саҳифа чиплари очади (тез орада эмас)', (t) async {
@@ -513,7 +522,7 @@ void main() {
       await t.pumpAndSettle();
       await t.tap(_k('sm_chip_weekly'));
       await t.pumpAndSettle();
-      expect(find.byType(SmWeeklyScreen), findsOneWidget);
+      expect(find.byType(SmBasketScreen), findsOneWidget);
       await t.pageBack();
       await t.pumpAndSettle();
       await t.tap(_k('sm_chip_orders'));
@@ -849,8 +858,8 @@ void main() {
   group('катта шрифт 1.5 / 320 px — overflow йўқ (2-босқич)', () {
     final screens = <String, Widget Function(SupermarketController c)>{
       'quick': (c) => SmQuickBuyScreen(controller: c),
-      'weekly_first': (c) => SmWeeklyScreen(controller: c, store: _FakeStore()),
-      'weekly_saved': (c) => SmWeeklyScreen(controller: c, store: _FakeStore([const SmList(id: 'a', name: 'Ҳафталик сават — шанба', remind: SmRemind(enabled: true))])),
+      'basket_empty': (c) => SmBasketScreen(controller: c, store: _FakeStore(), birthdays: () async => (own: null, spouse: null)),
+      'other_lists': (c) => SmOtherListsScreen(controller: c, store: _FakeStore([const SmList(id: 'a', name: 'Ҳафталик сават — шанба', remind: SmRemind(enabled: true))])),
       'editor': (c) => SmListEditorScreen(
             controller: c,
             store: _FakeStore(),

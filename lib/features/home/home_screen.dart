@@ -128,6 +128,9 @@ import 'widgets/service_spotlight_item.dart';
 import '../restaurants/domain/restaurants_access.dart';
 import '../markets/open_market.dart';
 import '../supermarket/screens/supermarket_home_screen.dart' show openSupermarket;
+import '../supermarket/data/sm_basket_birthdays.dart' show loadSmBasketBirthdays;
+import '../supermarket/domain/sm_basket.dart' show smBasketBirthdayMode, smBasketImage, smBasketTitleKey;
+import '../supermarket/domain/sm_holiday.dart' show smTashkentDate;
 import '../supermarket/screens/sm_holiday_screen.dart' show openHolidayBasket;
 import '../supermarket/domain/sm_holiday.dart' show relativesBonusProgress;
 import 'controllers/home_holiday_cards.dart';
@@ -1274,6 +1277,7 @@ class _HomeViewState extends State<_HomeView> {
   HomeHolidayState _holidayState = HomeHolidayState.none;
   final _holidayCards = HomeHolidayCards();
   bool _holidayResolving = false;
+  bool _birthdayBasket = false;
 
   Future<void> _resolveHolidayCards() async {
     if (_holidayResolving || !mounted) return;
@@ -1284,6 +1288,12 @@ class _HomeViewState extends State<_HomeView> {
         phone: context.read<HomeController>().phone,
       );
       if (mounted && s != _holidayState) setState(() => _holidayState = s);
+      // Эга 2026-11-28: карточка сарлавҳаси/расми — ўзи ёки турмуш ўртоғи туғилган кунига ≤15 кун (сессияда 1 марта).
+      if (s.holiday) {
+        final bd = await loadSmBasketBirthdays();
+        final on = smBasketBirthdayMode(today: smTashkentDate(), own: bd.own, spouse: bd.spouse);
+        if (mounted && on != _birthdayBasket) setState(() => _birthdayBasket = on);
+      }
     } finally {
       _holidayResolving = false;
     }
@@ -1335,10 +1345,11 @@ class _HomeViewState extends State<_HomeView> {
           // «Байрам саватчаси» (эга 2026-11-26).
           'holiday' => HomeLiteCardData(
               id: 'holiday',
-              title: context.tr('hb_home_title'),
+              title: context.tr(smBasketTitleKey(birthday: _birthdayBasket)),
               caption: context.tr('hb_home_caption'),
               icon: Icons.celebration_rounded,
-              fit: HomeLiteImageFit.contain,
+              imagePath: smBasketImage(birthday: _birthdayBasket),
+              fit: HomeLiteImageFit.cover,
               onTap: () => openHolidayBasket(Navigator.of(context)),
             ),
           'relatives_bday' => HomeLiteCardData(

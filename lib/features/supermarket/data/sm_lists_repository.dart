@@ -13,7 +13,7 @@ import '../domain/sm_list.dart';
 abstract class SmListsStore {
   Future<List<SmList>> load();
 
-  /// Янги рўйхат; қайтади — ҳужжат id.
+  /// Янги рўйхат (`list.id` бўш — авто id, акс ҳолда шу id); қайтади — ҳужжат id.
   Future<String> create(SmList list);
   Future<void> update(SmList list);
   Future<void> delete(String listId);
@@ -46,9 +46,10 @@ class FirestoreSmListsStore implements SmListsStore {
     return out;
   }
 
+  /// `list.id` бўш — янги авто id; акс ҳолда шу id (саватча — `weekly_basket`, эга 2026-11-28).
   @override
   Future<String> create(SmList list) async {
-    final ref = _col().doc();
+    final ref = list.id.isEmpty ? _col().doc() : _col().doc(list.id);
     await ref.set({
       ...list.toMap(),
       'createdAt': FieldValue.serverTimestamp(),

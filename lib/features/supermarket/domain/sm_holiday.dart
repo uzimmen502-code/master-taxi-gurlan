@@ -744,6 +744,7 @@ class SmHolidayCheckout {
     this.asGift = false,
     this.recipientName = '',
     this.recipientPhone = '',
+    this.origin = 'holiday',
   });
 
   final String occasionId;
@@ -752,12 +753,17 @@ class SmHolidayCheckout {
   final String recipientName;
   final String recipientPhone;
 
-  SmHolidayCheckout copyWith({String? occasionId, String? basketId}) => SmHolidayCheckout(
+  /// Буюртма манбаи (сервер `ORDER_ORIGINS`): байрам/туғилган кун контекстида 'holiday', ҳафталик саватчадан
+  /// 'weekly' (эга 2026-11-28). Расмийлаштириш шакли (сана ≤14 кун, совға, бонус) — иккисида ҳам бир хил.
+  final String origin;
+
+  SmHolidayCheckout copyWith({String? occasionId, String? basketId, String? origin}) => SmHolidayCheckout(
         occasionId: occasionId ?? this.occasionId,
         basketId: basketId ?? this.basketId,
         asGift: asGift,
         recipientName: recipientName,
         recipientPhone: recipientPhone,
+        origin: origin ?? this.origin,
       );
 }
 

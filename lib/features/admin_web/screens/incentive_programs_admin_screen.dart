@@ -191,6 +191,15 @@ class _ProgramCardState extends State<_ProgramCard> {
                 ),
                 if (_busy) const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
                 const SizedBox(width: 8),
+                // «Яқинлар туғилган куни» (сервер 5eb77906): ЯГОНА ёзиш йўли — adminUpsertRelativesBonusProgram
+                // («Байрам саватчаси» бўлими); бу ерда фақат кўриш.
+                if (incentiveProgramLocked(widget.id, d))
+                  Text(
+                    'Таҳрир: «Байрам саватчаси» бўлимида · ${_stageLabels[d['stage']] ?? 'Ўчиқ'}',
+                    key: ValueKey('incentive_locked_${widget.id}'),
+                    style: const TextStyle(color: Colors.black54),
+                  )
+                else ...[
                 DropdownButton<String>(
                   key: ValueKey('incentive_stage_${widget.id}'),
                   value: _stageLabels.containsKey(d['stage']) ? d['stage'] as String : 'off',
@@ -205,6 +214,7 @@ class _ProgramCardState extends State<_ProgramCard> {
                   icon: const Icon(Icons.edit, size: 18),
                   label: const Text('Таҳрирлаш'),
                 ),
+                ],
               ],
             ),
             const SizedBox(height: 6),

@@ -30,6 +30,13 @@ class AdminIncentivesService {
   }
 }
 
+/// «Яқинлар туғилган куни» бонус дастури (сервер 5eb77906 `incentive_programs/relatives_birthdays`, `kind`).
+const kRelativesBonusProgramId = 'relatives_birthdays';
+
+/// Умумий рағбат экранида таҳрирлаб бўлмайдиган дастур (ЯГОНА ёзиш йўли — `adminUpsertRelativesBonusProgram`).
+bool incentiveProgramLocked(String id, Map<String, dynamic> data) =>
+    id == kRelativesBonusProgramId || data['kind'] == kRelativesBonusProgramId;
+
 /// Сервер хато кодлари → админ учун тушунарли матн (админ панели кирилл, конвенция бўйича).
 String incentiveAdminError(Object e) {
   final code = e is FirebaseFunctionsException

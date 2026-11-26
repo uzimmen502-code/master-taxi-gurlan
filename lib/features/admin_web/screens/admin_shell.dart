@@ -64,6 +64,7 @@ import 'finance_center_screen.dart';
 import 'payout_management_screen.dart';
 import 'platform_products_admin_screen.dart';
 import 'supermarket_admin_screen.dart';
+import 'holiday_admin_screen.dart';
 import 'products_manager_screen.dart';
 import 'procurement_prices_screen.dart';
 import 'oil_catalog_admin_screen.dart';
@@ -242,6 +243,14 @@ class _AdminShellState extends State<AdminShell> {
       label: 'AVA Супермаркет',
       icon: Icons.local_grocery_store_outlined,
       description: 'Таклифлар, таксономия, буюртмалар (тортиш, қатор олиш), босқич ва етказиш вақтлари',
+      access: _SectionAccess.users,
+    ),
+    // «Байрам саватчаси» (эга 2026-11-26): байрамлар, тайёр саватчалар. Сервер рухсати — admin/superadmin (PROPOSED).
+    _AdminSection(
+      group: 'Буюртма ва етказиш',
+      label: 'Байрам саватчаси',
+      icon: Icons.celebration_outlined,
+      description: 'Байрамлар (Ҳайит саналари), тайёр саватчалар (оддий / ўрта / катта), яқинлар бонуси',
       access: _SectionAccess.users,
     ),
 
@@ -760,6 +769,9 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'AVA Супермаркет') {
       return const SupermarketAdminScreen();
+    }
+    if (section.label == 'Байрам саватчаси') {
+      return const HolidayAdminScreen();
     }
     if (section.label == 'AVAGram') {
       return const TvClipsModerationScreen();

@@ -20,7 +20,6 @@
 'use strict';
 
 const sm = require('./supermarket');
-const inc = require('./incentives');
 const { normalizeLang } = require('./notif_i18n');
 
 const MODULE = 'holiday';
@@ -68,6 +67,7 @@ const MSG = Object.freeze({
   GROUP_UNKNOWN: ['Бундай гуруҳ йўқ.', "Bunday guruh yöq.", 'Такой группы нет.'],
   TAXONOMY_MISSING: ['Бўлимлар рўйхати ҳали яратилмаган.', "Bölimlar röyxati hali yaratilmagan.", 'Список категорий ещё не создан.'],
   NOT_AVAILABLE: ['Саватча ҳозир мавжуд эмас.', 'Savatça hozir mavjud emas.', 'Корзина сейчас недоступна.'],
+  PROGRAM_REPLACED: ['Бу бонус дастури ёпилди — ўрнига ўзаро тасдиқланган қариндошлар бонуси.', "Bu bonus dasturi yopildi — örniga özaro tasdiqlangan qarindoşlar bonusi.", 'Эта программа закрыта — вместо неё бонус за взаимно подтверждённых родственников.'],
   PROGRAM_INVALID: ['Бонус дастури маълумоти нотўғри.', "Bonus dasturi ma'lumoti notöğri.", 'Неверные данные бонусной программы.'],
   INTERNAL: ['Амални бажариб бўлмади. Қайта уриниб кўринг.', "Amalni bajarib bölmadi. Qayta urinib köring.", 'Не удалось выполнить. Попробуйте ещё раз.'],
 });
@@ -828,118 +828,25 @@ function attachHoliday(exportsObj, deps) {
         }
         return r;
       });
-      let bonus = null;
-      if (md != null) {
-        try { bonus = await grantRelativesBonus(ownerId); } catch (e) { bonus = 'error'; log({ action: 'relativesBonus', result: 'error', errorCode: (e.details && e.details.code) || 'INTERNAL' }); }
-      }
-      log({ action: 'onRelativeBirthdayIndex', result: res, bonus: bonus && (bonus.result || bonus) });
+      // Эга 2026-11-28: «3 қариндош → бонус» ЎЧИРИЛДИ (ўрнига family_links.js — ўзаро тасдиқ). Индекс ўзгармади.
+      log({ action: 'onRelativeBirthdayIndex', result: res });
       return null;
     });
 
   /**
-   * Қариндошлар бонуси (бир марта, умрбод): ≥ minRelatives қариндошда исм+сана → грант (мавжуд рағбат тизими).
-   * БАРЧА телефон шакллари (эга 2026-11-27): шахс калити = охирги 9 рақам ('998'+9). Грант id =
-   * `${programId}_${personKey}` — users/998… ва эски 9 хонали ҳужжат БИР грантга тўқнашади (t.create — фақат битта ғолиб).
-   * Грант `uid` = ҳисоб ҳужжати id'си (канон бор бўлса — канон, йўқ бўлса — эски 9 хонали): мавжуд incentives.js
-   * (сарф/қайтариш/муддат/бекор) `users/{grant.uid}` га ёзади — ҳужжат мавжуд бўлиши шарт. Қариндошлар иккала
-   * relatives/{…} ҳужжатидан санолади (исм+сана бўйича такрорсиз). Қариндош ўчирилса ҳам грант қайтариб олинмайди.
+   * Эски «3 қариндош → 10 000» (relatives_birthdays) — ЁПИЛДИ (эга 2026-11-28, J): ўрнига family_links.js (ўзаро тасдиқ,
+   * relative_link 5 000 ҳар томонга). Эски илова учун callable қолди — ҳеч нарса бермайди. Мавжуд грантлар (берилганлари)
+   * incentives.js орқали сарфланаверади/қайтарилади — маълумот ўзгармади.
    */
-  async function grantRelativesBonus(ownerDocId) {
-    const personKey = personKeyOf(ownerDocId);
-    if (!personKey) return { result: 'skip', code: 'UID_INVALID' };
-    const progRef = db.collection('incentive_programs').doc(BONUS_PROGRAM_ID);
-    const [pSnap, user] = await Promise.all([progRef.get(), userDoc(personKey)]);
-    if (!pSnap.exists || (pSnap.data() || {}).kind !== BONUS_PROGRAM_ID) return { result: 'skip', code: 'PROGRAM_OFF' };
-    if (!user) return { result: 'skip', code: 'NOT_ELIGIBLE' };
-    const userRef = user.ref;
-    const p0 = pSnap.data();
-    if (!bonusStageAllows(p0, personKey, user.data.districtId)) return { result: 'skip', code: 'NOT_IN_STAGE' };
-    const seen = new Set();
-    let count = 0;
-    for (const owner of [personKey, personKey.slice(3)]) {
-      const people = await db.collection('relatives').doc(owner).collection('people').limit(LIMITS.peopleScan).get();
-      for (const x of people.docs) {
-        const d = x.data() || {};
-        if (!relativeEligible(d)) continue;
-        const key = `${String(d.firstName || d.fullName || '').trim().toLowerCase()}|${mdOfBirth(d.birthDate)}`;
-        if (seen.has(key)) continue;
-        seen.add(key); count += 1;
-      }
-    }
-    if (count < p0.minRelatives) return { result: 'skip', code: 'NOT_ENOUGH_RELATIVES', count };
-    const grantId = inc.grantIdOf(BONUS_PROGRAM_ID, personKey);
-    const grantRef = db.collection('incentive_grants').doc(grantId);
-    const uid = userRef.id;
-    const out = await db.runTransaction(async (t) => {
-      const nowMs = now();
-      const [ps, gs, us] = await Promise.all([t.get(progRef), t.get(grantRef), t.get(userRef)]);
-      if (gs.exists) return { result: 'duplicate' };
-      const p = ps.data() || {};
-      if (!us.exists || !bonusStageAllows(p, personKey, (us.data() || {}).districtId)) return { result: 'skip', code: 'NOT_IN_STAGE' };
-      const granted = Number.isSafeInteger((p.counters || {}).grantedAmount) ? p.counters.grantedAmount : 0;
-      if (granted + p.amount > p.budgetTotal) return { result: 'skip', code: 'BUDGET_EXHAUSTED' };
-      const buckets = { [BONUS_BUCKET]: p.amount };
-      t.create(grantRef, {
-        uid, personKey, programId: BONUS_PROGRAM_ID, programKey: BONUS_PROGRAM_ID, amount: p.amount, remaining: p.amount, buckets,
-        maxOrderSharePct: p.maxOrderSharePct, minOrderAmount: p.minOrderAmount, scope: BONUS_BUCKET, status: 'active',
-        expiresAt: TS.fromMillis(nowMs + p.validityDays * DAY_MS), relativesCount: count, createdAt: ts(), updatedAt: ts(),
-      });
-      t.update(userRef, { incentiveBalance: FV.increment(p.amount), incentiveUpdatedAt: ts() });
-      t.update(progRef, { 'counters.grantedAmount': FV.increment(p.amount), 'counters.grantedCount': FV.increment(1), updatedAt: ts() });
-      t.create(db.collection('incentive_ledger').doc(`grant_${grantId}`), {
-        type: 'grant', uid, programId: BONUS_PROGRAM_ID, grantId, amount: p.amount, buckets, actor: 'system:relatives_birthdays', at: ts(),
-      });
-      return { result: 'granted', amount: p.amount, minOrderAmount: p.minOrderAmount };
-    });
-    if (out.result === 'granted') {
-      log({ action: 'relativesBonus', result: 'granted', userId: tail(uid), amount: out.amount });
-      try {
-        const m = BONUS_TEXT[normalizeLang(user.data.appLang)] || BONUS_TEXT.uz_Cyrl;
-        const params = { amount: out.amount, min: out.minOrderAmount };
-        await notifyUserInApp({ userId: uid, title: m.title, body: fill(m.body, params), category: 'info', source: 'holiday_relatives_bonus', dataType: 'holiday_relatives_bonus', screen: 'supermarket' });
-      } catch (e) { log({ action: 'relativesBonus', result: 'notify_error', errorCode: 'NOTIFY_FAILED' }); }
-    }
-    return out;
-  }
-
-  /** Илова «бонусни олиш» тугмаси учун (триггер ўтказиб юборилган бўлса). Идемпотент. */
   exportsObj.claimRelativesBonus = functions.https.onCall(async (data, context) => {
-    const uid = callerUid(context);
-    const res = await grantRelativesBonus(uid);
-    return { ok: res.result === 'granted' || res.result === 'duplicate', ...res };
+    callerUid(context);
+    return { ok: false, result: 'skip', code: 'PROGRAM_REPLACED' };
   });
 
-  /**
-   * Админ: дастур созламаси. ЯГОНА ёзиш йўли шу (умумий adminUpsertIncentiveProgram ЭМАС — у `kind` ва
-   * minOrderAmount'ни билмайди). audience.newUsersSince ЁЗИЛМАЙДИ → мавжуд claimIncentive/getMyIncentiveOffers
-   * бу дастурни ҳеч кимга бермайди (NOT_NEW_USER); грант фақат шу модулдан.
-   */
+  /** Ёпилган дастур: созлаш рад этилади (янги — adminUpsertFamilyBonusProgram). */
   exportsObj.adminUpsertRelativesBonusProgram = functions.https.onCall(async (data, context) => {
-    const actor = await requireAdmin(context);
-    const p = sm.trimDeep(data && data.program);
-    const v = validateBonusProgram(p);
-    if (!v.ok) throw fail('invalid-argument', 'PROGRAM_INVALID', { errors: v.errors });
-    const reason = typeof (data && data.reason) === 'string' ? data.reason.trim().slice(0, 300) : '';
-    const ref = db.collection('incentive_programs').doc(BONUS_PROGRAM_ID);
-    const out = await db.runTransaction(async (t) => {
-      const s = await t.get(ref);
-      const cur = s.exists ? (s.data() || {}) : null;
-      if (cur && cur.kind !== BONUS_PROGRAM_ID) throw fail('failed-precondition', 'PROGRAM_INVALID');
-      const pick = (o) => (o ? Object.fromEntries(BONUS_KEYS.map((k) => [k, o[k] === undefined ? null : o[k]])) : null);
-      if (cur && sm.stableStringify(pick(cur)) === sm.stableStringify(pick(p))) return { changed: false };
-      t.set(ref, {
-        ...p, kind: BONUS_PROGRAM_ID, key: BONUS_PROGRAM_ID, audience: { gender: 'any' },
-        buckets: [{ category: BONUS_BUCKET, amount: p.amount }], budgetDaily: 0,
-        updatedAt: ts(), updatedBy: actor, ...(cur ? {} : { createdAt: ts(), counters: { grantedAmount: 0, grantedCount: 0, spentAmount: 0 } }),
-      }, { merge: true });
-      t.set(db.collection(ADMIN_AUDIT).doc(), {
-        kind: 'incentive_program_upsert', programKind: BONUS_PROGRAM_ID, actor, target: `incentive_programs/${BONUS_PROGRAM_ID}`,
-        before: pick(cur), after: pick(p), reason, at: ts(),
-      });
-      return { changed: true };
-    });
-    log({ action: 'adminUpsertRelativesBonusProgram', result: 'ok', userId: tail(actor), stage: p.stage, ...out });
-    return { ok: true, programId: BONUS_PROGRAM_ID, ...out };
+    await requireAdmin(context);
+    throw fail('failed-precondition', 'PROGRAM_REPLACED');
   });
 
   // ── 6. Эслатмалар ──
@@ -1174,7 +1081,7 @@ function attachHoliday(exportsObj, deps) {
   exportsObj.smGiftPiiSweep = functions.pubsub.schedule('every 60 minutes').timeZone('Asia/Tashkent').onRun(() => runGiftPiiSweep());
 
   // Совға олувчига хабар — supermarket.js onSupermarketOrderCancelStock (буюртма курьерга ўтганда, бир марта).
-  return { runHolidayRemindersAll, runGiftPiiSweep, grantRelativesBonus };
+  return { runHolidayRemindersAll, runGiftPiiSweep };
 }
 
 module.exports = {

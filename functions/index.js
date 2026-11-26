@@ -125,6 +125,10 @@ attachSupermarketReports(exports, { functions, db, admin, requireCallerRoles });
 // (қариндошлар туғилган кунлари + байрамлар), совға PII тозалаш, қариндошлар бонуси (мавжуд рағбат тизими). Фақат ЯНГИ функциялар.
 const { attachHoliday } = require('./holiday');
 attachHoliday(exports, { functions, db, admin, callerPhone, canonicalUid, requireCallerRoles, notifyUserInApp });
+// Оила боғланиши ўзаро тасдиқ + бонус (эга 2026-11-28): inviteSpouse/respondSpouseInvite/unlinkSpouse, inviteRelative/
+// respondRelativeInvite/unlinkRelative, getMyFamilyLinks, adminUpsertFamilyBonusProgram, adminGetFamilyBonusPrograms.
+const { attachFamilyLinks } = require('./family_links');
+attachFamilyLinks(exports, { functions, db, admin, callerPhone, canonicalUid, requireCallerRoles, notifyUserInApp });
 // Админ ўчириши (2026-10-19; торайтирилди 2026-10-20): ҳақиқий ўчириш фақат superadmin — support_chat (шахсий маълумот талаби) ва
 // 365 кундан эски resolved risk_event; admin_news — қайтариб олинади, чат — архивга олинади. Ҳаммаси callable, audit билан (§41).
 const { attachAdminDeleteRecord } = require('./admin_delete_record');

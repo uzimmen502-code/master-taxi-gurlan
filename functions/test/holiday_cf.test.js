@@ -213,35 +213,38 @@ async function main() {
     fakeNow = Date.now();
   });
 
-  await check('C7 қариндошлар: индекс (исмсиз), 3-қариндошда бонус бир марта, умумий claimIncentive бермайди', async () => {
-    await expectCode(call('adminUpsertRelativesBonusProgram', { program: { ...PROGRAM, amount: 0 } }, ADMIN), 'PROGRAM_INVALID');
-    await call('adminUpsertRelativesBonusProgram', { program: PROGRAM }, ADMIN);
+  // Эски (ёпилган) «3 қариндош → 10 000» грантининг шакли — мавжуд прод маълумоти сарфланаверишини текшириш учун.
+  async function seedLegacyGrant(uid, personKey) {
+    const id = `relatives_birthdays_${personKey}`;
+    await db.doc(`incentive_grants/${id}`).set({
+      uid, personKey, programId: 'relatives_birthdays', programKey: 'relatives_birthdays', amount: 10000, remaining: 10000,
+      buckets: { supermarket: 10000 }, maxOrderSharePct: 100, minOrderAmount: 100000, scope: 'supermarket', status: 'active',
+      expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + 30 * 86400000), createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    await db.doc(`users/${uid}`).update({ incentiveBalance: admin.firestore.FieldValue.increment(10000) });
+  }
+
+  await check('C7 қариндошлар: индекс (исмсиз); эски «3 → бонус» ЁПИЛДИ (триггер/claim/админ бермайди); мавжуд грант қолади', async () => {
+    await expectCode(call('adminUpsertRelativesBonusProgram', { program: PROGRAM }, ADMIN), 'PROGRAM_REPLACED');
+    await db.doc('incentive_programs/relatives_birthdays').set({ ...PROGRAM, kind: 'relatives_birthdays', counters: { grantedAmount: 0, grantedCount: 0 } });
     const bd = admin.firestore.Timestamp.fromMillis(Date.UTC(1965, 2, 20, 19)); // 21-март Тошкент
     await relTrigger(USER, 'p1', { firstName: 'Лола', fullName: 'Лола', birthDate: bd });
     await relTrigger(USER, 'p2', { firstName: 'Ҳасан', birthDate: admin.firestore.Timestamp.fromMillis(Date.UTC(1990, 5, 1, 19)) });
     await relTrigger(USER, 'p0', { firstName: 'Мен', birthDate: bd, isSelf: true });
-    assert.strictEqual((await db.collection('incentive_grants').get()).size, 0);
+    await relTrigger(USER, 'p3', { firstName: 'Зуҳра', birthDate: admin.firestore.Timestamp.fromMillis(Date.UTC(1992, 7, 9, 19)) });
+    await relTrigger(USER, 'p4', { firstName: 'Ака', birthDate: bd });
+    assert.strictEqual((await db.collection('incentive_grants').get()).size, 0, '4 қариндош — эски бонус берилмайди');
     const ix = await get(`holiday_birthday_index/${USER}_p1`);
     assert.deepStrictEqual(Object.keys(ix).sort(), ['md', 'ownerId', 'personId', 'updatedAt']);
     assert.strictEqual(ix.md, '03-21');
     assert.strictEqual(await get(`holiday_birthday_index/${USER}_p0`), undefined);
-    await relTrigger(USER, 'p3', { firstName: 'Зуҳра', birthDate: admin.firestore.Timestamp.fromMillis(Date.UTC(1992, 7, 9, 19)) });
-    const g = await get(`incentive_grants/relatives_birthdays_${USER}`);
-    assert.deepStrictEqual([g.amount, g.remaining, g.status, g.minOrderAmount, g.buckets], [10000, 10000, 'active', 100000, { supermarket: 10000 }]);
-    assert.strictEqual((await get(`users/${USER}`)).incentiveBalance, 10000);
-    assert.ok(await get(`incentive_ledger/grant_relatives_birthdays_${USER}`));
-    await relTrigger(USER, 'p4', { firstName: 'Ака', birthDate: bd });
-    assert.strictEqual((await get(`users/${USER}`)).incentiveBalance, 10000);
-    assert.strictEqual((await call('claimRelativesBonus', {}, USER)).result, 'duplicate');
-    await relTrigger(USER, 'p4', null); // ўчирилса — грант қолади
+    const cl = await call('claimRelativesBonus', {}, USER);
+    assert.deepStrictEqual([cl.ok, cl.code], [false, 'PROGRAM_REPLACED']);
+    await relTrigger(USER, 'p4', null);
     assert.strictEqual(await get(`holiday_birthday_index/${USER}_p4`), undefined);
-    assert.strictEqual((await get(`incentive_grants/relatives_birthdays_${USER}`)).status, 'active');
-    assert.strictEqual((await call('claimRelativesBonus', {}, OTHER)).code, 'NOT_IN_STAGE');
-    const prog = await get('incentive_programs/relatives_birthdays');
-    assert.strictEqual(prog.audience.newUsersSince, undefined); // умумий claimIncentive → NOT_NEW_USER
-    assert.strictEqual(prog.counters.grantedCount, 1);
+    await seedLegacyGrant(USER, USER);
+    assert.strictEqual((await get(`users/${USER}`)).incentiveBalance, 10000);
   });
-
   let incOrderId;
   await check('C8 бонус буюртмада: min order, бир марта, нетто ҳамён ечими, грант сарфланди', async () => {
     const bal0 = (await get(`users/${USER}`)).bonusBalance;
@@ -311,37 +314,16 @@ async function main() {
   const LEG = '912000009'; const LEGC = `998${LEG}`; // фақат эски 9 хонали users ҳужжати
   const DUAL = '998912000011'; const DUAL9 = DUAL.slice(3); // бир шахснинг иккала ҳужжати
   const bdTs = (y, m, d) => admin.firestore.Timestamp.fromMillis(Date.UTC(y, m - 1, d - 1, 19));
-  await check('C12 бонус барча телефон шаклларида: эски 9 хонали ҳисоб олади; бир шахснинг 2 ҳужжати — БИТТА грант', async () => {
+  await check('C12 эски 9 хонали ҳисобдаги мавжуд (эски дастур) гранти — буюртмада ишлайди (маълумот мослиги)', async () => {
     await db.doc(`users/${LEG}`).set({ role: 'user', name: 'Eski', bonusBalance: 500000, districtId: 'gurlan', appLang: 'ru' });
-    await db.doc(`users/${DUAL}`).set({ role: 'user', name: 'Dual', bonusBalance: 0, districtId: 'gurlan' });
-    await db.doc(`users/${DUAL9}`).set({ role: 'user', name: 'Dual old', bonusBalance: 0, districtId: 'gurlan' });
     const st = (await db.doc('settings/supermarket').get()).data();
     await db.doc('settings/supermarket').update({ testerIds: [...st.testerIds, LEGC, DUAL] });
-    await call('adminUpsertRelativesBonusProgram', { program: { ...PROGRAM, internalPhones: [USER, LEGC, DUAL] } }, ADMIN);
-    // эски ҳисоб: қариндошлар иккала relatives ҳужжатида (2 + 1 = 3, такрор санолмайди)
-    await relTrigger(LEG, 'a', { firstName: 'Ona', birthDate: bdTs(1960, 4, 1) });
-    await relTrigger(LEG, 'b', { firstName: 'Ota', birthDate: bdTs(1958, 5, 2) });
-    await relTrigger(LEGC, 'a2', { firstName: 'ona', birthDate: bdTs(1960, 4, 1) }); // ўша одам (исм+сана) — санолмайди
-    assert.strictEqual(await get(`incentive_grants/relatives_birthdays_${LEGC}`), undefined);
-    await relTrigger(LEGC, 'c', { firstName: 'Opa', birthDate: bdTs(1985, 6, 3) });
-    const g = await get(`incentive_grants/relatives_birthdays_${LEGC}`);
-    assert.deepStrictEqual([g.uid, g.personKey, g.amount, g.status], [LEG, LEGC, 10000, 'active']);
+    await db.doc(`users/${DUAL}`).set({ role: 'user', name: 'Dual', bonusBalance: 0, districtId: 'gurlan' });
+    await db.doc(`users/${DUAL9}`).set({ role: 'user', name: 'Dual old', bonusBalance: 0, districtId: 'gurlan' });
+    await seedLegacyGrant(LEG, LEGC);
     assert.strictEqual((await get(`users/${LEG}`)).incentiveBalance, 10000);
-    assert.strictEqual(await get(`users/${LEGC}`), undefined); // канон ҳужжат яратилмади
-    assert.strictEqual((await call('claimRelativesBonus', {}, LEGC)).result, 'duplicate');
-    // иккала ҳужжат: 9 хонали — 3 қариндош, канон — 3 қариндош → фақат БИТТА грант (канон ҳисобга)
-    for (const p of ['x', 'y', 'z']) await relTrigger(DUAL9, p, { firstName: `Q${p}`, birthDate: bdTs(1970, 1, 10) });
-    for (const p of ['u', 'v', 'w']) await relTrigger(DUAL, p, { firstName: `R${p}`, birthDate: bdTs(1971, 2, 11) });
-    const grants = (await db.collection('incentive_grants').where('personKey', '==', DUAL).get()).docs;
-    assert.strictEqual(grants.length, 1);
-    assert.deepStrictEqual([grants[0].id, grants[0].data().uid], [`relatives_birthdays_${DUAL}`, DUAL]);
-    assert.strictEqual((await get(`users/${DUAL}`)).incentiveBalance, 10000);
-    assert.strictEqual((await get(`users/${DUAL9}`)).incentiveBalance, undefined);
-    assert.strictEqual((await get('incentive_programs/relatives_birthdays')).counters.grantedCount, 3);
-    // бузуқ id — грант йўқ
-    assert.strictEqual((await api.grantRelativesBonus('12345')).code, 'UID_INVALID');
+    assert.strictEqual(await get(`users/${LEGC}`), undefined);
   });
-
   await check('C13 бонус ОДДИЙ буюртмада (байрам эмас) ва эски 9 хонали ҳисобда; бекорда тикланади', async () => {
     const ctxLeg = (d) => call('placeSupermarketOrder', { clientRequestId: rid('leg'), address: ADDR, slotId: 'morning', deliveryDate: h.addDays(todayKey, 1), ...d }, LEGC);
     const r = await ctxLeg({ items: [{ productId: 'beef_lean_1', qty: 1 }, { productId: 'soda_cola_1', qty: 3 }], origin: 'quick', useIncentive: true });

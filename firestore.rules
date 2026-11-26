@@ -3716,8 +3716,13 @@ service cloud.firestore {
             'categoryId', 'sort', 'available', 'stopUntil', 'saleHours',
             'servings', 'weightG', 'kcal', 'protein', 'fat', 'carbs',
             'cuisineGroup', 'cuisineId', 'tags', 'qtyTiers',
+            'preorderable', 'preorderLeadDays',
             'createdAt', 'updatedAt'
           ])
+          // Олдиндан буюртма (эга 2026-11-27): таом даражасида; текширув — placeRestaurantOrder (сервер).
+          && (!('preorderable' in d) || d.preorderable is bool)
+          && (!('preorderLeadDays' in d)
+              || (d.preorderLeadDays is int && d.preorderLeadDays >= 0 && d.preorderLeadDays <= 14))
           && d.name is string && d.name.size() >= 1 && d.name.size() <= 80
           && d.price is int && d.price > 0 && d.price <= 50000000
           && (!('packagingFee' in d)

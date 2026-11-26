@@ -336,6 +336,17 @@ async function main() {
     await assertSucceeds(as(OWNER).doc(`restaurants/${R1}/menu_items/q1`).update({ price: 50000 }));
     await assertFails(putDish(STRANGER, 'q_stranger', { qtyTiers: [t(10, 38000)] }), 'begona yozolmaydi');
   });
+  await check('preorderable/preorderLeadDays (ega 2026-11-27): a\'zo yozadi (bool; int 0…14 chegaralar); 15, -1, kasr, satr, null, bool emas — rad; begona — yo\'q', async () => {
+    await assertSucceeds(putDish(OWNER, 'p_ok', { preorderable: true, preorderLeadDays: 2 }));
+    await assertSucceeds(putDish(STAFF, 'p_0', { preorderable: false, preorderLeadDays: 0 }));
+    await assertSucceeds(putDish(OWNER, 'p_14', { preorderLeadDays: 14 }));
+    await assertSucceeds(as(OWNER).doc(`restaurants/${R1}/menu_items/p_ok`).update({ preorderLeadDays: 3 }));
+    for (const [n, extra] of Object.entries({ d15: { preorderLeadDays: 15 }, dneg: { preorderLeadDays: -1 }, dfrac: { preorderLeadDays: 1.5 },
+      dstr: { preorderLeadDays: '2' }, dnull: { preorderLeadDays: null }, pstr: { preorderable: 'yes' }, pnull: { preorderable: null } })) {
+      await assertFails(putDish(OWNER, `pb_${n}`, extra), n);
+    }
+    await assertFails(putDish(STRANGER, 'p_stranger', { preorderable: true }), 'begona');
+  });
   await check('S6 order_courier_live: faqat tayinlangan kuryer, faqat FAOL holatda yozadi; mijoz, restoran a\'zosi va admin o\'qiydi; begona va boshqa kuryer — yo\'q', async () => {
     const { serverTimestamp } = require('firebase/firestore');
     const live = (who, oid = 'live_picked') => as(who).doc(`order_courier_live/${oid}`);

@@ -13,9 +13,10 @@ const check = (name, fn) => {
 const MIN = 60 * 1000;
 const T = 1_800_000_000_000;
 
-check('ega qiymatlari: 60 daqiqa / 7 kun', () => {
+check('ega qiymatlari: 60 daqiqa / 14 kun (ega 2026-11-27; avval 7)', () => {
   assert.strictEqual(pre.MIN_LEAD_MIN, 60);
-  assert.strictEqual(pre.MAX_DAYS, 7);
+  assert.strictEqual(pre.MAX_DAYS, 14);
+  assert.strictEqual(pre.MAX_LEAD_DAYS, 14);
 });
 
 check('parseScheduled: yo\'q/bo\'sh — oddiy; butun musbat son — ok; satr, kasr, 0, manfiy, NaN, bool — xato', () => {
@@ -26,11 +27,13 @@ check('parseScheduled: yo\'q/bo\'sh — oddiy; butun musbat son — ok; satr, ka
   }
 });
 
-check('checkWindow chegaralari: 59:59 — erta; 60:00 — ok; 7 kun — ok; 7 kun + 1 ms — uzoq', () => {
+check('checkWindow chegaralari: 59:59 — erta; 60:00 — ok; 7 va 14 kun — ok; 14 kun + 1 ms — uzoq', () => {
   assert.strictEqual(pre.checkWindow(T, T + 60 * MIN - 1), 'PREORDER_TOO_SOON');
   assert.strictEqual(pre.checkWindow(T, T + 60 * MIN), null);
   assert.strictEqual(pre.checkWindow(T, T + 7 * 24 * 60 * MIN), null);
-  assert.strictEqual(pre.checkWindow(T, T + 7 * 24 * 60 * MIN + 1), 'PREORDER_TOO_FAR');
+  assert.strictEqual(pre.checkWindow(T, T + 7 * 24 * 60 * MIN + 1), null);
+  assert.strictEqual(pre.checkWindow(T, T + 14 * 24 * 60 * MIN), null);
+  assert.strictEqual(pre.checkWindow(T, T + 14 * 24 * 60 * MIN + 1), 'PREORDER_TOO_FAR');
   assert.strictEqual(pre.checkWindow(T, T - MIN), 'PREORDER_TOO_SOON', 'o\'tmish');
   assert.strictEqual(pre.checkWindow(T, T), 'PREORDER_TOO_SOON');
 });
@@ -42,7 +45,7 @@ check('acceptDeadlineMs: 2 soat YOKI bajarilishdan 30 daqiqa oldin — qaysi bir
   assert.strictEqual(pre.acceptDeadlineMs(T, T + 151 * MIN), T + 120 * MIN);
   assert.strictEqual(pre.acceptDeadlineMs(T, T + 120 * MIN), T + 90 * MIN);
   // har qanday ruxsat etilgan buyurtmada muddat hozirdan KEYIN va bajarilishdan OLDIN
-  for (let lead = 60; lead <= 7 * 24 * 60; lead += 37) {
+  for (let lead = 60; lead <= 14 * 24 * 60; lead += 37) {
     const d = pre.acceptDeadlineMs(T, T + lead * MIN);
     assert.ok(d > T && d <= T + lead * MIN - 30 * MIN, `lead ${lead}`);
   }
@@ -61,6 +64,30 @@ check('scheduledMsOf: Timestamp → ms; yo\'q/noto\'g\'ri — null', () => {
   assert.strictEqual(pre.scheduledMsOf({ scheduledFor: { toMillis: () => 123 } }), 123);
   for (const od of [null, undefined, {}, { scheduledFor: null }, { scheduledFor: 5 }, { scheduledFor: {} }]) {
     assert.strictEqual(pre.scheduledMsOf(od), null);
+  }
+});
+
+check('dishPreorderProblem (ega 2026-11-27): eski taom — cheklovsiz; preorderable=false — oldindan yo\'q; leadDays chegaralari; noto\'g\'ri — xavfsiz rad', () => {
+  const D = 24 * 60 * MIN;
+  // eski taom (maydonsiz) — oddiy ham, oldindan ham
+  assert.strictEqual(pre.dishPreorderProblem({ price: 1000 }, T, null), null);
+  assert.strictEqual(pre.dishPreorderProblem({ price: 1000 }, T, T + 3 * D), null);
+  assert.strictEqual(pre.dishPreorderProblem(undefined, T, null), null);
+  // preorderable
+  assert.strictEqual(pre.dishPreorderProblem({ preorderable: true }, T, T + D), null);
+  assert.strictEqual(pre.dishPreorderProblem({ preorderable: false }, T, null), null, 'oddiy buyurtmada mumkin');
+  assert.deepStrictEqual(pre.dishPreorderProblem({ preorderable: false }, T, T + D), { code: 'PREORDER_ITEM_NOT_ALLOWED' });
+  // leadDays: 0 — cheklov yo'q; N — faqat oldindan, >= hozir + N kun (chegara kiradi)
+  assert.strictEqual(pre.dishPreorderProblem({ preorderLeadDays: 0 }, T, null), null);
+  assert.strictEqual(pre.dishPreorderProblem({ preorderLeadDays: 0 }, T, T + 60 * MIN), null);
+  assert.deepStrictEqual(pre.dishPreorderProblem({ preorderable: true, preorderLeadDays: 2 }, T, null), { code: 'PREORDER_ITEM_REQUIRED', leadDays: 2 });
+  assert.deepStrictEqual(pre.dishPreorderProblem({ preorderLeadDays: 2 }, T, T + 2 * D - 1), { code: 'PREORDER_ITEM_LEAD_TOO_SHORT', leadDays: 2 });
+  assert.strictEqual(pre.dishPreorderProblem({ preorderLeadDays: 2 }, T, T + 2 * D), null);
+  assert.strictEqual(pre.dishPreorderProblem({ preorderLeadDays: 14 }, T, T + 14 * D), null);
+  assert.deepStrictEqual(pre.dishPreorderProblem({ preorderable: false, preorderLeadDays: 1 }, T, T + 2 * D), { code: 'PREORDER_ITEM_NOT_ALLOWED' });
+  for (const bad of [{ preorderLeadDays: 15 }, { preorderLeadDays: -1 }, { preorderLeadDays: 1.5 }, { preorderLeadDays: '2' }, { preorderLeadDays: null },
+    { preorderable: 'true' }, { preorderable: null }, { preorderable: 1 }]) {
+    assert.deepStrictEqual(pre.dishPreorderProblem(bad, T, T + 3 * D), { code: 'MENU_ITEM_PREORDER_INVALID' }, JSON.stringify(bad));
   }
 });
 

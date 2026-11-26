@@ -405,15 +405,19 @@ async function main() {
     assert.ok(Math.abs(odn.acceptDeadlineAt.toMillis() - (Date.now() + 5 * MINMS)) < 10000, 'oddiy buyurtma — 5 daqiqa');
     await cancelPre(normal.orderId);
   });
-  await check('PO2 oyna: 59 daqiqa — PREORDER_TOO_SOON; 61 daqiqa ok; 7 kundan uzoq — PREORDER_TOO_FAR; noto\'g\'ri tur — PREORDER_TIME_INVALID (buyurtma yaratilmaydi)', async () => {
+  await check('PO2 oyna: 59 daqiqa — PREORDER_TOO_SOON; 61 daqiqa ok; 7 kundan uzoq — ok (ega 2026-11-27: 14 kun); 14 kundan uzoq — PREORDER_TOO_FAR; noto\'g\'ri tur — PREORDER_TIME_INVALID (buyurtma yaratilmaydi)', async () => {
     await expectCode(pre(Date.now() + 59 * MINMS), 'PREORDER_TOO_SOON');
     await expectCode(pre(Date.now() - 5 * MINMS), 'PREORDER_TOO_SOON');
-    await expectCode(pre(Date.now() + 7 * 24 * 60 * MINMS + 5 * MINMS), 'PREORDER_TOO_FAR');
+    await expectCode(pre(Date.now() + 14 * 24 * 60 * MINMS + 5 * MINMS), 'PREORDER_TOO_FAR');
     for (const bad of ['1800000000000', 1.5, 0, -1, Number.NaN, true]) await expectCode(pre(bad), 'PREORDER_TIME_INVALID', 'invalid-argument');
     const ok = await pre(Date.now() + 61 * MINMS);
     await cancelPre(ok.orderId);
     const ok7 = await pre(Date.now() + 7 * 24 * 60 * MINMS - 5 * MINMS);
     await cancelPre(ok7.orderId);
+    const ok8 = await pre(Date.now() + 7 * 24 * 60 * MINMS + 5 * MINMS); // avval TOO_FAR edi
+    await cancelPre(ok8.orderId);
+    const ok14 = await pre(Date.now() + 14 * 24 * 60 * MINMS - 5 * MINMS);
+    await cancelPre(ok14.orderId);
   });
   await check('PO3 ish vaqti BAJARILISH vaqtida: hozir yopiq restoranga ertangi buyurtma mumkin; oddiy buyurtma — RESTAURANT_CLOSED; ish vaqtidan tashqari vaqt — PREORDER_CLOSED_AT_TIME', async () => {
     const h = tashkentHourNow();
@@ -500,7 +504,33 @@ async function main() {
     assert.strictEqual((await order(c.orderId)).restaurantStatus, 'cancelled');
     await db.collection('restaurants').doc(rid).update({ timeoutStreak: 0, acceptsPreorder: false });
   });
-  await check('S6 jonli nuqta tozalash: restoran rad qilsa o\'chadi; soatlik supurgi 2 soatdan eskisini o\'chiradi, yangisiga tegmaydi', async () => {
+  await check('PO9 taom darajasi (ega 2026-11-27): preorderLeadDays=2 — oddiy buyurtmada PREORDER_ITEM_REQUIRED, 2 kundan erta — PREORDER_ITEM_LEAD_TOO_SHORT, 2 kun+ — ok; preorderable=false — oldindan PREORDER_ITEM_NOT_ALLOWED, oddiyda ok; buzuq qiymat — MENU_ITEM_PREORDER_INVALID; eski taomlar o\'zgarmadi', async () => {
+    await restRef().update({ acceptsPreorder: true });
+    const menu = restRef().collection('menu_items');
+    await menu.doc('tort').set({ name: 'Tort', price: 150000, available: true, preorderable: true, preorderLeadDays: 2 });
+    await menu.doc('salat').set({ name: 'Salat', price: 20000, available: true, preorderable: false });
+    await menu.doc('bad').set({ name: 'Bad', price: 20000, available: true, preorderLeadDays: 30 });
+    const DAY = 24 * 60 * MINMS;
+    try {
+      const err = async (p, code, itemId) => {
+        await assert.rejects(p, (e) => { assert.strictEqual((e.details && e.details.code) || e.message, code); assert.strictEqual(e.details.itemId, itemId); return true; });
+      };
+      await err(place(rid, CUSTOMER, { items: [{ itemId: 'tort', qty: 1 }] }), 'PREORDER_ITEM_REQUIRED', 'tort');
+      await err(pre(Date.now() + 2 * DAY - 10 * MINMS, { items: [{ itemId: 'osh', qty: 1 }, { itemId: 'tort', qty: 1 }] }), 'PREORDER_ITEM_LEAD_TOO_SHORT', 'tort');
+      const ok = await pre(Date.now() + 2 * DAY + 10 * MINMS, { items: [{ itemId: 'tort', qty: 1 }] });
+      assert.strictEqual((await order(ok.orderId)).isPreorder, true);
+      await cancelPre(ok.orderId);
+      await err(pre(Date.now() + 3 * 60 * MINMS, { items: [{ itemId: 'salat', qty: 1 }] }), 'PREORDER_ITEM_NOT_ALLOWED', 'salat');
+      const sal = await place(rid, CUSTOMER, { items: [{ itemId: 'salat', qty: 1 }, { itemId: 'osh', qty: 1 }] });
+      await cancelPre(sal.orderId);
+      await err(pre(Date.now() + 3 * DAY, { items: [{ itemId: 'bad', qty: 1 }] }), 'MENU_ITEM_PREORDER_INVALID', 'bad');
+      const old = await pre(Date.now() + 3 * 60 * MINMS); // osh/somsa — maydonsiz eski taomlar
+      await cancelPre(old.orderId);
+    } finally {
+      await menu.doc('tort').delete(); await menu.doc('salat').delete(); await menu.doc('bad').delete();
+      await restRef().update({ acceptsPreorder: false });
+    }
+  });  await check('S6 jonli nuqta tozalash: restoran rad qilsa o\'chadi; soatlik supurgi 2 soatdan eskisini o\'chiradi, yangisiga tegmaydi', async () => {
     const live = (id) => db.collection('order_courier_live').doc(id);
     const r = await place(rid, CUSTOMER);
     await live(r.orderId).set({ orderId: r.orderId, lat: 41.8, lng: 60.3, updatedAt: admin.firestore.Timestamp.now() });

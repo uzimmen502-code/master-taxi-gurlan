@@ -20,7 +20,10 @@
 'use strict';
 
 const MIN_LEAD_MIN = 60;
-const MAX_DAYS = 7;
+// Ega 2026-11-27: 7 -> 14 kun (tuğilgan kun/bayram uçun tort va taomlar oldindan).
+const MAX_DAYS = 14;
+const MAX_LEAD_DAYS = 14;
+const DAY = 24 * 60 * 60 * 1000;
 const ACCEPT_CAP_MIN = 120;
 const ACCEPT_BEFORE_MIN = 30;
 const COURIER_WINDOW_MIN = 90;
@@ -52,6 +55,30 @@ function courierWindowOpen(nowMs, scheduledMs) {
   return nowMs >= scheduledMs - COURIER_WINDOW_MIN * MIN;
 }
 
+/**
+ * Taom darajasidagi oldindan buyurtma (ega 2026-11-27). Menyu hujjati (restoran yozadi — 18-qoida, ishonilmaydi):
+ *   - `preorderable === false` — oldindan buyurtmada bu taom YO'Q (PREORDER_ITEM_NOT_ALLOWED);
+ *   - `preorderLeadDays` N (butun 0..14): N >= 1 bo'lsa taom FAQAT oldindan, bajarilish vaqti >= hozir + N×24 soat
+ *     (oddiy buyurtmada — PREORDER_ITEM_REQUIRED, erta — PREORDER_ITEM_LEAD_TOO_SHORT); 0 — qo'shimcha cheklov yo'q;
+ *   - maydonlar yo'q (eski taomlar) — avvalgidek, cheklov yo'q (backward compatible);
+ *   - noto'g'ri tip/chegara (qoida chetlab o'tilgan) — xavfsiz tomonga: MENU_ITEM_PREORDER_INVALID.
+ * null — to'g'ri; aks holda `{ code, leadDays? }`.
+ */
+function dishPreorderProblem(item, nowMs, scheduledMs) {
+  const m = item || {};
+  const has = (k) => Object.prototype.hasOwnProperty.call(m, k) && m[k] !== undefined;
+  if (has('preorderable') && typeof m.preorderable !== 'boolean') return { code: 'MENU_ITEM_PREORDER_INVALID' };
+  let lead = 0;
+  if (has('preorderLeadDays')) {
+    if (!Number.isInteger(m.preorderLeadDays) || m.preorderLeadDays < 0 || m.preorderLeadDays > MAX_LEAD_DAYS) return { code: 'MENU_ITEM_PREORDER_INVALID' };
+    lead = m.preorderLeadDays;
+  }
+  if (scheduledMs == null) return lead > 0 ? { code: 'PREORDER_ITEM_REQUIRED', leadDays: lead } : null;
+  if (m.preorderable === false) return { code: 'PREORDER_ITEM_NOT_ALLOWED' };
+  if (lead > 0 && scheduledMs < nowMs + lead * DAY) return { code: 'PREORDER_ITEM_LEAD_TOO_SHORT', leadDays: lead };
+  return null;
+}
+
 /** Hujjatdagi `scheduledFor` (Timestamp) → ms; yo'q/noto'g'ri — null. */
 function scheduledMsOf(od) {
   const t = od && od.scheduledFor;
@@ -59,6 +86,6 @@ function scheduledMsOf(od) {
 }
 
 module.exports = {
-  parseScheduled, checkWindow, acceptDeadlineMs, courierWindowOpen, scheduledMsOf,
-  MIN_LEAD_MIN, MAX_DAYS, ACCEPT_CAP_MIN, ACCEPT_BEFORE_MIN, COURIER_WINDOW_MIN,
+  parseScheduled, checkWindow, acceptDeadlineMs, courierWindowOpen, scheduledMsOf, dishPreorderProblem,
+  MIN_LEAD_MIN, MAX_DAYS, MAX_LEAD_DAYS, ACCEPT_CAP_MIN, ACCEPT_BEFORE_MIN, COURIER_WINDOW_MIN,
 };

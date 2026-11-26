@@ -1768,7 +1768,9 @@ service cloud.firestore {
 
       // Статус/курьер майдонлари — фақат staff (courier|seller|…) ёки админ.
       // Олдин authсиз update бўлган — чужой заказ «delivered» қилиш мумкин эди.
-      allow update: if isAdmin()
+      // smCourierPayout / smCourierPaid (супермаркет курьер тўлови нусхаси ва «тўланди» белгиси) — фақат CF, админ ҳам ёзмайди.
+      allow update: if (isAdmin()
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['smCourierPayout', 'smCourierPaid']))
           || (
             isStaff()
             && request.resource.data.diff(resource.data).affectedKeys()

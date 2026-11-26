@@ -115,6 +115,58 @@ check('P9 shortfall = max(0, талаб − (stock + reserved)) — чегара
   assert.deepStrictEqual([of(a, 'beef1').onHand, of(a, 'beef1').shortfall], [3, 0]);
 });
 
+const SM = require('../supermarket');
+
+check('P10 курьер тўлови нусхаси: percent floor, fixed, созланмаган/бузуқ → amount null; валидатор', () => {
+  assert.deepStrictEqual(SM.courierPayoutSnapshot({ mode: 'percent', percent: 15 }, 1234, 3), { mode: 'percent', percent: 15, amount: 185, settingsVersion: 3 }); // 185.1 → 185
+  assert.strictEqual(SM.courierPayoutSnapshot({ mode: 'percent', percent: 100 }, 9999, 1).amount, 9999);
+  assert.strictEqual(SM.courierPayoutSnapshot({ mode: 'percent', percent: 0 }, 9999, 1).amount, 0);
+  assert.strictEqual(SM.courierPayoutSnapshot({ mode: 'percent', percent: 33 }, 0, 1).amount, 0);
+  assert.deepStrictEqual(SM.courierPayoutSnapshot({ mode: 'fixed', fixedAmount: 7000 }, 1234, 4), { mode: 'fixed', fixedAmount: 7000, amount: 7000, settingsVersion: 4 });
+  assert.deepStrictEqual(SM.courierPayoutSnapshot(undefined, 1234, 2), { mode: null, amount: null, settingsVersion: 2 });
+  assert.strictEqual(SM.courierPayoutSnapshot({ mode: 'percent', percent: 101 }, 1000, 2).amount, null);
+  assert.deepStrictEqual(SM.courierPayoutProblems(null), []);
+  for (const bad of [{ mode: 'x' }, { mode: 'percent', percent: 1.5 }, { mode: 'percent', percent: -1 }, { mode: 'percent', percent: 10, fixedAmount: 1 },
+    { mode: 'fixed', fixedAmount: -1 }, { mode: 'fixed', fixedAmount: 10.5 }, { mode: 'fixed', fixedAmount: 1, percent: 2 }, { mode: 'fixed', fixedAmount: 1, card: '8600' }, 'x']) {
+    assert.ok(SM.courierPayoutProblems(bad).length > 0, JSON.stringify(bad));
+  }
+  const base = { stage: 'internal', testerIds: [], districtIds: ['gurlan'], slots: [], cutoffMin: 0, weighHoldPercent: 10 };
+  assert.ok(SM.validateSupermarketSettings(base).ok, 'yöq — sozlanmagan');
+  assert.ok(SM.validateSupermarketSettings({ ...base, courierPayout: { mode: 'fixed', fixedAmount: 0 } }).ok);
+  const v = SM.validateSupermarketSettings({ ...base, courierPayout: { mode: 'percent', percent: 200 } });
+  assert.ok(!v.ok && v.errors.includes('COURIER_PAYOUT_PERCENT_INVALID courierPayout.percent'), v.errors.join());
+});
+
+check('P11 кунлик: курьер тўлови етказилганлардан, тўланган/тўланмаган, net = етказилган fee − тўлов (манфий ҳам)', () => {
+  const del = (id, fee, amount, paid, extra = {}) => order(id, [], { status: 'delivered', deliveryFee: fee, itemsTotal: 1, userPhone: id, smCourierPayout: { mode: 'fixed', fixedAmount: amount, amount, settingsVersion: 1 }, ...(paid ? { smCourierPaid: { at: { toMillis: () => 1 }, by: 'a' } } : {}), ...extra });
+  const s = R.aggregateDailyStats([del('a', 5000, 7000, true), del('b', 5000, 4000, false), order('c', [], { status: 'new', deliveryFee: 9000, smCourierPayout: { amount: 9000 } }), del('d', 5000, 100, false, { status: 'cancelled' })]).stats;
+  assert.deepStrictEqual([s.courierPayout, s.courierPayoutPaid, s.courierPayoutUnpaid, s.courierPayoutMissing, s.deliveredFeeRevenue, s.netLogistics, s.courierPayoutPartial], [11000, 7000, 4000, 0, 10000, -1000, false]);
+});
+
+check('P12 курьер бўйича гуруҳлаш: телефон 9→12, тўланган/тўланмаган/белгиланмаган; мижоз PII йўқ', () => {
+  const del = (id, cid, amount, paid) => ({ __id: id, subtype: 'supermarket', status: 'delivered', courierId: cid, userPhone: '998900000009', address: 'X', deliveryFee: 5000, slot: { date: '2026-11-20' },
+    smCourierPayout: amount == null ? { mode: null, amount: null } : { mode: 'fixed', amount }, ...(paid ? { smCourierPaid: { at: { toMillis: () => 5 } } } : {}) });
+  const g = R.groupCourierPayouts([del('o1', '901112233', 7000, true), del('o2', '998901112233', 4000, false), del('o3', '998901112233', null, false), del('o4', '998907776655', 3000, false), { ...del('o5', '998907776655', 3000, false), status: 'ready' }, del('o6', '', 1000, false)]);
+  const c1 = g.find((x) => x.courierId === '998901112233');
+  assert.deepStrictEqual([c1.total, c1.paid, c1.unpaid, c1.missing, c1.orders.length, c1.phone], [11000, 7000, 4000, 1, 3, '998901112233']);
+  assert.strictEqual(g.find((x) => x.courierId === '998907776655').orders.length, 1, 'ready — yetkazilmagan');
+  assert.ok(g.find((x) => x.courierId === 'unknown'));
+  const json = JSON.stringify(g);
+  for (const k of ['userPhone', '998900000009', 'address']) assert.ok(!json.includes(k), k);
+});
+
+check('P13 тўланди белгиси шартлари: икки марта — ALREADY_PAID; бошқа курьер; етказилмаган; созланмаган', () => {
+  const ok = { subtype: 'supermarket', status: 'delivered', courierId: '998901112233', smCourierPayout: { amount: 5000 } };
+  assert.strictEqual(R.markPaidProblem(ok, '998901112233'), '');
+  assert.strictEqual(R.markPaidProblem({ ...ok, smCourierPaid: { at: 1 } }, '998901112233'), 'ALREADY_PAID');
+  assert.strictEqual(R.markPaidProblem(ok, '998907776655'), 'COURIER_MISMATCH');
+  assert.strictEqual(R.markPaidProblem({ ...ok, status: 'ready' }, '998901112233'), 'ORDER_NOT_DELIVERED');
+  assert.strictEqual(R.markPaidProblem({ ...ok, smCourierPayout: { amount: null } }, '998901112233'), 'PAYOUT_NOT_CONFIGURED');
+  assert.strictEqual(R.markPaidProblem(null, 'x'), 'ORDER_NOT_FOUND');
+  assert.strictEqual(R.canonPhone('+998 90 111 22 33'), '998901112233');
+  assert.strictEqual(R.canonPhone('12'), '');
+});
+
 check('P4 кунлик: сонлар, GMV/fee фақат бекор қилинмаган, қайтим турлари, origin, avg, unique, top', () => {
   const orders = [
     order('d1', [line('beef1', 'beef', 1.2, { smUnit: 'kg', weighed: true, actualQty: 1, total: 96000, finalTotal: 80000 })], { status: 'delivered', itemsTotal: 80000, deliveryFee: 8800, userPhone: '998900000001', smOrigin: 'weekly', smRefundedTotal: 17000, smRefundByAction: { weigh: 17000 } }),
@@ -137,9 +189,9 @@ check('P4 кунлик: сонлар, GMV/fee фақат бекор қилинм
   assert.deepStrictEqual(s.topGroupsBySum[0].qty, { kg: 1 });
   assert.deepStrictEqual(s.topGroupsBySum[1].qty, { kg: 5 });
   assert.strictEqual(s.topGroupsByQty[0].groupId, 'potato');
-  assert.strictEqual(s.courierPayout, null);
-  assert.strictEqual(s.netLogistics, null);
-  assert.strictEqual(s.courierPayoutSource, 'UNKNOWN');
+  // етказилган 2 та буюртмада smCourierPayout йўқ (эски) → partial, net null
+  assert.deepStrictEqual([s.courierPayout, s.courierPayoutMissing, s.courierPayoutPartial, s.netLogistics, s.deliveredFeeRevenue], [0, 2, true, null, 10450]);
+  assert.strictEqual(s.courierPayoutSource, 'snapshot');
 });
 
 check('P5 кунлик: бўш кун → 0 лар, avg 0; top 20 чегараси', () => {
@@ -151,11 +203,11 @@ check('P5 кунлик: бўш кун → 0 лар, avg 0; top 20 чегарас
   assert.strictEqual(s.topGroupsBySum[0].groupId, 'g24');
 });
 
-check('P6 summarizeDays: йиғинди, payout UNKNOWN → net null; маълум бўлса fee − payout (манфий)', () => {
-  const a = R.summarizeDays([{ orders: 3, cancelled: 1, gmv: 100000, deliveryFeeRevenue: 11000, courierPayout: null, byOrigin: { weekly: 2 } }, { orders: 1, cancelled: 0, gmv: 50000, deliveryFeeRevenue: 5500, byOrigin: {} }]);
-  assert.deepStrictEqual([a.orders, a.gmv, a.avgBasket, a.weeklyOrders, a.netLogistics, a.courierPayout], [4, 150000, 50000, 2, null, null]);
-  const b = R.summarizeDays([{ orders: 1, cancelled: 0, gmv: 1, deliveryFeeRevenue: 5000, courierPayout: 8000 }]);
-  assert.strictEqual(b.netLogistics, -3000);
+check('P6 summarizeDays: йиғинди; бирор кун net null (partial) → net null; ҳаммаси маълум → етказилган fee − payout (манфий)', () => {
+  const a = R.summarizeDays([{ orders: 3, cancelled: 1, gmv: 100000, deliveryFeeRevenue: 11000, deliveredFeeRevenue: 11000, courierPayout: 4000, netLogistics: null, courierPayoutMissing: 1, byOrigin: { weekly: 2 } }, { orders: 1, cancelled: 0, gmv: 50000, deliveredFeeRevenue: 5500, courierPayout: 1000, netLogistics: 4500, byOrigin: {} }]);
+  assert.deepStrictEqual([a.orders, a.gmv, a.avgBasket, a.weeklyOrders, a.netLogistics, a.courierPayout, a.courierPayoutPartial, a.courierPayoutMissing], [4, 150000, 50000, 2, null, 5000, true, 1]);
+  const b = R.summarizeDays([{ orders: 1, cancelled: 0, gmv: 1, deliveredFeeRevenue: 5000, courierPayout: 8000, courierPayoutPaid: 3000, courierPayoutUnpaid: 5000, netLogistics: -3000 }]);
+  assert.deepStrictEqual([b.netLogistics, b.courierPayoutPaid, b.courierPayoutUnpaid, b.courierPayoutPartial], [-3000, 3000, 5000, false]);
 });
 
 check('P7 сана валидацияси ва оралиқ', () => {

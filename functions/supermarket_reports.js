@@ -12,8 +12,8 @@
  * B) smDailyStats (ҳар куни 00:30 Asia/Tashkent) → `supermarket_stats/{YYYY-MM-DD}` (кечаги кун, тўлиқ қайта
  *    ёзиш — идемпотент). Кун асоси — `slot.date` (етказиш куни; PROPOSED). adminSupermarketStats({from,to,backfill})
  *    — ≤92 кун; backfill:true — етишмаган кунни (≤7 та) ҳисоблаб ёзади (фақат admin/superadmin, audit).
- *    Курьер тўлови: платформа буюртмалари учун repo'да майдон ТОПИЛМАДИ → courierPayout = null (UNKNOWN),
- *    netLogistics = null.
+ *    Курьер тўлови (эга 2026-11-26): етказилган буюртмалардаги smCourierPayout.amount йиғиндиси, тўланган/тўланмаган;
+ *    netLogistics = етказилганлар deliveryFee − тўлов (нусхаси йўқ буюртма бўлса null + courierPayoutPartial).
  *
  * ПУЛ — бутун сўм; миқдор — милли-бирлик бутун сонида йиғилади (supermarket.js toMilli).
  */
@@ -56,6 +56,13 @@ const MSG = Object.freeze({
   UNAUTHENTICATED: ['Илтимос, тизимга киринг.', 'Iltimos, tizimga kiring.', 'Пожалуйста, войдите в систему.'],
   PERMISSION_DENIED: ['Бу амал учун рухсат йўқ.', 'Bu amal uçun ruxsat yöq.', 'Нет доступа к этому действию.'],
   DATE_INVALID: ['Сана нотўғри.', 'Sana notöğri.', 'Неверная дата.'],
+  PAYOUT_REQUEST_INVALID: ['Сўров нотўғри.', "So'rov notöğri.", 'Неверный запрос.'],
+  ORDER_NOT_FOUND: ['Буюртма топилмади.', 'Buyurtma topilmadi.', 'Заказ не найден.'],
+  ORDER_NOT_SUPERMARKET: ['Бу супермаркет буюртмаси эмас.', 'Bu supermarket buyurtmasi emas.', 'Это не заказ супермаркета.'],
+  ORDER_NOT_DELIVERED: ['Буюртма ҳали етказилмаган.', 'Buyurtma hali yetkazilmagan.', 'Заказ ещё не доставлен.'],
+  COURIER_MISMATCH: ['Буюртма бошқа курьерга тегишли.', 'Buyurtma boşqa kuryerga tegişli.', 'Заказ принадлежит другому курьеру.'],
+  PAYOUT_NOT_CONFIGURED: ['Бу буюртмада курьер тўлови белгиланмаган.', 'Bu buyurtmada kuryer tölovi belgilanmagan.', 'Для этого заказа не задана выплата курьеру.'],
+  ALREADY_PAID: ['Бу буюртма аллақачон тўланган деб белгиланган.', 'Bu buyurtma allaqaçon tölangan deb belgilangan.', 'Этот заказ уже отмечен как оплаченный.'],
   RANGE_INVALID: ['Сана оралиғи нотўғри (кўпи билан 92 кун).', 'Sana oralığı notöğri (köpi bilan 92 kun).', 'Неверный период (не более 92 дней).'],
   INTERNAL: ['Ҳисоботни тайёрлаб бўлмади. Қайта уриниб кўринг.', "Hisobotni tayyorlab bölmadi. Qayta urinib köring.", 'Не удалось подготовить отчёт. Попробуйте ещё раз.'],
 });
@@ -218,7 +225,8 @@ function aggregateProcurement(orders, products, taxonomy, reserved = {}) {
 function aggregateDailyStats(orders) {
   const s = {
     orders: 0, delivered: 0, cancelled: 0, open: 0,
-    gmv: 0, deliveryFeeRevenue: 0,
+    gmv: 0, deliveryFeeRevenue: 0, deliveredFeeRevenue: 0,
+    courierPayout: 0, courierPayoutPaid: 0, courierPayoutUnpaid: 0, courierPayoutMissing: 0,
     refundsTotal: 0, refundsByType: { weigh: 0, shortage: 0, removed: 0, unattributed: 0 },
     extraChargedTotal: 0,
     byOrigin: { catalog: 0, quick: 0, weekly: 0, reorder: 0, unknown: 0 },
@@ -246,7 +254,17 @@ function aggregateDailyStats(orders) {
     s.extraChargedTotal += Math.max(0, Math.trunc(Number(od.smExtraChargedTotal || 0)));
     if (isCancelled(od)) { s.cancelled += 1; continue; }
     nonCancelled += 1;
-    if (isDelivered(od)) s.delivered += 1; else s.open += 1;
+    if (isDelivered(od)) {
+      s.delivered += 1;
+      // Курьер тўлови (эга 2026-11-26): етказилган буюртмадаги нусха (smCourierPayout.amount); пул тизимда юрмайди.
+      s.deliveredFeeRevenue += Math.max(0, Math.trunc(Number(od.deliveryFee || 0)));
+      const amt = od.smCourierPayout && Number.isInteger(od.smCourierPayout.amount) ? od.smCourierPayout.amount : null;
+      if (amt == null) s.courierPayoutMissing += 1;
+      else {
+        s.courierPayout += amt;
+        if (od.smCourierPaid && od.smCourierPaid.at) s.courierPayoutPaid += amt; else s.courierPayoutUnpaid += amt;
+      }
+    } else s.open += 1;
     s.gmv += Math.max(0, Math.trunc(Number(od.itemsTotal || 0)));
     s.deliveryFeeRevenue += Math.max(0, Math.trunc(Number(od.deliveryFee || 0)));
     if (od.userPhone) customers.add(String(od.userPhone));
@@ -269,29 +287,34 @@ function aggregateDailyStats(orders) {
   // Миқдор бўйича — бирликлар аралаш бўлгани учун қаторлар сони (кейин миқдор йиғиндиси) бўйича.
   const qtySum = (g) => Object.values(g.qty).reduce((a, b) => a + b, 0);
   s.topGroupsByQty = all.slice().sort((a, b) => (b.lines - a.lines) || (qtySum(b) - qtySum(a)) || a.groupId.localeCompare(b.groupId)).slice(0, TOP_GROUPS).map(view);
-  // Курьер тўлови: repo'да платформа буюртмаси учун майдон йўқ (UNKNOWN) — тахмин қилинмайди.
-  s.courierPayout = null;
-  s.courierPayoutSource = 'UNKNOWN';
-  s.netLogistics = null;
+  // Соф логистика = етказилган буюртмалар deliveryFee − курьер тўлови; бирор етказилганда нусха йўқ → null (partial).
+  s.courierPayoutSource = 'snapshot';
+  s.courierPayoutPartial = s.courierPayoutMissing > 0;
+  s.netLogistics = s.courierPayoutPartial ? null : s.deliveredFeeRevenue - s.courierPayout;
   return { stats: s, customers: [...customers].sort() };
 }
 
 /** Кунлар йиғмаси (callable учун). */
 function summarizeDays(days) {
-  const t = { orders: 0, delivered: 0, cancelled: 0, gmv: 0, deliveryFeeRevenue: 0, refundsTotal: 0, uniqueCustomersSum: 0, repeatCustomersSum: 0, weeklyOrders: 0, days: days.length };
-  let payoutKnown = days.length > 0;
-  let payout = 0;
+  const t = { orders: 0, delivered: 0, cancelled: 0, gmv: 0, deliveryFeeRevenue: 0, deliveredFeeRevenue: 0, refundsTotal: 0, uniqueCustomersSum: 0, repeatCustomersSum: 0, weeklyOrders: 0, days: days.length,
+    courierPayout: 0, courierPayoutPaid: 0, courierPayoutUnpaid: 0, courierPayoutMissing: 0 };
+  let netKnown = true;
   for (const d of days) {
     t.orders += d.orders || 0; t.delivered += d.delivered || 0; t.cancelled += d.cancelled || 0;
     t.gmv += d.gmv || 0; t.deliveryFeeRevenue += d.deliveryFeeRevenue || 0; t.refundsTotal += d.refundsTotal || 0;
     t.uniqueCustomersSum += d.uniqueCustomers || 0; t.repeatCustomersSum += d.repeatCustomers || 0;
     t.weeklyOrders += (d.byOrigin && d.byOrigin.weekly) || 0;
-    if (Number.isInteger(d.courierPayout)) payout += d.courierPayout; else payoutKnown = false;
+    t.deliveredFeeRevenue += d.deliveredFeeRevenue || 0;
+    t.courierPayout += Number.isInteger(d.courierPayout) ? d.courierPayout : 0;
+    t.courierPayoutPaid += d.courierPayoutPaid || 0; t.courierPayoutUnpaid += d.courierPayoutUnpaid || 0;
+    t.courierPayoutMissing += d.courierPayoutMissing || 0;
+    // Эски (курьер тўловисиз) ҳужжатда netLogistics null — йиғма ҳам null.
+    if (!Number.isInteger(d.netLogistics)) netKnown = false;
   }
   const nonCancelled = t.orders - t.cancelled;
   t.avgBasket = nonCancelled > 0 ? Math.floor(t.gmv / nonCancelled) : 0;
-  t.courierPayout = payoutKnown ? payout : null;
-  t.netLogistics = payoutKnown ? t.deliveryFeeRevenue - payout : null;
+  t.courierPayoutPartial = !netKnown;
+  t.netLogistics = netKnown ? t.deliveredFeeRevenue - t.courierPayout : null;
   return t;
 }
 
@@ -315,11 +338,11 @@ function attachSupermarketReports(exportsObj, deps) {
   };
 
   /** Сўров натижаси саҳифалаб (__name__), MAX_ORDERS гача. */
-  async function pagedOrders(base) {
+  async function pagedOrders(base, orderFirst = null) {
     const out = [];
     let last = null;
     for (;;) {
-      let q = base.orderBy(FieldPath.documentId()).limit(PAGE);
+      let q = (orderFirst ? base.orderBy(orderFirst) : base).orderBy(FieldPath.documentId()).limit(PAGE);
       if (last) q = q.startAfter(last);
       const snap = await q.get();
       for (const d of snap.docs) out.push({ ...d.data(), __id: d.id });
@@ -463,11 +486,177 @@ function attachSupermarketReports(exportsObj, deps) {
     }
   });
 
+  // ══════════════ Курьерларга тўлов (эга 2026-11-26) ══════════════
+  // Тўлов канали — админ курьер КАРТАСИГА тизимдан ТАШҚАРИДА қўлда ўтказади. Тизим пул юрмайди, карта
+  // маълумоти САҚЛАНМАЙДИ. Курьер — orders.courierId (courierCreateRoute / етказиш callable'лари ёзади).
+
+  async function deliveredInRange(from, to) {
+    const { orders, truncated } = await pagedOrders(db.collection(ORDERS).where('subtype', '==', 'supermarket')
+      .where('slot.date', '>=', from).where('slot.date', '<=', to), 'slot.date');
+    return { orders: orders.filter((o) => isDelivered(o) && !isCancelled(o)), truncated };
+  }
+
+  async function courierNames(ids) {
+    const out = {};
+    const refs = ids.map((id) => db.collection('users').doc(id));
+    const snaps = refs.length ? await db.getAll(...refs) : [];
+    const retry = [];
+    snaps.forEach((s, i) => {
+      if (s.exists) out[ids[i]] = String((s.data() || {}).name || (s.data() || {}).fullName || '').slice(0, 80);
+      else if (ids[i].length === 12 && ids[i].startsWith('998')) retry.push(ids[i]);
+    });
+    if (retry.length) {
+      const s9 = await db.getAll(...retry.map((id) => db.collection('users').doc(id.slice(3))));
+      s9.forEach((s, i) => { if (s.exists) out[retry[i]] = String((s.data() || {}).name || (s.data() || {}).fullName || '').slice(0, 80); });
+    }
+    return out;
+  }
+
+  exportsObj.adminSupermarketCourierPayouts = functions.https.onCall(async (data, context) => {
+    const started = Date.now();
+    const uid = await requireRoles(context, ADMIN_ROLES);
+    const d = data || {};
+    const from = String(d.from || '');
+    const to = String(d.to || '');
+    if (!validDateKey(from) || !validDateKey(to) || from > to || daysBetween(from, to) + 1 > MAX_RANGE_DAYS) throw fail('invalid-argument', 'RANGE_INVALID');
+    try {
+      const { orders, truncated } = await deliveredInRange(from, to);
+      const groups = groupCourierPayouts(orders);
+      const names = await courierNames(groups.map((g) => g.courierId).filter((x) => x !== 'unknown'));
+      for (const g of groups) g.name = names[g.courierId] || '';
+      log({ action: 'adminSupermarketCourierPayouts', result: 'ok', userTail: uid.slice(-4), from, to, couriers: groups.length, orders: orders.length, duration: Date.now() - started });
+      return { ok: true, from, to, truncated, couriers: groups };
+    } catch (e) {
+      if (e instanceof HttpsError) throw e;
+      console.error(JSON.stringify({ module: MODULE, action: 'adminSupermarketCourierPayouts', errorCode: 'INTERNAL', error: String((e && e.message) || e) }));
+      throw fail('internal', 'INTERNAL');
+    }
+  });
+
+  exportsObj.adminMarkSupermarketCourierPaid = functions.https.onCall(async (data, context) => {
+    const started = Date.now();
+    const actor = await requireRoles(context, ADMIN_ROLES);
+    const d = data || {};
+    const courierId = canonPhone(d.courierId);
+    const ids = Array.isArray(d.orderIds) ? [...new Set(d.orderIds.map((x) => String(x || '').trim()))] : [];
+    const note = typeof d.note === 'string' ? d.note.trim().slice(0, 300) : '';
+    const reqId = typeof d.clientRequestId === 'string' ? d.clientRequestId.trim() : '';
+    if (!courierId || ids.length < 1 || ids.length > MARK_MAX || ids.some((x) => !ORDER_ID_RE.test(x)) || !CLIENT_REQ_RE.test(reqId)) {
+      throw fail('invalid-argument', 'PAYOUT_REQUEST_INVALID');
+    }
+    const idemRef = db.collection('wallet_idempotency').doc(`sm_cpaid_${actor}_${reqId}`);
+    let out;
+    try {
+      out = await db.runTransaction(async (t) => {
+        const prev = await t.get(idemRef);
+        if (prev.exists) return { ...(prev.data().result || {}), duplicate: true };
+        const refs = ids.map((id) => db.collection(ORDERS).doc(id));
+        const snaps = await Promise.all(refs.map((r) => t.get(r)));
+        let total = 0;
+        snaps.forEach((s, i) => {
+          const od = s.exists ? (s.data() || {}) : null;
+          const problem = markPaidProblem(od, courierId);
+          if (problem) throw fail('failed-precondition', problem, { orderId: ids[i] });
+          total += od.smCourierPayout.amount;
+        });
+        const paid = { at: FV.serverTimestamp(), by: actor, note, batchId: idemRef.id };
+        refs.forEach((r) => t.update(r, { smCourierPaid: paid }));
+        t.set(db.collection(ADMIN_AUDIT).doc(), {
+          kind: 'sm_courier_paid', actor, target: `courier/${courierId}`, courierId, orderIds: ids, total, note,
+          channel: 'manual_card_transfer_outside_system', at: FV.serverTimestamp(),
+        });
+        const result = { ok: true, courierId, count: ids.length, total };
+        t.set(idemRef, { type: 'adminMarkSupermarketCourierPaid', result, createdAt: FV.serverTimestamp() });
+        return result;
+      });
+    } catch (e) {
+      const code = (e && e.details && e.details.code) || 'INTERNAL';
+      log({ action: 'adminMarkSupermarketCourierPaid', result: 'error', errorCode: code, userTail: actor.slice(-4) });
+      if (e instanceof HttpsError) throw e;
+      console.error(JSON.stringify({ module: MODULE, action: 'adminMarkSupermarketCourierPaid', error: String((e && e.message) || e) }));
+      throw fail('internal', 'INTERNAL');
+    }
+    log({ action: 'adminMarkSupermarketCourierPaid', result: 'ok', userTail: actor.slice(-4), count: out.count, total: out.total, duplicate: !!out.duplicate, duration: Date.now() - started });
+    return out;
+  });
+
+  exportsObj.adminUnmarkSupermarketCourierPaid = functions.https.onCall(async (data, context) => {
+    const actor = await requireRoles(context, ['superadmin']);
+    const d = data || {};
+    const orderId = String(d.orderId || '').trim();
+    const reason = typeof d.reason === 'string' ? d.reason.trim().slice(0, 300) : '';
+    if (!ORDER_ID_RE.test(orderId) || !reason) throw fail('invalid-argument', 'PAYOUT_REQUEST_INVALID');
+    const ref = db.collection(ORDERS).doc(orderId);
+    const out = await db.runTransaction(async (t) => {
+      const s = await t.get(ref);
+      const od = s.exists ? (s.data() || {}) : null;
+      if (!od || od.subtype !== 'supermarket') throw fail('failed-precondition', 'ORDER_NOT_SUPERMARKET', { orderId });
+      if (!od.smCourierPaid) return { ok: true, changed: false };
+      t.update(ref, { smCourierPaid: FV.delete() });
+      t.set(db.collection(ADMIN_AUDIT).doc(), {
+        kind: 'sm_courier_paid_undo', actor, target: `${ORDERS}/${orderId}`, courierId: String(od.courierId || ''),
+        before: od.smCourierPaid, amount: od.smCourierPayout ? od.smCourierPayout.amount : null, reason, at: FV.serverTimestamp(),
+      });
+      return { ok: true, changed: true };
+    });
+    log({ action: 'adminUnmarkSupermarketCourierPaid', result: 'ok', userTail: actor.slice(-4), orderId, changed: out.changed });
+    return out;
+  });
+
   return { runDailyStats, computeDay, writeDay };
+}
+
+const MARK_MAX = 200;
+const ORDER_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+const CLIENT_REQ_RE = /^[A-Za-z0-9_-]{8,64}$/;
+
+/** Телефон ID → 12 хонали (998…); бўш — ''. */
+function canonPhone(v) {
+  const dgt = String(v || '').replace(/\D/g, '');
+  if (dgt.length === 9) return `998${dgt}`;
+  return dgt.length === 12 && dgt.startsWith('998') ? dgt : '';
+}
+
+/** Тўланди деб белгилаш мумкинми — муаммо коди ёки ''. */
+function markPaidProblem(od, courierId) {
+  if (!od) return 'ORDER_NOT_FOUND';
+  if (od.subtype !== 'supermarket') return 'ORDER_NOT_SUPERMARKET';
+  if (!isDelivered(od) || isCancelled(od)) return 'ORDER_NOT_DELIVERED';
+  if (canonPhone(od.courierId) !== courierId) return 'COURIER_MISMATCH';
+  if (!od.smCourierPayout || !Number.isInteger(od.smCourierPayout.amount)) return 'PAYOUT_NOT_CONFIGURED';
+  if (od.smCourierPaid) return 'ALREADY_PAID';
+  return '';
+}
+
+/**
+ * Етказилган буюртмалар → курьер бўйича (тоза). Мижоз PII йўқ: фақат буюртма ID, сана, сумма.
+ * @returns {{courierId, orders[], total, paid, unpaid, missing}[]}
+ */
+function groupCourierPayouts(orders) {
+  const by = new Map();
+  for (const od of orders) {
+    if (!od || od.subtype !== 'supermarket' || !isDelivered(od) || isCancelled(od)) continue;
+    const cid = canonPhone(od.courierId) || 'unknown';
+    let g = by.get(cid);
+    if (!g) { g = { courierId: cid, phone: cid === 'unknown' ? '' : cid, orders: [], total: 0, paid: 0, unpaid: 0, missing: 0 }; by.set(cid, g); }
+    const amount = od.smCourierPayout && Number.isInteger(od.smCourierPayout.amount) ? od.smCourierPayout.amount : null;
+    const paidAt = od.smCourierPaid && od.smCourierPaid.at && typeof od.smCourierPaid.at.toMillis === 'function' ? od.smCourierPaid.at.toMillis() : null;
+    const isPaid = !!(od.smCourierPaid && od.smCourierPaid.at);
+    g.orders.push({
+      orderId: od.__id || od.id || '', date: (od.slot && od.slot.date) || '', deliveryFee: Math.max(0, Math.trunc(Number(od.deliveryFee || 0))),
+      amount, mode: (od.smCourierPayout && od.smCourierPayout.mode) || null, paid: isPaid, paidAtMs: paidAt,
+    });
+    if (amount == null) g.missing += 1;
+    else { g.total += amount; if (isPaid) g.paid += amount; else g.unpaid += amount; }
+  }
+  const out = [...by.values()];
+  for (const g of out) g.orders.sort((a, b) => a.date.localeCompare(b.date) || a.orderId.localeCompare(b.orderId));
+  return out.sort((a, b) => (b.unpaid - a.unpaid) || a.courierId.localeCompare(b.courierId));
 }
 
 module.exports = {
   attachSupermarketReports,
+  groupCourierPayouts, markPaidProblem, canonPhone,
   aggregateProcurement, reservedByOffer, RESERVING_STATUSES, aggregateDailyStats, summarizeDays, procurementEligible, isDelivered, lineQtyMilli,
   validDateKey, addDays, daysBetween, ORIGINS, REFUND_BUCKET, STATS, STATS_SCHEMA, MAX_RANGE_DAYS, MAX_BACKFILL, messagesOf,
 };

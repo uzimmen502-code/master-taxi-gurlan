@@ -159,6 +159,16 @@ async function main() {
     await assertFails(user.doc('supermarket_stats/2026-11-22').set({ orders: 1 }));
   });
 
+  await check('R11 orders.smCourierPayout / smCourierPaid — фақат CF (админ клиенти ҳам ёзолмайди); админ бошқа майдонни ёзади', async () => {
+    await testEnv.withSecurityRulesDisabled(async (c) => {
+      await c.firestore().doc('orders/smo1').set({ type: 'platform', subtype: 'supermarket', userPhone: USER, status: 'delivered', smCourierPayout: { mode: 'fixed', amount: 5000 } });
+    });
+    await assertFails(adm.doc('orders/smo1').update({ smCourierPaid: { at: serverTimestamp(), by: ADMIN } }));
+    await assertFails(adm.doc('orders/smo1').update({ smCourierPayout: { mode: 'fixed', amount: 999999 } }));
+    await assertFails(user.doc('orders/smo1').update({ smCourierPaid: { at: serverTimestamp() } }));
+    await assertSucceeds(adm.doc('orders/smo1').update({ updatedAt: serverTimestamp() }));
+  });
+
   await testEnv.cleanup();
   const passed = results.filter(Boolean).length;
   console.log(`\n${passed}/${results.length} passed`);

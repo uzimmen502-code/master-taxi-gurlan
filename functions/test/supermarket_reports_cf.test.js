@@ -161,8 +161,7 @@ async function main() {
     assert.deepStrictEqual(s1.byOrigin, { catalog: 1, quick: 1, weekly: 1, reorder: 1, unknown: 0 });
     assert.deepStrictEqual([s1.uniqueCustomers, s1.repeatCustomers], [2, 1]);
     assert.strictEqual(s1.listsWithReminders, 1);
-    assert.strictEqual(s1.courierPayout, null);
-    assert.strictEqual(s1.netLogistics, null);
+    assert.deepStrictEqual([s1.courierPayout, s1.netLogistics, s1.courierPayoutPartial], [0, 0, false], 'yetkazilgan yöq');
     assert.strictEqual(s1.source, 'schedule');
     assert.strictEqual(s1.dateBasis, 'slot.date');
     await api.runDailyStats();
@@ -184,7 +183,7 @@ async function main() {
     assert.strictEqual(r.days.length, 1);
     assert.strictEqual(r.summary.orders, 4);
     assert.strictEqual(r.summary.weeklyOrders, 1);
-    assert.strictEqual(r.summary.netLogistics, null);
+    assert.strictEqual(r.summary.netLogistics, 0);
     assert.strictEqual(r.listsWithReminders, 1);
     assert.strictEqual((await db.doc(`supermarket_stats/${prev}`).get()).exists, false, 'backfillsiz yozilmaydi');
     const b = await lcall('adminSupermarketStats', { from: prev, to: R.addDays(TOMORROW, 1) }, ADMIN);
@@ -200,8 +199,68 @@ async function main() {
     assert.deepStrictEqual(au[0].dates, [prev]);
   });
 
+  const SUPER = '998915000009';
+  const COURIER = '998931112233';
+  await check('K7 курьер тўлови: созлама (версия+audit old/new), нусха percent/fixed, созлама ўзгариши эски буюртмага таъсир қилмайди, созланмаган → null', async () => {
+    await db.doc(`users/${SUPER}`).set({ role: 'superadmin' });
+    await db.doc(`users/${COURIER}`).set({ role: 'courier', name: 'Курьер Бек' });
+    assert.deepStrictEqual((await get(`orders/${ids.o2}`)).smCourierPayout, { mode: null, amount: null, settingsVersion: 1 });
+    const cur = await get('settings/supermarket');
+    const { version, updatedAt, updatedBy, ...base } = cur;
+    await expectCode(call('adminSetSupermarketSettings', { settings: { ...base, courierPayout: { mode: 'percent', percent: 101 } }, expectedVersion: 1, reason: 'x' }, ADMIN), 'SETTINGS_INVALID');
+    await expectCode(call('adminSetSupermarketSettings', { settings: { ...base, courierPayout: { mode: 'fixed', fixedAmount: 5000, cardNumber: '8600' } }, expectedVersion: 1, reason: 'x' }, ADMIN), 'SETTINGS_INVALID');
+    const v2 = await call('adminSetSupermarketSettings', { settings: { ...base, courierPayout: { mode: 'percent', percent: 13 } }, expectedVersion: 1, reason: 'kuryer 13%' }, ADMIN);
+    assert.strictEqual(v2.version, 2);
+    const au = (await db.collection('admin_audit').where('kind', '==', 'supermarket_settings_set').where('version', '==', 2).get()).docs[0].data();
+    assert.deepStrictEqual([au.before.courierPayout, au.after.courierPayout, au.actor], [null, { mode: 'percent', percent: 13 }, ADMIN]);
+    ids.o5 = (await place([{ productId: 'milk_1l_01', qty: 1 }], OTHER)).orderId;
+    const o5 = await get(`orders/${ids.o5}`);
+    assert.deepStrictEqual(o5.smCourierPayout, { mode: 'percent', percent: 13, amount: Math.floor(o5.deliveryFee * 13 / 100), settingsVersion: 2 });
+    await call('adminSetSupermarketSettings', { settings: { ...base, courierPayout: { mode: 'fixed', fixedAmount: 6000 } }, expectedVersion: 2, reason: 'fixed' }, ADMIN);
+    ids.o6 = (await place([{ productId: 'milk_1l_01', qty: 1 }], OTHER)).orderId;
+    assert.deepStrictEqual((await get(`orders/${ids.o6}`)).smCourierPayout, { mode: 'fixed', fixedAmount: 6000, amount: 6000, settingsVersion: 3 });
+    assert.deepStrictEqual((await get(`orders/${ids.o5}`)).smCourierPayout, o5.smCourierPayout, 'eski buyurtma özgarmadi');
+    ids.o5amount = o5.smCourierPayout.amount;
+  });
+
+  await check('K8 курьерга тўлов рўйхати + тўланди белгиси: фақат admin, идемпотент, икки марта рад, бошқа курьер рад, superadmin қайтаради', async () => {
+    for (const id of [ids.o5, ids.o6]) await db.doc(`orders/${id}`).update({ status: 'delivered', fulfillmentStatus: 'completed', courierId: COURIER });
+    await db.doc(`orders/${ids.o2}`).update({ status: 'delivered', fulfillmentStatus: 'completed', courierId: COURIER }); // созланмаган
+    await expectCode(lcall('adminSupermarketCourierPayouts', { from: TOMORROW, to: TOMORROW }, DISP), 'PERMISSION_DENIED');
+    const L = await lcall('adminSupermarketCourierPayouts', { from: TOMORROW, to: TOMORROW }, ADMIN);
+    const c = L.couriers.find((x) => x.courierId === COURIER);
+    assert.deepStrictEqual([c.name, c.phone, c.orders.length, c.total, c.unpaid, c.paid, c.missing], ['Курьер Бек', COURIER, 3, ids.o5amount + 6000, ids.o5amount + 6000, 0, 1]);
+    assert.ok(!JSON.stringify(L).includes(USER) && !JSON.stringify(L).includes(OTHER), 'mijoz telefoni yöq');
+    const mark = (orderIds, req, who = ADMIN, courierId = COURIER) => lcall('adminMarkSupermarketCourierPaid', { orderIds, courierId, note: 'Humo karta, 26.11', clientRequestId: req }, who);
+    await expectCode(mark([ids.o5], 'pay-00000001', DISP), 'PERMISSION_DENIED');
+    await expectCode(mark([ids.o5], 'pay-00000001', ADMIN, '998907776655'), 'COURIER_MISMATCH');
+    await expectCode(mark([ids.o5, ids.o2], 'pay-00000001'), 'PAYOUT_NOT_CONFIGURED');
+    assert.strictEqual((await get(`orders/${ids.o5}`)).smCourierPaid, undefined, 'tranzaksiya — hec biri belgilanmadi');
+    const m1 = await mark([ids.o5, ids.o6], 'pay-00000002');
+    assert.deepStrictEqual([m1.count, m1.total], [2, ids.o5amount + 6000]);
+    const again = await mark([ids.o5, ids.o6], 'pay-00000002');
+    assert.strictEqual(again.duplicate, true, 'shu söröv qayta — idempotent');
+    await expectCode(mark([ids.o6], 'pay-00000003'), 'ALREADY_PAID');
+    const paidDoc = (await get(`orders/${ids.o6}`)).smCourierPaid;
+    assert.deepStrictEqual([paidDoc.by, paidDoc.note], [ADMIN, 'Humo karta, 26.11']);
+    const au = (await db.collection('admin_audit').where('kind', '==', 'sm_courier_paid').get()).docs.map((d) => d.data());
+    assert.strictEqual(au.length, 1);
+    assert.strictEqual(au[0].total, ids.o5amount + 6000);
+    const st = await api.computeDay(TOMORROW);
+    assert.deepStrictEqual([st.courierPayout, st.courierPayoutPaid, st.courierPayoutUnpaid, st.courierPayoutMissing, st.courierPayoutPartial, st.netLogistics], [ids.o5amount + 6000, ids.o5amount + 6000, 0, 1, true, null]);
+    await expectCode(lcall('adminUnmarkSupermarketCourierPaid', { orderId: ids.o6, reason: 'xato' }, ADMIN), 'PERMISSION_DENIED');
+    await expectCode(lcall('adminUnmarkSupermarketCourierPaid', { orderId: ids.o6 }, SUPER), 'PAYOUT_REQUEST_INVALID');
+    const u = await lcall('adminUnmarkSupermarketCourierPaid', { orderId: ids.o6, reason: 'xato karta' }, SUPER);
+    assert.strictEqual(u.changed, true);
+    assert.strictEqual((await get(`orders/${ids.o6}`)).smCourierPaid, undefined);
+    const ua = (await db.collection('admin_audit').where('kind', '==', 'sm_courier_paid_undo').get()).docs.map((d) => d.data());
+    assert.deepStrictEqual([ua.length, ua[0].actor, ua[0].amount, ua[0].before.by], [1, SUPER, 6000, ADMIN]);
+    const m2 = await mark([ids.o6], 'pay-00000004');
+    assert.strictEqual(m2.count, 1, 'qaytarilgandan keyin yana belgilash mumkin');
+  });
+
   await check('K6 index.js экспорти: adminSupermarketProcurementReport, adminSupermarketStats, smDailyStats', async () => {
-    for (const n of ['adminSupermarketProcurementReport', 'adminSupermarketStats', 'smDailyStats']) assert.ok(fns[n], n);
+    for (const n of ['adminSupermarketProcurementReport', 'adminSupermarketStats', 'smDailyStats', 'adminSupermarketCourierPayouts', 'adminMarkSupermarketCourierPaid', 'adminUnmarkSupermarketCourierPaid']) assert.ok(fns[n], n);
   });
 
   const passed = results.filter(Boolean).length;

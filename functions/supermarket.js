@@ -399,7 +399,42 @@ function findGroup(taxonomy, groupId) {
   return null;
 }
 
-const SETTINGS_KEYS = ['stage', 'testerIds', 'districtIds', 'slots', 'cutoffMin', 'weighHoldPercent'];
+const SETTINGS_KEYS = ['stage', 'testerIds', 'districtIds', 'slots', 'cutoffMin', 'weighHoldPercent', 'courierPayout'];
+const COURIER_PAYOUT_MODES = Object.freeze(['percent', 'fixed']);
+
+/**
+ * Курьер тўлови созламаси (эга 2026-11-26): {mode:'percent', percent:0..100 (буюртма deliveryFee'дан)} ёки
+ * {mode:'fixed', fixedAmount:≥0 сўм}. undefined/null — созланмаган. Хатолар рўйхати қайтади.
+ */
+function courierPayoutProblems(cp, p = 'courierPayout') {
+  if (cp === undefined || cp === null) return [];
+  const out = [];
+  if (!isPlainObject(cp)) return [`COURIER_PAYOUT_INVALID ${p}`];
+  for (const k of Object.keys(cp)) if (!['mode', 'percent', 'fixedAmount'].includes(k)) out.push(`UNKNOWN_KEY ${p}.${k}`);
+  if (!COURIER_PAYOUT_MODES.includes(cp.mode)) out.push(`COURIER_PAYOUT_MODE_INVALID ${p}.mode`);
+  if (cp.mode === 'percent') {
+    if (!Number.isInteger(cp.percent) || cp.percent < 0 || cp.percent > 100) out.push(`COURIER_PAYOUT_PERCENT_INVALID ${p}.percent`);
+    if (cp.fixedAmount !== undefined) out.push(`UNKNOWN_KEY ${p}.fixedAmount`);
+  } else if (cp.mode === 'fixed') {
+    if (!Number.isInteger(cp.fixedAmount) || cp.fixedAmount < 0 || cp.fixedAmount > LIMITS.priceMax) out.push(`COURIER_PAYOUT_FIXED_INVALID ${p}.fixedAmount`);
+    if (cp.percent !== undefined) out.push(`UNKNOWN_KEY ${p}.percent`);
+  }
+  return out;
+}
+
+/**
+ * Буюртма яратилганда курьер тўлови нусхаси (кейинги созлама ўзгариши эски буюртмага таъсир қилмайди, 9-банд).
+ * percent → floor(deliveryFee × percent / 100); fixed → fixedAmount; созланмаган/бузуқ → amount null.
+ */
+function courierPayoutSnapshot(cp, deliveryFee, settingsVersion) {
+  const version = Number.isInteger(settingsVersion) ? settingsVersion : 0;
+  if (cp == null || courierPayoutProblems(cp).length) return { mode: null, amount: null, settingsVersion: version };
+  if (cp.mode === 'percent') {
+    const fee = Number.isInteger(deliveryFee) && deliveryFee > 0 ? deliveryFee : 0;
+    return { mode: 'percent', percent: cp.percent, amount: Math.floor((fee * cp.percent) / 100), settingsVersion: version };
+  }
+  return { mode: 'fixed', fixedAmount: cp.fixedAmount, amount: cp.fixedAmount, settingsVersion: version };
+}
 const SLOT_KEYS = ['id', 'names', 'startMin', 'endMin'];
 
 function validateSupermarketSettings(obj) {
@@ -444,6 +479,10 @@ function validateSupermarketSettings(obj) {
   if (!Number.isInteger(obj.cutoffMin) || obj.cutoffMin < 0 || obj.cutoffMin > 720) err('CUTOFF_INVALID', 'cutoffMin');
   if (!Number.isInteger(obj.weighHoldPercent) || obj.weighHoldPercent < 0 || obj.weighHoldPercent > 50) {
     err('WEIGH_HOLD_PERCENT_INVALID', 'weighHoldPercent');
+  }
+  for (const e of courierPayoutProblems(obj.courierPayout)) {
+    const i = e.indexOf(' ');
+    err(e.slice(0, i), e.slice(i + 1));
   }
   return done();
 }
@@ -1201,6 +1240,8 @@ function attachSupermarket(exportsObj, deps) {
           slot: { id: slot.id, day, date: slot.date, startMin: slot.startMin, endMin: slot.endMin, names: slot.names },
           smClientRequestId: clientRequestId,
           smOrigin: origin,
+          // Курьер тўлови нусхаси (эга 2026-11-26) — фақат сервер; пул тизимда ЮРМАЙДИ (админ картага қўлда ўтказади).
+          smCourierPayout: courierPayoutSnapshot(settings.courierPayout, priced.fee, settings.version),
           smAdjustSeq: 0,
           smWeighPending: priced.lines.some((l) => l.weighed),
           createdAt: ts(),
@@ -1668,4 +1709,6 @@ module.exports = {
   DEBIT_NOTES, REMIND_TEXT, SHORTAGE_TEXT, SHORTAGE_ANSWER_MS, PAIRS_MAX, LIST_ID_RE, ID_RE, PRODUCT_ID_RE, LIMITS,
   MSG, UNITS, PACK_UNITS, OPERATOR_ROLES, REFUND_NOTES, STAGES, SM_STATUSES, LANGS, TAXONOMY_DOC, SETTINGS_DOC, HISTORY_COLLECTION, HISTORY_PREFIX,
   TARIFF_VERSION, UNIT_LABELS, ORDER_ORIGINS,
+  // 3-босқич: курьер тўлови
+  courierPayoutProblems, courierPayoutSnapshot, COURIER_PAYOUT_MODES,
 };

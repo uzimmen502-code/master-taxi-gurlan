@@ -5195,6 +5195,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // «AVA Супермаркет» кунлик статистикаси — фақат CF (smDailyStats / adminSupermarketStats) ёзади, админ ўқийди.
+    match /supermarket_stats/{day} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     // Модул созламалари: тўлқинлар, score чегараси, push лимитлари.
     //
     // Клиент ЎҚИЙДИ (форма чегаралари ва «Intent Router» луғати учун),

@@ -1,6 +1,23 @@
 {
   "indexes": [
     {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "subtype", "order": "ASCENDING" },
+        { "fieldPath": "slot.date", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "subtype", "order": "ASCENDING" },
+        { "fieldPath": "userPhone", "order": "ASCENDING" },
+        { "fieldPath": "slot.date", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "deal_chats",
       "queryScope": "COLLECTION",
       "fields": [

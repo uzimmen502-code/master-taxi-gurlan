@@ -76,6 +76,7 @@ const UNITS = Object.freeze(['kg', 'l', 'piece', 'pack', 'bunch']);
 const STAGES = Object.freeze(['off', 'internal', 'pilot', 'public']);
 const SM_STATUSES = Object.freeze(['active', 'out_of_stock', 'hidden']);
 const DAYS = Object.freeze(['today', 'tomorrow']);
+const ORDER_ORIGINS = Object.freeze(['catalog', 'quick', 'weekly', 'reorder']); // 3-босқич (эга 2026-11-21)
 const TARIFF_VERSION = 'sm-v1'; // формула: каталог нархи × миқдор + settings/app % + тортиш ушлаб туриши
 const TZ_OFFSET_MS = 5 * 3600000; // Asia/Tashkent
 const DAY_MS = 86400000;
@@ -1107,6 +1108,9 @@ function attachSupermarket(exportsObj, deps) {
     const day = String(d.day || '');
     const slotId = String(d.slotId || '');
     if (!DAYS.includes(day) || !SLOT_ID_RE.test(slotId)) throw fail('invalid-argument', 'INVALID_REQUEST', { field: 'slot' });
+    // 3-босқич: буюртма манбаи (аналитика учун; эски клиент юбормайди → 'catalog').
+    const origin = d.origin == null ? 'catalog' : d.origin;
+    if (!ORDER_ORIGINS.includes(origin)) throw fail('invalid-argument', 'INVALID_REQUEST', { field: 'origin' });
 
     const { settings, feeConfig, user } = await loadGateContext(uid);
     if (!user) throw fail('not-found', 'USER_NOT_FOUND');
@@ -1196,6 +1200,7 @@ function attachSupermarket(exportsObj, deps) {
           fulfillmentMode: 'delivery',
           slot: { id: slot.id, day, date: slot.date, startMin: slot.startMin, endMin: slot.endMin, names: slot.names },
           smClientRequestId: clientRequestId,
+          smOrigin: origin,
           smAdjustSeq: 0,
           smWeighPending: priced.lines.some((l) => l.weighed),
           createdAt: ts(),
@@ -1326,6 +1331,8 @@ function attachSupermarket(exportsObj, deps) {
         smShortagePending: m.lines.some(linePending),
         ...(adj.capDiscount > 0 ? { smCapDiscount: adj.capDiscount } : {}),
         smRefundedTotal: FV.increment(adj.refund),
+        // 3-босқич: қайтим тури бўйича (аналитика; эски буюртмаларда йўқ → «unattributed»).
+        ...(adj.refund > 0 ? { [`smRefundByAction.${action}`]: FV.increment(adj.refund) } : {}),
         ...(adj.debit > 0 ? { smExtraChargedTotal: FV.increment(adj.debit) } : {}),
         updatedAt: ts(),
       });
@@ -1660,5 +1667,5 @@ module.exports = {
   stableStringify, isPlainObject, stepOk,
   DEBIT_NOTES, REMIND_TEXT, SHORTAGE_TEXT, SHORTAGE_ANSWER_MS, PAIRS_MAX, LIST_ID_RE, ID_RE, PRODUCT_ID_RE, LIMITS,
   MSG, UNITS, PACK_UNITS, OPERATOR_ROLES, REFUND_NOTES, STAGES, SM_STATUSES, LANGS, TAXONOMY_DOC, SETTINGS_DOC, HISTORY_COLLECTION, HISTORY_PREFIX,
-  TARIFF_VERSION, UNIT_LABELS,
+  TARIFF_VERSION, UNIT_LABELS, ORDER_ORIGINS,
 };

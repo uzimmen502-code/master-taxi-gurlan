@@ -146,6 +146,19 @@ async function main() {
     await assertFails(adm.doc('platform_products/new9').set({ name: 'x', price: 1, smImageSrc: 'https://x' }));
   });
 
+  await check('R10 supermarket_stats — фақат админ ўқийди, ҳеч ким (админ ҳам) ёзмайди', async () => {
+    await testEnv.withSecurityRulesDisabled(async (c) => { await c.firestore().doc('supermarket_stats/2026-11-20').set({ orders: 1 }); });
+    await assertSucceeds(adm.doc('supermarket_stats/2026-11-20').get());
+    await assertSucceeds(adm.collection('supermarket_stats').get());
+    await assertFails(user.doc('supermarket_stats/2026-11-20').get());
+    await assertFails(user.collection('supermarket_stats').get());
+    await assertFails(anon.doc('supermarket_stats/2026-11-20').get());
+    await assertFails(adm.doc('supermarket_stats/2026-11-21').set({ orders: 9 }));
+    await assertFails(adm.doc('supermarket_stats/2026-11-20').update({ orders: 9 }));
+    await assertFails(adm.doc('supermarket_stats/2026-11-20').delete());
+    await assertFails(user.doc('supermarket_stats/2026-11-22').set({ orders: 1 }));
+  });
+
   await testEnv.cleanup();
   const passed = results.filter(Boolean).length;
   console.log(`\n${passed}/${results.length} passed`);

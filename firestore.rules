@@ -1812,12 +1812,14 @@ service cloud.firestore {
       }
       // `private/secrets` — pickupCode: фақат ресторан / бизнес сотувчиси (курьерга оғзаки
       // айтади) ва админ; мижоз ва курьер ўқимайди.
+      // `private/courier_payout` — супермаркет курьер тўлови нусхаси + «тўланди» белгиси (ИЧКИ харажат, 14-банд):
+      // фақат админ ўқийди; ёзиш фақат CF.
       match /private/{doc} {
-        allow read: if isAdmin() || (
+        allow read: if isAdmin() || (doc != 'courier_payout' && ((
             isAuth()
             && restaurantOrderParent().get('restaurantId', '') != ''
             && isRestaurantMember(restaurantOrderParent().get('restaurantId', ''))
-        ) || isBusinessSellerOf(restaurantOrderParent());
+        ) || isBusinessSellerOf(restaurantOrderParent())));
         allow write: if false;
       }
     }

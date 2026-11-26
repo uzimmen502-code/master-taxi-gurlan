@@ -1240,8 +1240,6 @@ function attachSupermarket(exportsObj, deps) {
           slot: { id: slot.id, day, date: slot.date, startMin: slot.startMin, endMin: slot.endMin, names: slot.names },
           smClientRequestId: clientRequestId,
           smOrigin: origin,
-          // Курьер тўлови нусхаси (эга 2026-11-26) — фақат сервер; пул тизимда ЮРМАЙДИ (админ картага қўлда ўтказади).
-          smCourierPayout: courierPayoutSnapshot(settings.courierPayout, priced.fee, settings.version),
           smAdjustSeq: 0,
           smWeighPending: priced.lines.some((l) => l.weighed),
           createdAt: ts(),
@@ -1249,6 +1247,11 @@ function attachSupermarket(exportsObj, deps) {
         };
         if (address.lat != null) { order.lat = address.lat; order.lng = address.lng; }
         t.set(orderRef, order);
+        // Курьер тўлови нусхаси (эга 2026-11-26) — ИЧКИ харажат (14-банд): мижоз ўқийдиган буюртма ҳужжатида эмас,
+        // orders/{id}/private/courier_payout (фақат админ ўқийди, ёзиш фақат CF). Пул тизимда ЮРМАЙДИ.
+        t.set(orderRef.collection('private').doc('courier_payout'), {
+          ...courierPayoutSnapshot(settings.courierPayout, priced.fee, settings.version), orderId: orderRef.id, createdAt: ts(),
+        });
         const result = {
           ok: true, orderId: orderRef.id, itemsTotal: priced.goods, weighHold: priced.extras,
           deliveryFee: priced.fee, deliveryFeePercent: feePercent, deliveryFeeVersion: feeConfig.version, total: priced.hold, walletDebit: priced.hold,

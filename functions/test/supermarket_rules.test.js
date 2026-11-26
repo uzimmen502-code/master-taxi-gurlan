@@ -169,6 +169,19 @@ async function main() {
     await assertSucceeds(adm.doc('orders/smo1').update({ updatedAt: serverTimestamp() }));
   });
 
+  await check('R12 orders/{id}/private/courier_payout — мижоз (буюртма эгаси) ЎҚИЙ ОЛМАЙДИ, админ ўқийди, ҳеч ким ёзмайди', async () => {
+    await testEnv.withSecurityRulesDisabled(async (c) => {
+      await c.firestore().doc('orders/smo1/private/courier_payout').set({ mode: 'fixed', fixedAmount: 5000, amount: 5000, settingsVersion: 1, orderId: 'smo1' });
+    });
+    await assertSucceeds(user.doc('orders/smo1').get(), 'buyurtmaning özi mijozga ochiq');
+    await assertFails(user.doc('orders/smo1/private/courier_payout').get());
+    await assertFails(anon.doc('orders/smo1/private/courier_payout').get());
+    await assertSucceeds(adm.doc('orders/smo1/private/courier_payout').get());
+    await assertFails(adm.doc('orders/smo1/private/courier_payout').update({ paid: { at: serverTimestamp() } }));
+    await assertFails(user.doc('orders/smo1/private/courier_payout').set({ amount: 1 }));
+    await assertFails(adm.doc('orders/smo2/private/courier_payout').set({ amount: 1 }));
+  });
+
   await testEnv.cleanup();
   const passed = results.filter(Boolean).length;
   console.log(`\n${passed}/${results.length} passed`);

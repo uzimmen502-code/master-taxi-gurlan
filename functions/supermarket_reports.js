@@ -12,7 +12,7 @@
  * B) smDailyStats (ҳар куни 00:30 Asia/Tashkent) → `supermarket_stats/{YYYY-MM-DD}` (кечаги кун, тўлиқ қайта
  *    ёзиш — идемпотент). Кун асоси — `slot.date` (етказиш куни; PROPOSED). adminSupermarketStats({from,to,backfill})
  *    — ≤92 кун; backfill:true — етишмаган кунни (≤7 та) ҳисоблаб ёзади (фақат admin/superadmin, audit).
- *    Курьер тўлови (эга 2026-11-26): етказилган буюртмалардаги smCourierPayout.amount йиғиндиси, тўланган/тўланмаган;
+ *    Курьер тўлови (эга 2026-11-26): етказилганларнинг orders/{id}/private/courier_payout.amount йиғиндиси, тўланган/тўланмаган;
  *    netLogistics = етказилганлар deliveryFee − тўлов (нусхаси йўқ буюртма бўлса null + courierPayoutPartial).
  *
  * ПУЛ — бутун сўм; миқдор — милли-бирлик бутун сонида йиғилади (supermarket.js toMilli).
@@ -409,7 +409,9 @@ function attachSupermarketReports(exportsObj, deps) {
 
   /** Бир кунни ҳисоблаш (ёзмайди). */
   async function computeDay(date) {
-    const { orders, truncated } = await ordersForDate(date);
+    const { orders: raw, truncated } = await ordersForDate(date);
+    // Курьер тўлови — фақат етказилганлар учун private ҳужжат ўқилади (37-банд).
+    const orders = await attachPayouts(raw, (o) => isDelivered(o) && !isCancelled(o));
     const { stats, customers } = aggregateDailyStats(orders);
     const rep = await countRepeat(customers, date);
     return { date, dateBasis: 'slot.date', schema: STATS_SCHEMA, ...stats, ...rep, truncated };
@@ -490,10 +492,24 @@ function attachSupermarketReports(exportsObj, deps) {
   // Тўлов канали — админ курьер КАРТАСИГА тизимдан ТАШҚАРИДА қўлда ўтказади. Тизим пул юрмайди, карта
   // маълумоти САҚЛАНМАЙДИ. Курьер — orders.courierId (courierCreateRoute / етказиш callable'лари ёзади).
 
+  // Курьер тўлови нусхаси ва «тўланди» белгиси — orders/{id}/private/courier_payout (мижоз ўқимайди, 14-банд).
+  const payoutRef = (orderRef) => orderRef.collection('private').doc('courier_payout');
+  /** Хотирада smCourierPayout / smCourierPaid сифатида бириктиради (тоза агрегациялар ўзгармайди). */
+  async function attachPayouts(orders, need = () => true) {
+    const list = orders.filter((o) => o.__id && need(o));
+    for (let i = 0; i < list.length; i += 100) {
+      const part = list.slice(i, i + 100);
+      const snaps = await db.getAll(...part.map((o) => payoutRef(db.collection(ORDERS).doc(o.__id))));
+      snaps.forEach((s, j) => { Object.assign(part[j], withPayout({}, s)); });
+    }
+    return orders;
+  }
+
   async function deliveredInRange(from, to) {
-    const { orders, truncated } = await pagedOrders(db.collection(ORDERS).where('subtype', '==', 'supermarket')
+    const { orders: raw, truncated } = await pagedOrders(db.collection(ORDERS).where('subtype', '==', 'supermarket')
       .where('slot.date', '>=', from).where('slot.date', '<=', to), 'slot.date');
-    return { orders: orders.filter((o) => isDelivered(o) && !isCancelled(o)), truncated };
+    const orders = await attachPayouts(raw.filter((o) => isDelivered(o) && !isCancelled(o)));
+    return { orders, truncated };
   }
 
   async function courierNames(ids) {
@@ -551,16 +567,18 @@ function attachSupermarketReports(exportsObj, deps) {
         const prev = await t.get(idemRef);
         if (prev.exists) return { ...(prev.data().result || {}), duplicate: true };
         const refs = ids.map((id) => db.collection(ORDERS).doc(id));
+        const pRefs = refs.map(payoutRef);
         const snaps = await Promise.all(refs.map((r) => t.get(r)));
+        const pSnaps = await Promise.all(pRefs.map((r) => t.get(r)));
         let total = 0;
         snaps.forEach((s, i) => {
-          const od = s.exists ? (s.data() || {}) : null;
+          const od = s.exists ? withPayout(s.data() || {}, pSnaps[i]) : null;
           const problem = markPaidProblem(od, courierId);
           if (problem) throw fail('failed-precondition', problem, { orderId: ids[i] });
           total += od.smCourierPayout.amount;
         });
         const paid = { at: FV.serverTimestamp(), by: actor, note, batchId: idemRef.id };
-        refs.forEach((r) => t.update(r, { smCourierPaid: paid }));
+        pRefs.forEach((r) => t.update(r, { paid }));
         t.set(db.collection(ADMIN_AUDIT).doc(), {
           kind: 'sm_courier_paid', actor, target: `courier/${courierId}`, courierId, orderIds: ids, total, note,
           channel: 'manual_card_transfer_outside_system', at: FV.serverTimestamp(),
@@ -587,12 +605,14 @@ function attachSupermarketReports(exportsObj, deps) {
     const reason = typeof d.reason === 'string' ? d.reason.trim().slice(0, 300) : '';
     if (!ORDER_ID_RE.test(orderId) || !reason) throw fail('invalid-argument', 'PAYOUT_REQUEST_INVALID');
     const ref = db.collection(ORDERS).doc(orderId);
+    const pRef = payoutRef(ref);
     const out = await db.runTransaction(async (t) => {
       const s = await t.get(ref);
-      const od = s.exists ? (s.data() || {}) : null;
+      const ps = await t.get(pRef);
+      const od = s.exists ? withPayout(s.data() || {}, ps) : null;
       if (!od || od.subtype !== 'supermarket') throw fail('failed-precondition', 'ORDER_NOT_SUPERMARKET', { orderId });
       if (!od.smCourierPaid) return { ok: true, changed: false };
-      t.update(ref, { smCourierPaid: FV.delete() });
+      t.update(pRef, { paid: FV.delete() });
       t.set(db.collection(ADMIN_AUDIT).doc(), {
         kind: 'sm_courier_paid_undo', actor, target: `${ORDERS}/${orderId}`, courierId: String(od.courierId || ''),
         before: od.smCourierPaid, amount: od.smCourierPayout ? od.smCourierPayout.amount : null, reason, at: FV.serverTimestamp(),
@@ -604,6 +624,17 @@ function attachSupermarketReports(exportsObj, deps) {
   });
 
   return { runDailyStats, computeDay, writeDay };
+}
+
+/** private/courier_payout снапшотини буюртма объектига (хотирада) қўшади. */
+function withPayout(od, snap) {
+  const out = od;
+  if (snap && snap.exists) {
+    const { paid, orderId, createdAt, ...cp } = snap.data() || {};
+    out.smCourierPayout = cp;
+    out.smCourierPaid = paid || null;
+  }
+  return out;
 }
 
 const MARK_MAX = 200;
@@ -656,7 +687,7 @@ function groupCourierPayouts(orders) {
 
 module.exports = {
   attachSupermarketReports,
-  groupCourierPayouts, markPaidProblem, canonPhone,
+  groupCourierPayouts, markPaidProblem, canonPhone, withPayout,
   aggregateProcurement, reservedByOffer, RESERVING_STATUSES, aggregateDailyStats, summarizeDays, procurementEligible, isDelivered, lineQtyMilli,
   validDateKey, addDays, daysBetween, ORIGINS, REFUND_BUCKET, STATS, STATS_SCHEMA, MAX_RANGE_DAYS, MAX_BACKFILL, messagesOf,
 };

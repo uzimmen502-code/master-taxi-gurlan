@@ -1031,6 +1031,9 @@ function attachRestaurantOrders(exportsObj, deps) {
         const m = s.data() || {};
         const stopped = m.stopUntil && typeof m.stopUntil.toMillis === 'function' && m.stopUntil.toMillis() > at.getTime();
         if (m.available === false || stopped) throw fail('failed-precondition', 'MENU_ITEM_UNAVAILABLE', { itemId: s.id });
+        // Taom darajasidagi oldindan buyurtma (ega 2026-11-27): preorderable / preorderLeadDays (restaurant_preorder.js).
+        const pre = preorder.dishPreorderProblem(m, at.getTime(), scheduledFor ? scheduledFor.getTime() : null);
+        if (pre) throw fail('failed-precondition', pre.code, { itemId: s.id, ...(pre.leadDays != null ? { leadDays: pre.leadDays } : {}) });
         // Faqat HAQIQIY butun son: `'5000'` satri ham rad (menyuni restoran
         // yozadi — klient ma'lumoti, 18-qoida; qoida ham `int` talab qiladi).
         const price = typeof m.price === 'number' ? m.price : Number.NaN;

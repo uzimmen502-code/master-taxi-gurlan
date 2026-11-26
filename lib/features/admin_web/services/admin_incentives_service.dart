@@ -34,8 +34,14 @@ class AdminIncentivesService {
 const kRelativesBonusProgramId = 'relatives_birthdays';
 
 /// Умумий рағбат экранида таҳрирлаб бўлмайдиган дастур (ЯГОНА ёзиш йўли — `adminUpsertRelativesBonusProgram`).
+/// Оила бонуслари (эга 2026-11-28): spouse_link / relative_link — ЯГОНА ёзиш йўли dminUpsertFamilyBonusProgram.
+const kFamilyBonusProgramIds = ['spouse_link', 'relative_link'];
+
 bool incentiveProgramLocked(String id, Map<String, dynamic> data) =>
-    id == kRelativesBonusProgramId || data['kind'] == kRelativesBonusProgramId;
+    id == kRelativesBonusProgramId ||
+    data['kind'] == kRelativesBonusProgramId ||
+    kFamilyBonusProgramIds.contains(id) ||
+    kFamilyBonusProgramIds.contains(data['kind']);
 
 /// Сервер хато кодлари → админ учун тушунарли матн (админ панели кирилл, конвенция бўйича).
 String incentiveAdminError(Object e) {

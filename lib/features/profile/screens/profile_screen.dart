@@ -1,3 +1,4 @@
+import '../../relatives/widgets/family_prompt.dart' show FamilyLinksEntryTile;
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -325,6 +326,8 @@ class _ProfileViewState extends State<_ProfileView> {
                 ),
                 // «Байрам эслатмалари» (эга 2026-11-26) — ўчириб қўйиш мумкин.
                 const HolidayRemindersToggle(),
+                // Оила боғланиши (эга 2026-11-28): турмуш ўртоғи ва қариндошлар — ўзаро тасдиқ.
+                const FamilyLinksEntryTile(),
                 // «Чиқиш» қатори бу ерда йўқ: у ҳедернинг ўнг юқори бурчагидаги
                 // ихчам стрелкага кўчди (эга, 2026-10-24).
               ],

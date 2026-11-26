@@ -26,6 +26,8 @@ import '../inbox/inbox_read_store.dart';
 import '../inbox/inbox_tile.dart';
 import '../inbox/news_detail_screen.dart';
 import '../inbox_hide_keys.dart';
+import '../../relatives/screens/family_links_screen.dart';
+import '../../relatives/widgets/family_prompt.dart' show familyRouteOf;
 import 'dialog_news_detail_screen.dart';
 import 'order_news_detail_screen.dart';
 
@@ -241,6 +243,17 @@ class _NewsHubScreenState extends State<NewsHubScreen> {
       return;
     }
     // «Байрам саватчаси» хабарлари (сервер 5eb77906) — push билан бир хил йўл.
+    // Оила боғланиши хабарлари (эга 2026-11-28) — push билан бир хил.
+    final fp = e.payload;
+    final family = familyRouteOf(fp is NewsItem ? fp.source : '');
+    if (family != null) {
+      if (family == 'links') {
+        await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const FamilyLinksScreen()));
+      } else {
+        await openSupermarketWith(Navigator.of(context));
+      }
+      return;
+    }
     final holiday = holidayInboxTarget(e.payload);
     if (holiday != null) {
       await PushNavigation.openHolidayTarget(Navigator.of(context), holiday);

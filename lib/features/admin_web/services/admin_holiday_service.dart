@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
 import '../../supermarket/domain/sm_holiday.dart';
-import 'admin_incentives_service.dart' show kRelativesBonusProgramId;
+import 'admin_incentives_service.dart' show kFamilyBonusProgramIds;
 
 /// «Байрам саватчаси» админ манбаи (сервер 5eb77906, `functions/holiday.js`). Ўқиш — Firestore (rules: админ
 /// ҳаммасини ўқийди, `stage: off` ҳам); ёзиш — ФАҚАТ callable орқали (admin_audit, 41-банд):
@@ -11,10 +11,11 @@ import 'admin_incentives_service.dart' show kRelativesBonusProgramId;
 abstract class AdminHolidayApi {
   Future<List<HolidayOccasion>> loadOccasions();
   Future<List<HolidayBasket>> loadBaskets();
-  Future<RelativesBonusProgram?> loadBonusProgram();
+  /// Оила бонуслари (эга 2026-11-28): dminGetFamilyBonusPrograms → {spouse_link, relative_link} (йўқ — null).
+  Future<Map<String, FamilyBonusProgram?>> loadFamilyPrograms();
   Future<void> saveOccasion(HolidayOccasion o, {String reason = ''});
   Future<void> saveBasket(HolidayBasket b, {String reason = ''});
-  Future<void> saveBonusProgram(RelativesBonusProgram p, {String reason = ''});
+  Future<void> saveFamilyProgram(String programId, FamilyBonusProgram p, {String reason = ''});
 }
 
 class FirebaseAdminHolidayApi implements AdminHolidayApi {
@@ -40,9 +41,13 @@ class FirebaseAdminHolidayApi implements AdminHolidayApi {
   }
 
   @override
-  Future<RelativesBonusProgram?> loadBonusProgram() async {
-    final d = await _db.collection('incentive_programs').doc(kRelativesBonusProgramId).get();
-    return d.exists ? RelativesBonusProgram.fromMap(d.data()!) : null;
+  Future<Map<String, FamilyBonusProgram?>> loadFamilyPrograms() async {
+    final r = (await _fns.httpsCallable('adminGetFamilyBonusPrograms').call<Object?>(const {})).data;
+    final m = r is Map && r['programs'] is Map ? r['programs'] as Map : const {};
+    return {
+      for (final id in kFamilyBonusProgramIds)
+        id: m[id] is Map ? FamilyBonusProgram.fromMap(Map<String, dynamic>.from(m[id] as Map)) : null,
+    };
   }
 
   Future<void> _call(String name, Map<String, dynamic> data) => _fns.httpsCallable(name).call<Object?>(data);
@@ -56,8 +61,8 @@ class FirebaseAdminHolidayApi implements AdminHolidayApi {
       _call('adminUpsertHolidayBasket', {'basket': b.toAdminMap(), if (reason.trim().isNotEmpty) 'reason': reason.trim()});
 
   @override
-  Future<void> saveBonusProgram(RelativesBonusProgram p, {String reason = ''}) =>
-      _call('adminUpsertRelativesBonusProgram', {'program': p.toMap(), if (reason.trim().isNotEmpty) 'reason': reason.trim()});
+  Future<void> saveFamilyProgram(String programId, FamilyBonusProgram p, {String reason = ''}) => _call(
+      'adminUpsertFamilyBonusProgram', {'programId': programId, 'program': p.toMap(programId), if (reason.trim().isNotEmpty) 'reason': reason.trim()});
 }
 
 /// `incentive_programs/relatives_birthdays` — сервер `BONUS_KEYS` (бутун сўм).
@@ -199,3 +204,95 @@ const kHolidayStageLabels = <String, String>{
 };
 
 const kHolidayTierLabels = <String, String>{'simple': 'Оддий', 'medium': 'Ўрта', 'large': 'Катта'};
+
+/// Оила бонус дастури (сервер `family_links.js` PROGRAM_KEYS; бутун сўм). Чегаралар — фақат `relative_link`.
+class FamilyBonusProgram {
+  const FamilyBonusProgram({
+    this.title = const {},
+    this.stage = 'off',
+    this.internalPhones = const [],
+    this.pilotDistrictIds = const [],
+    this.amount = 0,
+    this.minOrderAmount = 0,
+    this.maxOrderSharePct = 100,
+    this.validityDays = 30,
+    this.budgetTotal = 0,
+    this.maxParents = 2,
+    this.maxSiblings = 15,
+    this.grantedAmount = 0,
+    this.grantedCount = 0,
+  });
+
+  /// Сукут (PROPOSED/эга): турмуш ўртоғи 10 000, қариндош 5 000; ота-она ≤2, ака-ука/опа-сингил ≤15; OFF.
+  static FamilyBonusProgram defaults(String programId) => programId == 'spouse_link'
+      ? const FamilyBonusProgram(title: {'uz_Cyrl': 'Турмуш ўртоғи бонуси', 'uz_Latn': 'Turmuş örtoği bonusi', 'ru': 'Бонус за супруга'}, amount: 10000, budgetTotal: 10000000)
+      : const FamilyBonusProgram(title: {'uz_Cyrl': 'Қариндошлар бонуси', 'uz_Latn': 'Qarindoşlar bonusi', 'ru': 'Бонус за родственников'}, amount: 5000, budgetTotal: 10000000);
+
+  final Map<String, String> title;
+  final String stage;
+  final List<String> internalPhones;
+  final List<String> pilotDistrictIds;
+  final int amount;
+  final int minOrderAmount;
+  final int maxOrderSharePct;
+  final int validityDays;
+  final int budgetTotal;
+  final int maxParents;
+  final int maxSiblings;
+  final int grantedAmount;
+  final int grantedCount;
+
+  factory FamilyBonusProgram.fromMap(Map<String, dynamic> d) {
+    int i(Object? v, int dflt) => v is num ? v.toInt() : dflt;
+    List<String> l(Object? v) => [if (v is List) for (final x in v) '$x'];
+    final t = d['title'] is Map ? d['title'] as Map : const {};
+    final c = d['counters'] is Map ? d['counters'] as Map : const {};
+    return FamilyBonusProgram(
+      title: {for (final e in t.entries) '${e.key}': '${e.value}'},
+      stage: kHolidayStages.contains(d['stage']) ? d['stage'] as String : 'off',
+      internalPhones: l(d['internalPhones']),
+      pilotDistrictIds: l(d['pilotDistrictIds']),
+      amount: i(d['amount'], 0),
+      minOrderAmount: i(d['minOrderAmount'], 0),
+      maxOrderSharePct: i(d['maxOrderSharePct'], 100),
+      validityDays: i(d['validityDays'], 30),
+      budgetTotal: i(d['budgetTotal'], 0),
+      maxParents: i(d['maxParents'], 2),
+      maxSiblings: i(d['maxSiblings'], 15),
+      grantedAmount: i(c['grantedAmount'], 0),
+      grantedCount: i(c['grantedCount'], 0),
+    );
+  }
+
+  Map<String, Object> toMap(String programId) => {
+        'title': title,
+        'stage': stage,
+        'internalPhones': internalPhones,
+        'pilotDistrictIds': pilotDistrictIds,
+        'amount': amount,
+        'minOrderAmount': minOrderAmount,
+        'maxOrderSharePct': maxOrderSharePct,
+        'validityDays': validityDays,
+        'budgetTotal': budgetTotal,
+        if (programId == 'relative_link') 'maxParents': maxParents,
+        if (programId == 'relative_link') 'maxSiblings': maxSiblings,
+      };
+}
+
+/// Оила бонус формаси хатолари (сервер `validateFamilyProgram` нусхаси).
+List<String> familyBonusProblems(String programId, FamilyBonusProgram p) => [
+      for (final l in const ['uz_Cyrl', 'uz_Latn', 'ru'])
+        if ((p.title[l] ?? '').trim().isEmpty || (p.title[l] ?? '').trim().length > 80) 'Номи ($l) 1–80 белги бўлсин.',
+      if (!kHolidayStages.contains(p.stage)) 'Босқич нотўғри.',
+      if (p.internalPhones.length > 50 || !p.internalPhones.every((x) => RegExp(r'^998\d{9}$').hasMatch(x)))
+        'Ички синов рақамлари: 998XXXXXXXXX, 50 тагача.',
+      if (p.pilotDistrictIds.length > 50 || !p.pilotDistrictIds.every((x) => RegExp(r'^[a-z0-9_-]{2,40}$').hasMatch(x)))
+        'Пилот туман ID лари нотўғри.',
+      if (p.amount < 1 || p.amount > 10000000) 'Бонус — 1 дан 10 000 000 сўмгача.',
+      if (p.minOrderAmount < 0 || p.minOrderAmount > 100000000) 'Энг кам буюртма нотўғри.',
+      if (p.maxOrderSharePct < 1 || p.maxOrderSharePct > 100) 'Буюртмадаги улуш 1–100%.',
+      if (p.validityDays < 1 || p.validityDays > 365) 'Муддат 1–365 кун.',
+      if (p.budgetTotal < (p.amount < 1 ? 1 : p.amount) || p.budgetTotal > 100000000000) 'Умумий бюджет камида битта бонус миқдорича.',
+      if (programId == 'relative_link' && (p.maxParents < 0 || p.maxParents > 10)) 'Ота-она чегараси 0–10.',
+      if (programId == 'relative_link' && (p.maxSiblings < 0 || p.maxSiblings > 50)) 'Ака-ука/опа-сингил чегараси 0–50.',
+    ];

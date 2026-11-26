@@ -128,6 +128,7 @@ import 'widgets/service_spotlight_item.dart';
 import '../restaurants/domain/restaurants_access.dart';
 import '../markets/open_market.dart';
 import '../supermarket/screens/supermarket_home_screen.dart' show openSupermarket;
+import '../relatives/widgets/family_prompt.dart' show maybeShowFamilyPrompt;
 import '../supermarket/data/sm_basket_birthdays.dart' show loadSmBasketBirthdays;
 import '../supermarket/domain/sm_basket.dart' show smBasketBirthdayMode, smBasketImage, smBasketTitleKey;
 import '../supermarket/domain/sm_holiday.dart' show smTashkentDate;
@@ -262,6 +263,8 @@ class _HomeViewState extends State<_HomeView> {
       unawaited(_refreshShopPresence());
       unawaited(_resolveRestaurantsCard());
       unawaited(_resolveHolidayCards());
+      // Эга 2026-11-28 (I): турмуш ўртоғи / қариндошлар таклифи — бир марта, дастур фаол бўлса.
+      unawaited(maybeShowFamilyPrompt(context));
     });
   }
 

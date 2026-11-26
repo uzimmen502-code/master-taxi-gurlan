@@ -6,6 +6,7 @@ import '../../supermarket/domain/sm_offer.dart';
 import '../../supermarket/domain/sm_qty.dart';
 import '../../supermarket/domain/sm_taxonomy.dart';
 import '../services/admin_holiday_service.dart';
+import '../services/admin_incentives_service.dart' show kFamilyBonusProgramIds;
 import '../services/admin_supermarket_service.dart';
 
 /// Админ: «Байрам саватчаси» (эга 2026-11-26) — байрамлар (Ҳайит — ой тақвими саналари рўйхати), тайёр
@@ -26,7 +27,7 @@ class _HolidayAdminScreenState extends State<HolidayAdminScreen> {
   late final AdminHolidayApi _api = widget.api ?? FirebaseAdminHolidayApi();
   List<HolidayOccasion>? _occasions;
   List<HolidayBasket> _baskets = const [];
-  RelativesBonusProgram? _bonus;
+  Map<String, FamilyBonusProgram?> _family = const {};
   SmTaxonomy _tx = SmTaxonomy.empty;
   List<SmOffer> _offers = const [];
   String? _error;
@@ -42,7 +43,7 @@ class _HolidayAdminScreenState extends State<HolidayAdminScreen> {
     try {
       final occ = await _api.loadOccasions();
       final b = await _api.loadBaskets();
-      final bonus = await _api.loadBonusProgram();
+      final family = await _api.loadFamilyPrograms();
       final sm = widget.loadTaxonomy == null ? AdminSupermarketService() : null;
       final tx = await (widget.loadTaxonomy?.call() ?? sm!.loadTaxonomyRaw().then(SmTaxonomy.fromMap));
       final offers = await (widget.loadOffers?.call(tx) ?? (sm ?? AdminSupermarketService()).loadOffers(tx));
@@ -50,7 +51,7 @@ class _HolidayAdminScreenState extends State<HolidayAdminScreen> {
       setState(() {
         _occasions = occ;
         _baskets = b;
-        _bonus = bonus;
+        _family = family;
         _tx = tx;
         _offers = offers;
       });
@@ -72,8 +73,9 @@ class _HolidayAdminScreenState extends State<HolidayAdminScreen> {
     if (saved == true) await _load();
   }
 
-  Future<void> _editBonus() async {
-    final saved = await showDialog<bool>(context: context, builder: (_) => _BonusDialog(api: _api, initial: _bonus));
+  Future<void> _editFamily(String programId) async {
+    final saved = await showDialog<bool>(
+        context: context, builder: (_) => _FamilyBonusDialog(api: _api, programId: programId, initial: _family[programId]));
     if (saved == true) await _load();
   }
 
@@ -84,7 +86,7 @@ class _HolidayAdminScreenState extends State<HolidayAdminScreen> {
       length: 3,
       child: Column(
         children: [
-          const TabBar(tabs: [Tab(text: 'Байрамлар'), Tab(text: 'Саватчалар'), Tab(text: 'Яқинлар бонуси')]),
+          const TabBar(tabs: [Tab(text: 'Байрамлар'), Tab(text: 'Саватчалар'), Tab(text: 'Оила бонуслари')]),
           Expanded(
             child: _error != null
                 ? Center(
@@ -153,29 +155,33 @@ class _HolidayAdminScreenState extends State<HolidayAdminScreen> {
                         ]),
                         ListView(padding: const EdgeInsets.all(16), children: [
                           const Text(
-                            'Камида N та қариндошнинг исми ва туғилган кунини киритган фойдаланувчига бир марта бонус. '
-                            'Бонус фақат Супермаркетда, энг кам буюртмадан ошганда ишлатилади; нақдга ечилмайди.',
+                            'Эга 2026-11-28: бонус фақат иккинчи томон (AVA фойдаланувчиси) ТАСДИҚЛАГАНДА — ҳар икки томонга. '
+                            'Турмуш ўртоғи — шахсга умрбод бир марта; қариндош (ота, она, ака-ука, опа-сингил) — ҳар тасдиқланган '
+                            'жуфтликда бир марта. Ажратиш бонусни қайтариб олмайди. Фақат Супермаркет (байрам саватчаси ҳам), нақдга ечилмайди. '
+                            'Эски «3 қариндош → бонус» ёпилган.',
                             style: TextStyle(color: Colors.black54),
                           ),
                           const SizedBox(height: 12),
-                          Card(
-                            child: ListTile(
-                              key: const ValueKey('hb_admin_bonus'),
-                              title: Text(_bonus == null ? 'Дастур ҳали яратилмаган' : (_bonus!.title['uz_Cyrl'] ?? 'Яқинлар бонуси')),
-                              subtitle: _bonus == null
-                                  ? null
-                                  : Text([
-                                      kHolidayStageLabels[_bonus!.stage] ?? _bonus!.stage,
-                                      '${_bonus!.amount} сўм',
-                                      'камида ${_bonus!.minRelatives} қариндош',
-                                      'буюртма ≥ ${_bonus!.minOrderAmount} сўм',
-                                      'берилган: ${_bonus!.grantedCount} та / ${_bonus!.grantedAmount} сўм',
-                                      'бюджет: ${_bonus!.budgetTotal} сўм',
-                                    ].join(' · ')),
-                              trailing: const Icon(Icons.edit_outlined),
-                              onTap: _editBonus,
+                          for (final id in kFamilyBonusProgramIds)
+                            Card(
+                              child: ListTile(
+                                key: ValueKey('hb_admin_family_$id'),
+                                title: Text(id == 'spouse_link' ? 'Турмуш ўртоғи (spouse_link)' : 'Қариндошлар (relative_link)'),
+                                subtitle: Text(_family[id] == null
+                                    ? 'Дастур ҳали яратилмаган (OFF)'
+                                    : [
+                                        kHolidayStageLabels[_family[id]!.stage] ?? _family[id]!.stage,
+                                        '${_family[id]!.amount} сўм',
+                                        '${_family[id]!.validityDays} кун',
+                                        'буюртма ≥ ${_family[id]!.minOrderAmount} сўм',
+                                        if (id == 'relative_link') 'ота-она ≤ ${_family[id]!.maxParents}, ака-ука/опа-сингил ≤ ${_family[id]!.maxSiblings}',
+                                        'берилган: ${_family[id]!.grantedCount} та / ${_family[id]!.grantedAmount} сўм',
+                                        'бюджет: ${_family[id]!.budgetTotal} сўм',
+                                      ].join(' · ')),
+                                trailing: const Icon(Icons.edit_outlined),
+                                onTap: () => _editFamily(id),
+                              ),
                             ),
-                          ),
                         ]),
                       ]),
           ),
@@ -794,27 +800,29 @@ class _BasketDialogState extends State<_BasketDialog> {
       );
 }
 
-class _BonusDialog extends StatefulWidget {
-  const _BonusDialog({required this.api, this.initial});
+class _FamilyBonusDialog extends StatefulWidget {
+  const _FamilyBonusDialog({required this.api, required this.programId, this.initial});
 
   final AdminHolidayApi api;
-  final RelativesBonusProgram? initial;
+  final String programId;
+  final FamilyBonusProgram? initial;
 
   @override
-  State<_BonusDialog> createState() => _BonusDialogState();
+  State<_FamilyBonusDialog> createState() => _FamilyBonusDialogState();
 }
 
-class _BonusDialogState extends State<_BonusDialog> {
-  late final RelativesBonusProgram _p = widget.initial ?? const RelativesBonusProgram();
-  late final _cyr = TextEditingController(text: _p.title['uz_Cyrl'] ?? 'Яқинлар бонуси');
-  late final _lat = TextEditingController(text: _p.title['uz_Latn'] ?? 'Yaqinlar bonusi');
-  late final _ru = TextEditingController(text: _p.title['ru'] ?? 'Бонус за близких');
+class _FamilyBonusDialogState extends State<_FamilyBonusDialog> {
+  late final FamilyBonusProgram _p = widget.initial ?? FamilyBonusProgram.defaults(widget.programId);
+  late final _cyr = TextEditingController(text: _p.title['uz_Cyrl'] ?? '');
+  late final _lat = TextEditingController(text: _p.title['uz_Latn'] ?? '');
+  late final _ru = TextEditingController(text: _p.title['ru'] ?? '');
   late final _amount = TextEditingController(text: _p.amount > 0 ? '${_p.amount}' : '');
-  late final _minRel = TextEditingController(text: '${_p.minRelatives}');
   late final _minOrder = TextEditingController(text: '${_p.minOrderAmount}');
   late final _share = TextEditingController(text: '${_p.maxOrderSharePct}');
   late final _validity = TextEditingController(text: '${_p.validityDays}');
   late final _budget = TextEditingController(text: _p.budgetTotal > 0 ? '${_p.budgetTotal}' : '');
+  late final _parents = TextEditingController(text: '${_p.maxParents}');
+  late final _siblings = TextEditingController(text: '${_p.maxSiblings}');
   late final _internal = TextEditingController(text: _p.internalPhones.join(', '));
   late final _pilot = TextEditingController(text: _p.pilotDistrictIds.join(', '));
   final _reason = TextEditingController();
@@ -822,28 +830,30 @@ class _BonusDialogState extends State<_BonusDialog> {
   List<String> _errors = const [];
   bool _saving = false;
 
+  bool get _rel => widget.programId == 'relative_link';
   int _int(TextEditingController c) => int.tryParse(c.text.replaceAll(RegExp(r'[\s  ]'), '')) ?? -1;
   List<String> _list(TextEditingController c) => [for (final s in c.text.split(RegExp(r'[,\s]+'))) if (s.trim().isNotEmpty) s.trim()];
 
   Future<void> _save() async {
-    final p = RelativesBonusProgram(
+    final p = FamilyBonusProgram(
       title: {'uz_Cyrl': _cyr.text.trim(), 'uz_Latn': _lat.text.trim(), 'ru': _ru.text.trim()},
       stage: _stage,
       internalPhones: _list(_internal),
       pilotDistrictIds: _list(_pilot),
       amount: _int(_amount),
-      minRelatives: _int(_minRel),
       minOrderAmount: _int(_minOrder),
       maxOrderSharePct: _int(_share),
       validityDays: _int(_validity),
       budgetTotal: _int(_budget),
+      maxParents: _rel ? _int(_parents) : 2,
+      maxSiblings: _rel ? _int(_siblings) : 15,
     );
-    final errs = relativesBonusProblems(p);
+    final errs = familyBonusProblems(widget.programId, p);
     setState(() => _errors = errs);
     if (errs.isNotEmpty) return;
     setState(() => _saving = true);
     try {
-      await widget.api.saveBonusProgram(p, reason: _reason.text);
+      await widget.api.saveFamilyProgram(widget.programId, p, reason: _reason.text);
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) setState(() => _errors = ['Сақлаб бўлмади: $e']);
@@ -852,7 +862,8 @@ class _BonusDialogState extends State<_BonusDialog> {
     }
   }
 
-  Widget _f(TextEditingController c, String label, {bool digits = true}) => TextField(
+  Widget _f(TextEditingController c, String label, {bool digits = true, Key? key}) => TextField(
+        key: key,
         controller: c,
         keyboardType: digits ? TextInputType.number : TextInputType.text,
         inputFormatters: digits ? [FilteringTextInputFormatter.digitsOnly] : null,
@@ -861,26 +872,29 @@ class _BonusDialogState extends State<_BonusDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-        title: const Text('«Яқинлар туғилган куни» бонуси'),
+        title: Text(_rel ? '«Қариндошлар» бонуси (ўзаро тасдиқ)' : '«Турмуш ўртоғи» бонуси (ўзаро тасдиқ)'),
         content: SizedBox(
           width: 560,
           child: SingleChildScrollView(
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               _names(_cyr, _lat, _ru),
               DropdownButtonFormField<String>(
-                key: const ValueKey('hb_admin_bonus_stage'),
+                key: const ValueKey('hb_admin_family_stage'),
                 initialValue: _stage,
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Босқич'),
                 items: [for (final s in kHolidayStages) DropdownMenuItem(value: s, child: Text(kHolidayStageLabels[s]!))],
                 onChanged: (v) => setState(() => _stage = v ?? 'off'),
               ),
-              _f(_amount, 'Бонус миқдори (сўм)'),
-              _f(_minRel, 'Камида неча қариндош (исм + туғилган кун)'),
+              _f(_amount, _rel ? 'Ҳар бир томонга, ҳар жуфтлик учун (сўм)' : 'Ҳар бир томонга (сўм)', key: const ValueKey('hb_admin_family_amount')),
               _f(_minOrder, 'Энг кам буюртма (сўм, 0 — чекловсиз)'),
               _f(_share, 'Буюртмадаги улуш (%)'),
               _f(_validity, 'Амал қилиш муддати (кун, 1–365)'),
               _f(_budget, 'Умумий бюджет (сўм)'),
+              if (_rel) ...[
+                _f(_parents, 'Ота-она чегараси (сукут 2)', key: const ValueKey('hb_admin_family_parents')),
+                _f(_siblings, 'Ака-ука/опа-сингил чегараси (сукут 15)', key: const ValueKey('hb_admin_family_siblings')),
+              ],
               _f(_internal, 'Ички синов рақамлари (998…, вергул билан)', digits: false),
               _f(_pilot, 'Пилот туман ID лари (вергул билан)', digits: false),
               TextField(controller: _reason, decoration: const InputDecoration(labelText: 'Сабаб (журнал учун, ихтиёрий)')),
@@ -890,7 +904,7 @@ class _BonusDialogState extends State<_BonusDialog> {
         ),
         actions: [
           TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Бекор')),
-          FilledButton(key: const ValueKey('hb_admin_bonus_save'), onPressed: _saving ? null : _save, child: const Text('Сақлаш')),
+          FilledButton(key: const ValueKey('hb_admin_family_save'), onPressed: _saving ? null : _save, child: const Text('Сақлаш')),
         ],
       );
 }

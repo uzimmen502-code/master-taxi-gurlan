@@ -38,20 +38,20 @@ class _FakeAdminApi implements AdminHolidayApi {
     const HolidayOccasion(id: 'navruz', names: {'uz_Cyrl': 'Наврўз', 'uz_Latn': 'Navröz', 'ru': 'Навруз'}, ruleType: 'fixed', md: '03-21', stage: 'off'),
   ];
   final savedOccasions = <HolidayOccasion>[];
-  final savedBonus = <RelativesBonusProgram>[];
+  final savedFamily = <FamilyBonusProgram>[];
 
   @override
   Future<List<HolidayOccasion>> loadOccasions() async => occasions;
   @override
   Future<List<HolidayBasket>> loadBaskets() async => const [];
   @override
-  Future<RelativesBonusProgram?> loadBonusProgram() async => null;
+  Future<Map<String, FamilyBonusProgram?>> loadFamilyPrograms() async => const {};
   @override
   Future<void> saveOccasion(HolidayOccasion o, {String reason = ''}) async => savedOccasions.add(o);
   @override
   Future<void> saveBasket(HolidayBasket b, {String reason = ''}) async {}
   @override
-  Future<void> saveBonusProgram(RelativesBonusProgram p, {String reason = ''}) async => savedBonus.add(p);
+  Future<void> saveFamilyProgram(String programId, FamilyBonusProgram p, {String reason = ''}) async => savedFamily.add(p);
 }
 
 class _FakeRestRepo implements RestaurantsRepository {

@@ -21,7 +21,9 @@ import '../features/restaurants/merchant/restaurant_panel_screen.dart';
 import '../features/intercity_taxi/driver/intercity_driver_resume.dart';
 import '../features/intercity_taxi/driver/screens/intercity_driver_panel_screen.dart';
 import '../features/intercity_taxi/passenger/screens/intercity_taxi_screen.dart';
+import '../features/relatives/screens/family_links_screen.dart';
 import '../features/relatives/screens/relatives_screen.dart';
+import '../features/relatives/widgets/family_prompt.dart' show familyRouteOf;
 import '../features/dating/dating_telegram_bot.dart';
 import '../l10n/app_localizations.dart';
 import '../features/ads/screens/my_ads_screen.dart';
@@ -232,6 +234,17 @@ class PushNavigation {
     final holiday = holidayPushTarget(data);
     if (holiday != null) {
       await openHolidayTarget(nav, holiday);
+      return;
+    }
+
+    // Оила боғланиши (эга 2026-11-28): таклиф/тасдиқ → боғланишлар экрани (қабул/рад); бонус → супермаркет.
+    final family = familyRouteOf(type);
+    if (family == 'links') {
+      await nav.push(MaterialPageRoute<void>(builder: (_) => const FamilyLinksScreen()));
+      return;
+    }
+    if (family == 'supermarket') {
+      if (_moduleOpen(nav, 'supermarket')) await openSupermarketWith(nav);
       return;
     }
 

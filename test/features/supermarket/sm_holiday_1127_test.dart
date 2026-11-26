@@ -57,13 +57,13 @@ class _FakeAdminApi implements AdminHolidayApi {
   @override
   Future<List<HolidayBasket>> loadBaskets() async => const [];
   @override
-  Future<RelativesBonusProgram?> loadBonusProgram() async => null;
+  Future<Map<String, FamilyBonusProgram?>> loadFamilyPrograms() async => const {};
   @override
   Future<void> saveOccasion(HolidayOccasion o, {String reason = ''}) async => saved.add(o);
   @override
   Future<void> saveBasket(HolidayBasket b, {String reason = ''}) async {}
   @override
-  Future<void> saveBonusProgram(RelativesBonusProgram p, {String reason = ''}) async {}
+  Future<void> saveFamilyProgram(String programId, FamilyBonusProgram p, {String reason = ''}) async {}
 }
 
 const _qurbonRaw = {

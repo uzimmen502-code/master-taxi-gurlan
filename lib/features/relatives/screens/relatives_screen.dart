@@ -32,6 +32,7 @@ import '../../../core/theme/ava_tokens.dart';
 import '../../../core/service_config_holder.dart';
 import '../../supermarket/data/holiday_repository.dart';
 import '../../supermarket/screens/sm_holiday_screen.dart' show openHolidayBasket;
+import 'family_links_screen.dart';
 import '../utils/relative_birthdays.dart';
 import '../widgets/relative_upcoming_birthdays.dart';
 
@@ -361,6 +362,12 @@ class _RelativesScreenState extends State<RelativesScreen>
               userId: phone,
               onTap: () => showTreeLinkInvitesSheet(context, phone),
             ),
+          IconButton(
+            key: const ValueKey('rel_family_links'),
+            tooltip: context.tr('fam_title'),
+            icon: const Icon(Icons.family_restroom_rounded),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FamilyLinksScreen())),
+          ),
           IconButton(
             tooltip: context.tr('rel_tooltip_circles'),
             icon: const Icon(Icons.groups_outlined),

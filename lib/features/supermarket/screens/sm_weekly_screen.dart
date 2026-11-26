@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../data/sm_lists_repository.dart';
+import '../data/supermarket_repository.dart' show smOriginWeekly;
 import '../domain/sm_list.dart';
 import '../domain/sm_offer.dart';
 import '../domain/sm_qty.dart';
@@ -287,7 +288,7 @@ class _SmSavedListScreenState extends State<SmSavedListScreen> {
     try {
       final prices = await widget.memo.load(_list.id);
       if (!mounted) return;
-      final n = await smCompareAndAddToCart(context, controller: _c, items: _list.items, previousPrices: prices);
+      final n = await smCompareAndAddToCart(context, controller: _c, items: _list.items, previousPrices: prices, origin: smOriginWeekly);
       if (!mounted || n == 0) return;
       // Энди кўрилган нархлар — кейинги солиштириш учун асос.
       await widget.memo.save(_list.id, smPricesOf(_list.items, _c.offers));

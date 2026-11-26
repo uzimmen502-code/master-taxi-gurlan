@@ -149,6 +149,7 @@ class _SmCheckoutScreenState extends State<SmCheckoutScreen> {
       address: _address(),
       slotId: _slotId!,
       day: _day!,
+      origin: _c.cartOrigin,
     );
     try {
       final res = await _c.api.placeOrder(payload);

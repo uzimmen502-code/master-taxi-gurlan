@@ -1,5 +1,6 @@
 // «AVA Супермаркет» админ бўлими (1-босқич, эга 2026-11-20). Матнлар — Кирилл (админ конвенцияси).
-// Таблар: Таклифлар · Excel импорт (2-босқич) · Таксономия · Буюртмалар (тортиш, олиш, етишмовчилик) · Созламалар.
+// Таблар: Таклифлар · Excel импорт (2-босқич) · Таксономия · Буюртмалар (тортиш, олиш, етишмовчилик) · Созламалар ·
+// Харид режаси · Аналитика (3-босқич — фақат ҳисобот).
 
 import 'dart:convert';
 
@@ -11,8 +12,10 @@ import '../../supermarket/domain/sm_qty.dart';
 import '../../supermarket/domain/sm_taxonomy.dart';
 import '../services/admin_supermarket_service.dart';
 import 'supermarket_import_admin_tab.dart';
+import 'supermarket_reports_admin_tab.dart';
 
 export 'supermarket_import_admin_tab.dart';
+export 'supermarket_reports_admin_tab.dart';
 
 const _stageText = <String, String>{
   'off': 'OFF — ҳеч кимга ёпиқ',
@@ -39,7 +42,7 @@ class SupermarketAdminScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = service ?? AdminSupermarketService();
     return DefaultTabController(
-      length: 5,
+      length: 7,
       child: Column(
         children: [
           const TabBar(
@@ -50,6 +53,8 @@ class SupermarketAdminScreen extends StatelessWidget {
               Tab(text: 'Таксономия'),
               Tab(text: 'Буюртмалар'),
               Tab(text: 'Созламалар'),
+              Tab(text: 'Харид режаси'),
+              Tab(text: 'Аналитика'),
             ],
           ),
           Expanded(
@@ -59,6 +64,8 @@ class SupermarketAdminScreen extends StatelessWidget {
               SmTaxonomyAdminTab(service: s),
               SmOrdersAdminTab(service: s),
               SmSettingsAdminTab(service: s),
+              SmProcurementAdminTab(service: s),
+              SmAnalyticsAdminTab(service: s),
             ]),
           ),
         ],

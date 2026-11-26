@@ -15,6 +15,7 @@ Future<int> smCompareAndAddToCart(
   required SupermarketController controller,
   required List<SmListItem> items,
   Map<String, int> previousPrices = const {},
+  required String origin,
 }) async {
   final lines = smCompareItems(items,
       offers: controller.offers, offersByGroup: controller.offersByGroup, previousPrices: previousPrices);
@@ -24,7 +25,7 @@ Future<int> smCompareAndAddToCart(
   );
   if (selected == null || selected.isEmpty) return 0;
   final cartLines = smCompareToCartLines(lines, selected: selected);
-  controller.addLines(cartLines);
+  controller.addLines(cartLines, origin: origin);
   return cartLines.length;
 }
 

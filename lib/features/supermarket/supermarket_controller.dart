@@ -82,11 +82,27 @@ class SupermarketController extends ChangeNotifier {
 
   void _setCart(SmCart next) {
     cart = next;
+    if (next.isEmpty) _cartOrigin = smOriginCatalog;
     notifyListeners();
     _store.save(next);
   }
 
-  void addToCart(String productId, int qtyMilli) => _setCart(cart.add(productId, qtyMilli));
+  /// Буюртма манбаи (аналитика, `placeSupermarketOrder.origin`): 'catalog' | 'quick' | 'weekly' | 'reorder'.
+  /// Бўш саватга биринчи қўшилган манба; каталог саватига тезкор/ҳафталик/қайта буюртма қўшилса — шу манба
+  /// (PROPOSED). Сават бўшаса — 'catalog'. Фақат сессияда (қурилмага ёзилмайди).
+  String _cartOrigin = smOriginCatalog;
+  String get cartOrigin => _cartOrigin;
+
+  void _noteOrigin(String origin) {
+    if (!smOrigins.contains(origin)) return;
+    if (cart.isEmpty || (_cartOrigin == smOriginCatalog && origin != smOriginCatalog)) _cartOrigin = origin;
+  }
+
+  void addToCart(String productId, int qtyMilli, {String origin = smOriginCatalog}) {
+    _noteOrigin(origin);
+    _setCart(cart.add(productId, qtyMilli));
+  }
+
   void setQty(String productId, int qtyMilli) => _setCart(cart.setQty(productId, qtyMilli));
   void removeLine(String productId) => _setCart(cart.remove(productId));
   void replaceOffer(String oldId, String newId, int qtyMilli) => _setCart(cart.replaceOffer(oldId, newId, qtyMilli));
@@ -94,12 +110,15 @@ class SupermarketController extends ChangeNotifier {
 
   /// Бир неча қаторни БИТТА ёзувда саватга қўшиш (ҳафталик сават / қайта буюртма). ФАҚАТ сават —
   /// буюртма бермайди, сервер чақирилмайди.
-  void addLines(Iterable<SmCartLine> lines) {
+  void addLines(Iterable<SmCartLine> lines, {String origin = smOriginCatalog}) {
     var next = cart;
     for (final l in lines) {
       next = next.add(l.productId, l.qtyMilli);
     }
-    if (!identical(next, cart)) _setCart(next);
+    if (!identical(next, cart)) {
+      _noteOrigin(origin);
+      _setCart(next);
+    }
   }
 
   /// «Тезкор харид»: гуруҳ → охирги танланган таклиф (шу сессияда, қурилмага ёзилмайди).
@@ -111,7 +130,7 @@ class SupermarketController extends ChangeNotifier {
   /// Танланган таклифни бир қадам қўшади ва уни гуруҳ учун эслаб қолади.
   void quickAdd(SmOffer o, int qtyMilli) {
     quickPicks[o.groupId] = o.id;
-    addToCart(o.id, qtyMilli);
+    addToCart(o.id, qtyMilli, origin: smOriginQuick);
   }
 
   List<SmOffer> get crossSell =>

@@ -7,6 +7,7 @@ import '../../../models/order_model.dart';
 import '../../../models/order_news_group.dart';
 import '../../profile/screens/order_news_detail_screen.dart';
 import '../data/sm_lists_repository.dart';
+import '../data/supermarket_repository.dart' show smOriginReorder;
 import '../domain/sm_list.dart';
 import '../domain/sm_order_progress.dart';
 import '../supermarket_controller.dart';
@@ -61,7 +62,7 @@ class _SmOrderHistoryScreenState extends State<SmOrderHistoryScreen> {
 
   Future<void> _reorder(OrderModel o) async {
     final r = smReorderItems(smOrderLineRefs(o.items.map((i) => i.raw)));
-    final n = await smCompareAndAddToCart(context, controller: widget.controller, items: r.items, previousPrices: r.prices);
+    final n = await smCompareAndAddToCart(context, controller: widget.controller, items: r.items, previousPrices: r.prices, origin: smOriginReorder);
     if (!mounted || n == 0) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()

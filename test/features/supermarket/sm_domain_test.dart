@@ -228,7 +228,15 @@ void main() {
         'address': {'districtId': 'gurlan', 'phone': '+998901234567'},
         'slotId': 's1',
         'day': 'today',
+        'origin': 'catalog',
       });
+      final cart = SmCart.empty.add('a', 1000);
+      Map<String, dynamic> withOrigin(String o) =>
+          smOrderPayload(clientRequestId: 'r', cart: cart, address: const {}, slotId: 's', day: 'today', origin: o);
+      expect(withOrigin('weekly')['origin'], 'weekly');
+      expect(withOrigin('reorder')['origin'], 'reorder');
+      expect(withOrigin('quick')['origin'], 'quick');
+      expect(withOrigin('bogus')['origin'], 'catalog', reason: 'серверда рад бўлмасин — номаълум → catalog');
     });
     test('хато коди → дўстона калит', () {
       expect(smErrorKey(grpcCode: 'failed-precondition', details: {'code': 'INSUFFICIENT_BALANCE'}), 'sm_err_insufficient_funds');

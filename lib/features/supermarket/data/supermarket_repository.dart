@@ -186,6 +186,13 @@ class SmCartStore {
   }
 }
 
+/// Буюртма манбалари — сервер `ORDER_ORIGINS` (supermarket.js) билан бир хил рўйхат.
+const smOriginCatalog = 'catalog';
+const smOriginQuick = 'quick';
+const smOriginWeekly = 'weekly';
+const smOriginReorder = 'reorder';
+const smOrigins = [smOriginCatalog, smOriginQuick, smOriginWeekly, smOriginReorder];
+
 /// Буюртма тўлови — `placeSupermarketOrder` payload (шартнома). Миқдор серверга оддий сон (1.5).
 Map<String, dynamic> smOrderPayload({
   required String clientRequestId,
@@ -193,6 +200,7 @@ Map<String, dynamic> smOrderPayload({
   required Map<String, dynamic> address,
   required String slotId,
   required String day,
+  String origin = smOriginCatalog,
 }) =>
     {
       'clientRequestId': clientRequestId,
@@ -202,4 +210,5 @@ Map<String, dynamic> smOrderPayload({
       'address': address,
       'slotId': slotId,
       'day': day,
+      'origin': smOrigins.contains(origin) ? origin : smOriginCatalog,
     };

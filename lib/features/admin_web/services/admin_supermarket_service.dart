@@ -19,8 +19,10 @@ import 'package:cloud_functions/cloud_functions.dart';
 import '../../supermarket/domain/sm_offer.dart';
 import '../../supermarket/domain/sm_qty.dart';
 import '../../supermarket/domain/sm_taxonomy.dart';
+import 'admin_supermarket_reports.dart';
 
 export 'admin_business_orders_service.dart' show parseTesterPhones, invalidTesterPhones;
+export 'admin_supermarket_reports.dart';
 
 /// Сервер `STAGES` (42-банд).
 const kSmStages = <String>['off', 'internal', 'pilot', 'public'];
@@ -359,6 +361,18 @@ class AdminSupermarketService {
         {'batchId': batchId},
         timeout: const Duration(seconds: 545),
       ));
+
+  /// 3-босқич: харид режаси (фақат ҳисоб, сервер ҳеч нарса сотиб олмайди).
+  Future<SmProcurementReport> procurementReport(String date) async =>
+      SmProcurementReport.fromMap(await _callData('adminSupermarketProcurementReport', {'date': date}));
+
+  /// 3-босқич: кунлик статистика (≤92 кун); [backfill] — етишмаган кунларни серверда ҳисоблаш (≤7, фақат admin).
+  Future<SmStatsReport> stats({required String from, required String to, bool backfill = false}) async =>
+      SmStatsReport.fromMap(await _callData('adminSupermarketStats', {
+        'from': from,
+        'to': to,
+        if (backfill) 'backfill': true,
+      }, timeout: const Duration(seconds: 120)));
 
   Future<void> _call(String name, Map<String, dynamic> data) => _callData(name, data);
 

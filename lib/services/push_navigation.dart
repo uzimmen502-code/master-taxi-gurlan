@@ -37,9 +37,17 @@ import '../repositories/rides_repository.dart';
 import '../features/profile/screens/news_hub_screen.dart';
 import '../features/profile/screens/order_news_detail_screen.dart';
 import '../features/supermarket/screens/supermarket_home_screen.dart' show openSupermarketWith;
-import '../features/supermarket/screens/sm_holiday_screen.dart' show openHolidayBasket;
+import '../features/supermarket/screens/sm_holiday_screen.dart' show openHolidayBasket, openHolidayMarketTarget;
 import '../features/supermarket/domain/sm_holiday.dart'
-    show HolidayPushTarget, HolidayRoute, SmHolidayCheckout, holidayPushTarget, holidayRouteOf, kHolidayKindBirthday;
+    show
+        HolidayPushKind,
+        HolidayPushTarget,
+        HolidayRoute,
+        SmHolidayCheckout,
+        holidayPushTarget,
+        holidayRouteOccasion,
+        holidayRouteOf,
+        kHolidayKindBirthday;
 import '../features/restaurants/domain/restaurants_access.dart' show kRestaurantsModuleId;
 import '../features/restaurants/screens/restaurants_list_screen.dart' show RestaurantsListScreen;
 import '../features/relatives/utils/relative_birthdays.dart' show relativeGiftCheckout;
@@ -776,22 +784,33 @@ class PushNavigation {
     HolidayPushTarget t,
   ) async {
     final route = holidayRouteOf(t);
-    // Ўз туғилган куни: «Ресторанда олдиндан буюртма» — ресторан модули дарвозаси (эга 2026-11-27).
+    // Эга 2026-11-27: мақсад тури — ресторан (олдиндан буюртма), бозор (Қурбон ҳайит), супермаркет, саватча.
     if (route == HolidayRoute.restaurantsPreorder) {
       if (!_moduleOpen(nav, kRestaurantsModuleId)) return;
       await nav.push(MaterialPageRoute<void>(builder: (_) => const RestaurantsListScreen(preorderOnly: true)));
       return;
     }
+    if (route == HolidayRoute.market) {
+      // Модул дарвозаси openMarket ичида (таксономиядаги moduleId).
+      if (nav.context.mounted) await openHolidayMarketTarget(nav.context, t.target!);
+      return;
+    }
     if (!_moduleOpen(nav, 'supermarket')) return;
-    if (route == HolidayRoute.bonus) {
+    if (route == HolidayRoute.bonus || route == HolidayRoute.supermarket) {
       await openSupermarketWith(nav);
       return;
     }
-    final occasionId = t.occasionId.isEmpty ? null : t.occasionId;
-    if (route == HolidayRoute.birthdayBasket || route == HolidayRoute.birthdayGuests) {
-      // Ўз туғилган куни — совғасиз (ўзига); «меҳмонлар учун» — меҳмонлар сони эслатмаси билан.
-      await openHolidayBasket(nav,
-          occasionId: occasionId ?? kHolidayKindBirthday, birthday: true, guestsHint: route == HolidayRoute.birthdayGuests);
+    final occ = holidayRouteOccasion(t);
+    final occasionId = occ.isEmpty ? null : occ;
+    if (route == HolidayRoute.basket || route == HolidayRoute.basketGuests || route == HolidayRoute.basketGift) {
+      // Ўз туғилган куни — совғасиз; «меҳмонлар учун» — изоҳ; «совға» — совға блоки ёқиқ.
+      await openHolidayBasket(
+        nav,
+        occasionId: occasionId,
+        birthday: t.kind == HolidayPushKind.self || occasionId == kHolidayKindBirthday,
+        guestsHint: route == HolidayRoute.basketGuests,
+        gift: route == HolidayRoute.basketGift ? const SmHolidayCheckout(asGift: true) : null,
+      );
       return;
     }
     if (route == HolidayRoute.occasionList) {

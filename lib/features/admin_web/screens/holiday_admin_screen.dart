@@ -193,9 +193,13 @@ String holidayOccasionSummary(HolidayOccasion o) => [
       if (!o.isBirthday && o.ruleType == 'fixed') 'ҳар йили ${o.md}',
       if (!o.isBirthday && o.ruleType == 'list') '${o.dates.length} та сана',
       'эслатма ${o.remindDaysBefore} кун олдин',
-      if (o.target.isMarket) 'бозор: ${o.target.market}',
-      if (o.isBirthday && o.selfReminders.isNotEmpty)
-        'ўз туғилган куни: ${[for (final r in o.selfReminders) 'D-${r.daysBefore}'].join(', ')}',
+      if (o.target != null) 'очади: ${kHolidayTargetLabels[o.target!.type] ?? o.target!.type}${o.target!.isMarket ? ' (${o.target!.market})' : ''}',
+      if (o.isBirthday)
+        o.selfReminders == null
+            ? 'ўз туғилган куни: сукут (D-7…D-3)'
+            : o.selfReminders!.isEmpty
+                ? 'ўз туғилган куни: ўчиқ'
+                : 'ўз туғилган куни: ${[for (final r in o.selfReminders!) 'D-${r.daysBefore}'].join(', ')}',
     ].join(' · ');
 
 Widget _names(TextEditingController cyr, TextEditingController lat, TextEditingController ru) => Column(children: [
@@ -237,25 +241,29 @@ class _OccasionDialogState extends State<_OccasionDialog> {
   List<String> _errors = const [];
   bool _saving = false;
 
-  // Байрам мақсади (эга 2026-11-27): саватча ёки бозор (Қурбон ҳайит → Мол бозори).
-  late String _targetType = _o?.target.isMarket == true ? kHolidayTargetMarket : kHolidayTargetBasket;
-  late final _market = TextEditingController(text: _o?.target.market ?? '');
-  late final _marketCats = TextEditingController(text: (_o?.target.categories ?? const []).join(', '));
+  // Байрам мақсади (эга 2026-11-27, сервер шартномаси): '' — саватча (null); бозор / ресторан / супермаркет.
+  late String _targetType = (_o?.target == null || _o!.target!.isBasket) ? '' : _o.target!.type;
+  late final _market = TextEditingController(text: _o?.target?.market ?? '');
+  late final _marketCats = TextEditingController(text: (_o?.target?.categories ?? const []).join(', '));
 
-  // Ўз туғилган куни эслатмалари (фақат туғилган кун).
+  // Ўз туғилган куни эслатмалари (фақат туғилган кун). Майдон йўқ — сервер сукути D-7..D-3 ([_selfDefault]).
+  late bool _selfDefault = _o?.selfReminders == null;
   late final List<_SelfRow> _self = [for (final r in _o?.selfReminders ?? const <HolidaySelfReminder>[]) _SelfRow.of(r)];
 
-  HolidayTarget get _target => _targetType == kHolidayTargetMarket
-      ? HolidayTarget(
-          type: kHolidayTargetMarket,
-          market: _market.text.trim(),
-          categories: [for (final s in _marketCats.text.split(RegExp(r'[,\s]+'))) if (s.trim().isNotEmpty) s.trim()],
-        )
-      : HolidayTarget.basket;
+  HolidayTarget? get _target => switch (_targetType) {
+        kTargetMarket => HolidayTarget(
+            type: kTargetMarket,
+            market: _market.text.trim(),
+            categories: [for (final s in _marketCats.text.split(RegExp(r'[,\s]+'))) if (s.trim().isNotEmpty) s.trim()],
+          ),
+        kTargetRestaurantsPreorder || kTargetSupermarket => HolidayTarget(type: _targetType),
+        _ => null,
+      };
 
   /// Тавсия этилган 5 та (эга 2026-11-27: D-7, D-6, D-5, D-4, D-3) — бўш рўйхатга бир босишда.
   void _addDefaultSelf() => setState(() {
-        for (final d in const [7, 6, 5, 4, 3]) {
+        _selfDefault = false;
+        for (final d in kSelfReminderDefaultDays) {
           if (_self.any((r) => int.tryParse(r.days.text.trim()) == d)) continue;
           _self.add(_SelfRow(days: '$d', target: d == 7 ? kSelfTargetPreorder : (d >= 5 ? kSelfTargetBasket : kSelfTargetGuests)));
         }
@@ -267,13 +275,14 @@ class _OccasionDialogState extends State<_OccasionDialog> {
           initialValue: _targetType,
           isExpanded: true,
           decoration: const InputDecoration(labelText: 'Босилганда нима очилади'),
-          items: const [
-            DropdownMenuItem(value: kHolidayTargetBasket, child: Text('Байрам саватчаси')),
-            DropdownMenuItem(value: kHolidayTargetMarket, child: Text('Бозор (масалан Қурбон ҳайит → Мол бозори)')),
+          items: [
+            const DropdownMenuItem(value: '', child: Text('Байрам саватчаси')),
+            for (final t in const [kTargetMarket, kTargetRestaurantsPreorder, kTargetSupermarket])
+              DropdownMenuItem(value: t, child: Text(kHolidayTargetLabels[t]!)),
           ],
-          onChanged: (v) => setState(() => _targetType = v ?? kHolidayTargetBasket),
+          onChanged: (v) => setState(() => _targetType = v ?? ''),
         ),
-        if (_targetType == kHolidayTargetMarket) ...[
+        if (_targetType == kTargetMarket) ...[
           TextField(
             key: const ValueKey('hb_admin_target_market'),
             controller: _market,
@@ -296,8 +305,14 @@ class _OccasionDialogState extends State<_OccasionDialog> {
         children: [
           const SizedBox(height: 12),
           const Text('Ўз туғилган куни эслатмалари', style: TextStyle(fontWeight: FontWeight.w700)),
-          const Text('Фойдаланувчининг ўз туғилган кунидан неча кун олдин (1–14) ва босилганда нима очилади.',
+          const Text('Фойдаланувчининг ўз туғилган кунидан неча кун олдин (1–14, 10 тагача) ва босилганда нима очилади.',
               style: TextStyle(color: Colors.black54)),
+          if (_selfDefault)
+            const Padding(
+              key: ValueKey('hb_admin_self_default_note'),
+              padding: EdgeInsets.only(top: 6),
+              child: Text('Ҳозир сервер сукути ишлайди: D-7, D-6, D-5, D-4, D-3 (тизим матнлари).'),
+            ),
           for (var i = 0; i < _self.length; i++)
             Card(
               key: ObjectKey(_self[i]),
@@ -340,16 +355,34 @@ class _OccasionDialogState extends State<_OccasionDialog> {
                       },
                     ),
                   ]),
-                  TextField(controller: _self[i].cyr, decoration: const InputDecoration(labelText: 'Матн (кирилл)')),
-                  TextField(controller: _self[i].lat, decoration: const InputDecoration(labelText: 'Матн (лотин)')),
-                  TextField(controller: _self[i].ru, decoration: const InputDecoration(labelText: 'Матн (рус)')),
+                  for (final (l, label) in const [('uz_Cyrl', 'кирилл'), ('uz_Latn', 'лотин'), ('ru', 'рус')]) ...[
+                    TextField(
+                      key: ValueKey('hb_admin_self_title_${l}_$i'),
+                      controller: _self[i].title[l],
+                      maxLength: kSelfReminderTitleMax,
+                      decoration: InputDecoration(labelText: 'Сарлавҳа ($label)', counterText: ''),
+                    ),
+                    TextField(
+                      key: ValueKey('hb_admin_self_body_${l}_$i'),
+                      controller: _self[i].body[l],
+                      maxLength: kSelfReminderBodyMax,
+                      minLines: 1,
+                      maxLines: 3,
+                      decoration: InputDecoration(labelText: 'Матн ($label)', counterText: ''),
+                    ),
+                  ],
                 ]),
               ),
             ),
           Wrap(spacing: 8, children: [
             OutlinedButton.icon(
               key: const ValueKey('hb_admin_self_add'),
-              onPressed: _self.length >= kSelfReminderMaxCount ? null : () => setState(() => _self.add(_SelfRow())),
+              onPressed: _self.length >= kSelfReminderMaxCount
+                  ? null
+                  : () => setState(() {
+                        _selfDefault = false;
+                        _self.add(_SelfRow());
+                      }),
               icon: const Icon(Icons.add),
               label: const Text('Эслатма қўшиш'),
             ),
@@ -358,6 +391,12 @@ class _OccasionDialogState extends State<_OccasionDialog> {
                 key: const ValueKey('hb_admin_self_defaults'),
                 onPressed: _addDefaultSelf,
                 child: const Text('D-7…D-3 тавсия'),
+              ),
+            if (!_selfDefault && _self.isEmpty)
+              TextButton(
+                key: const ValueKey('hb_admin_self_use_default'),
+                onPressed: () => setState(() => _selfDefault = true),
+                child: const Text('Сервер сукутига қайтариш'),
               ),
           ]),
         ],
@@ -373,7 +412,8 @@ class _OccasionDialogState extends State<_OccasionDialog> {
 
   Future<void> _save() async {
     final birthday = _kind == kHolidayKindBirthday;
-    final self = birthday ? [for (final r in _self) r.toReminder()] : const <HolidaySelfReminder>[];
+    // Туғилган кун: сукут — майдон юборилмайди; акс ҳолда рўйхат (бўш — эслатмалар ўчиқ).
+    final self = birthday && !_selfDefault ? [for (final r in _self) r.toReminder()] : null;
     final o = HolidayOccasion(
       id: _id.text.trim(),
       names: {'uz_Cyrl': _cyr.text.trim(), 'uz_Latn': _lat.text.trim(), 'ru': _ru.text.trim()},
@@ -386,13 +426,13 @@ class _OccasionDialogState extends State<_OccasionDialog> {
       stage: _stage,
       order: int.tryParse(_order.text.trim()) ?? 0,
       image: _image.text.trim(),
-      target: birthday ? HolidayTarget.basket : _target,
+      target: birthday ? null : _target,
       selfReminders: self,
     );
     final p = [
       ...holidayOccasionProblems(o),
-      if (birthday) ...holidaySelfReminderProblems(self),
-      if (!birthday && _targetType == kHolidayTargetMarket && !o.target.isMarket) 'Бозор ID нотўғри (кичик лотин, масалан livestock).',
+      if (self != null) ...holidaySelfReminderProblems(self),
+      if (!birthday && _targetType == kTargetMarket && !(o.target?.isMarket ?? false)) 'Бозор ID нотўғри (кичик лотин, масалан livestock).',
     ];
     setState(() => _errors = p);
     if (p.isNotEmpty) return;
@@ -509,35 +549,37 @@ const kSelfTargetLabels = {
   kSelfTargetGuests: 'Меҳмонлар учун саватча',
 };
 
-class _SelfRow {
-  _SelfRow({String days = '', this.target = '', String cyr = '', String lat = '', String ru = ''})
-      : days = TextEditingController(text: days),
-        cyr = TextEditingController(text: cyr),
-        lat = TextEditingController(text: lat),
-        ru = TextEditingController(text: ru);
+/// Байрам мақсади турлари (админ, Кирилл).
+const kHolidayTargetLabels = {
+  kTargetHolidayBasket: 'Байрам саватчаси',
+  kTargetMarket: 'Бозор (масалан Қурбон ҳайит → Мол бозори)',
+  kTargetRestaurantsPreorder: 'Ресторанда олдиндан буюртма',
+  kTargetSupermarket: 'Супермаркет',
+};
 
-  factory _SelfRow.of(HolidaySelfReminder r) => _SelfRow(
-        days: '${r.daysBefore}',
-        target: r.target,
-        cyr: r.texts['uz_Cyrl'] ?? '',
-        lat: r.texts['uz_Latn'] ?? '',
-        ru: r.texts['ru'] ?? '',
-      );
+class _SelfRow {
+  _SelfRow({String days = '', this.target = '', Map<String, ({String title, String body})> texts = const {}})
+      : days = TextEditingController(text: days),
+        title = {for (final l in _langs) l: TextEditingController(text: texts[l]?.title ?? '')},
+        body = {for (final l in _langs) l: TextEditingController(text: texts[l]?.body ?? '')};
+
+  static const _langs = ['uz_Cyrl', 'uz_Latn', 'ru'];
+
+  factory _SelfRow.of(HolidaySelfReminder r) => _SelfRow(days: '${r.daysBefore}', target: r.target, texts: r.texts);
 
   final TextEditingController days;
   String target;
-  final TextEditingController cyr;
-  final TextEditingController lat;
-  final TextEditingController ru;
+  final Map<String, TextEditingController> title;
+  final Map<String, TextEditingController> body;
 
   HolidaySelfReminder toReminder() => HolidaySelfReminder(
         daysBefore: int.tryParse(days.text.trim()) ?? 0,
-        texts: {'uz_Cyrl': cyr.text.trim(), 'uz_Latn': lat.text.trim(), 'ru': ru.text.trim()},
+        texts: {for (final l in _langs) l: (title: title[l]!.text.trim(), body: body[l]!.text.trim())},
         target: target,
       );
 
   void dispose() {
-    for (final c in [days, cyr, lat, ru]) {
+    for (final c in [days, ...title.values, ...body.values]) {
       c.dispose();
     }
   }

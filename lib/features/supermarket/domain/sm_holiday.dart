@@ -31,41 +31,155 @@ const kHolidayStages = ['off', 'internal', 'pilot', 'public'];
 /// Сервер `ID_RE` — байрам/сават id.
 final kHolidayIdRe = RegExp(r'^[a-z][a-z0-9_]{1,39}$');
 
+// ─── Байрам мақсади (сервер holiday-srv 6bde1531/2f51b761, эга 2026-11-27) ──────
+//
+// `target` турлари: `holiday_basket{occasionId, mode?: guests|gift}` · `restaurants_preorder` · `supermarket` ·
+// `market{market, categories?}`. Йўқ/нотўғри — `null` (оддий: байрам саватчаси).
+
+const kTargetHolidayBasket = 'holiday_basket';
+const kTargetRestaurantsPreorder = 'restaurants_preorder';
+const kTargetSupermarket = 'supermarket';
+const kTargetMarket = 'market';
+const kHolidayTargetTypes = [kTargetHolidayBasket, kTargetRestaurantsPreorder, kTargetSupermarket, kTargetMarket];
+
+const kTargetModeGuests = 'guests';
+const kTargetModeGift = 'gift';
+
+class HolidayTarget {
+  const HolidayTarget({required this.type, this.occasionId = '', this.mode = '', this.market = '', this.categories = const []});
+
+  final String type;
+  final String occasionId;
+
+  /// `holiday_basket`: `guests` | `gift` | бўш.
+  final String mode;
+  final String market;
+  final List<String> categories;
+
+  bool get isMarket => type == kTargetMarket && market.isNotEmpty;
+  bool get isBasket => type == kTargetHolidayBasket;
+
+  /// Бозор экранида очилишда танланадиган бўлим (биринчиси; бозорда бўлмаса экран ўзи сукутга қайтади).
+  String get initialCategory => categories.isEmpty ? '' : categories.first;
+
+  static String _id(Object? v) => v is String && kHolidayIdRe.hasMatch(v.trim()) ? v.trim() : '';
+
+  static List<String> _cats(Object? raw) => [
+        if (raw is List)
+          for (final c in raw)
+            if (_id(c).isNotEmpty) _id(c),
+        // Push маълумоти: вергул билан сатр.
+        if (raw is String)
+          for (final c in raw.split(','))
+            if (_id(c).isNotEmpty) _id(c),
+      ];
+
+  /// Ҳужжат/каталог объекти ёки push сатрлари (`targetType`, `occasionId`, `mode`, `market`, `categories`). Нотўғри —
+  /// `null`.
+  static HolidayTarget? fromMap(Object? raw) {
+    if (raw is! Map) return null;
+    final type = raw['type'];
+    if (type is! String || !kHolidayTargetTypes.contains(type.trim())) return null;
+    final t = type.trim();
+    final mode = raw['mode'] is String ? (raw['mode'] as String).trim() : '';
+    final out = HolidayTarget(
+      type: t,
+      occasionId: t == kTargetHolidayBasket ? _id(raw['occasionId']) : '',
+      mode: t == kTargetHolidayBasket && (mode == kTargetModeGuests || mode == kTargetModeGift) ? mode : '',
+      market: t == kTargetMarket ? _id(raw['market']) : '',
+      categories: t == kTargetMarket ? _cats(raw['categories']) : const [],
+    );
+    if (t == kTargetMarket && out.market.isEmpty) return null;
+    return out;
+  }
+
+  Map<String, Object> toMap() => {
+        'type': type,
+        if (type == kTargetHolidayBasket && occasionId.isNotEmpty) 'occasionId': occasionId,
+        if (type == kTargetHolidayBasket && mode.isNotEmpty) 'mode': mode,
+        if (type == kTargetMarket) 'market': market,
+        if (type == kTargetMarket && categories.isNotEmpty) 'categories': categories,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      other is HolidayTarget &&
+      other.type == type &&
+      other.occasionId == occasionId &&
+      other.mode == mode &&
+      other.market == market &&
+      other.categories.join(',') == categories.join(',');
+
+  @override
+  int get hashCode => Object.hash(type, occasionId, mode, market, categories.join(','));
+}
+
 // ─── Ўз туғилган куни эслатмалари (эга 2026-11-27) ───────────────────────────
 
-/// Эслатма мақсадлари (push `target`): туғилган кун саватчаси · ресторанда олдиндан буюртма · меҳмонлар учун саватча.
+/// Админ танлови (эга қарори: 3 мақсад) ↔ сервер `target` объекти.
 const kSelfTargetBasket = 'birthday_basket';
 const kSelfTargetPreorder = 'restaurants_preorder';
 const kSelfTargetGuests = 'birthday_basket_guests';
 const kSelfReminderTargets = [kSelfTargetBasket, kSelfTargetPreorder, kSelfTargetGuests];
 
-/// Эга 2026-11-27: D-7, D-6, D-5, D-4, D-3 (тавсия этилган рўйхат); админ 1..14 оралиғида ўзгартира олади.
+HolidayTarget selfTargetObject(String key) => switch (key) {
+      kSelfTargetPreorder => const HolidayTarget(type: kTargetRestaurantsPreorder),
+      kSelfTargetGuests => const HolidayTarget(type: kTargetHolidayBasket, occasionId: kHolidayKindBirthday, mode: kTargetModeGuests),
+      _ => const HolidayTarget(type: kTargetHolidayBasket, occasionId: kHolidayKindBirthday),
+    };
+
+/// Сервер объекти → админ танлови; бошқа шакл — бўш (админ қайта танлайди).
+String selfTargetKey(HolidayTarget? t) {
+  if (t == null) return '';
+  if (t.type == kTargetRestaurantsPreorder) return kSelfTargetPreorder;
+  if (t.isBasket) return t.mode == kTargetModeGuests ? kSelfTargetGuests : kSelfTargetBasket;
+  return '';
+}
+
+/// Эга 2026-11-27: D-7, D-6, D-5, D-4, D-3 (сервер сукути — майдон йўқ бўлса). Админ 1..14 (эга; сервер 1..30
+/// қабул қилади), кўпи билан 10 та (сервер).
+const kSelfReminderDefaultDays = [7, 6, 5, 4, 3];
 const int kSelfReminderDaysMin = 1;
 const int kSelfReminderDaysMax = 14;
-const int kSelfReminderMaxCount = 14;
-
-/// Матн узунлиги чегараси — PROPOSED (сервер валидатори якуний).
-const int kSelfReminderTextMax = 200;
+const int kSelfReminderMaxCount = 10;
+const int kSelfReminderTitleMax = 80;
+const int kSelfReminderBodyMax = 300;
 
 class HolidaySelfReminder {
   const HolidaySelfReminder({required this.daysBefore, required this.texts, required this.target});
 
   final int daysBefore;
-  final Map<String, String> texts;
+
+  /// Тил → (сарлавҳа ≤ 80, матн ≤ 300).
+  final Map<String, ({String title, String body})> texts;
+
+  /// Админ танлови ([kSelfReminderTargets]).
   final String target;
 
   static HolidaySelfReminder? fromMap(Object? raw) {
     if (raw is! Map) return null;
     final d = raw['daysBefore'];
-    final t = raw['target'];
-    if (d is! num || t is! String) return null;
-    return HolidaySelfReminder(daysBefore: d.toInt(), texts: smNames(raw['texts']), target: t.trim());
+    if (d is! num) return null;
+    final tx = raw['texts'];
+    String s(Object? v) => v is String ? v.trim() : '';
+    return HolidaySelfReminder(
+      daysBefore: d.toInt(),
+      texts: {
+        if (tx is Map)
+          for (final l in const ['uz_Cyrl', 'uz_Latn', 'ru'])
+            if (tx[l] is Map) l: (title: s((tx[l] as Map)['title']), body: s((tx[l] as Map)['body'])),
+      },
+      target: selfTargetKey(HolidayTarget.fromMap(raw['target'])),
+    );
   }
 
   Map<String, Object> toMap() => {
         'daysBefore': daysBefore,
-        'texts': {for (final l in const ['uz_Cyrl', 'uz_Latn', 'ru']) l: (texts[l] ?? '').trim()},
-        'target': target,
+        'texts': {
+          for (final l in const ['uz_Cyrl', 'uz_Latn', 'ru'])
+            l: {'title': (texts[l]?.title ?? '').trim(), 'body': (texts[l]?.body ?? '').trim()},
+        },
+        'target': selfTargetObject(target).toMap(),
       };
 }
 
@@ -80,52 +194,14 @@ List<String> holidaySelfReminderProblems(List<HolidaySelfReminder> list) {
       else if (!seen.add(r.daysBefore))
         'Кун такрорланди: D-${r.daysBefore}.',
       if (!kSelfReminderTargets.contains(r.target)) 'Мақсадни танланг (D-${r.daysBefore}).',
-      for (final l in const ['uz_Cyrl', 'uz_Latn', 'ru'])
-        if ((r.texts[l] ?? '').trim().isEmpty || (r.texts[l] ?? '').trim().length > kSelfReminderTextMax)
-          'Матн ($l, D-${r.daysBefore}) 1–$kSelfReminderTextMax белги бўлсин.',
+      for (final l in const ['uz_Cyrl', 'uz_Latn', 'ru']) ...[
+        if ((r.texts[l]?.title ?? '').trim().isEmpty || (r.texts[l]?.title ?? '').trim().length > kSelfReminderTitleMax)
+          'Сарлавҳа ($l, D-${r.daysBefore}) 1–$kSelfReminderTitleMax белги бўлсин.',
+        if ((r.texts[l]?.body ?? '').trim().isEmpty || (r.texts[l]?.body ?? '').trim().length > kSelfReminderBodyMax)
+          'Матн ($l, D-${r.daysBefore}) 1–$kSelfReminderBodyMax белги бўлсин.',
+      ],
     ],
   ];
-}
-
-// ─── Байрам мақсади (Қурбон ҳайит → Мол бозори, эга 2026-11-27) ──────────────
-
-const kHolidayTargetBasket = 'basket';
-const kHolidayTargetMarket = 'market';
-
-/// `occasion.target`: `{type:'market', market, categories[]}` — байрам саватча ўрнига бозорни очади. Йўқ/нотўғри —
-/// оддий саватча ([kHolidayTargetBasket]).
-class HolidayTarget {
-  const HolidayTarget({this.type = kHolidayTargetBasket, this.market = '', this.categories = const []});
-
-  static const basket = HolidayTarget();
-
-  final String type;
-  final String market;
-  final List<String> categories;
-
-  bool get isMarket => type == kHolidayTargetMarket && market.isNotEmpty;
-
-  /// Бозор экранида очилишда танланадиган бўлим (биринчиси; бозорда бўлмаса экран ўзи сукутга қайтади).
-  String get initialCategory => categories.isEmpty ? '' : categories.first;
-
-  static HolidayTarget fromMap(Object? raw) {
-    if (raw is! Map) return basket;
-    final type = raw['type'];
-    final market = raw['market'];
-    final cats = raw['categories'];
-    if (type != kHolidayTargetMarket || market is! String || !kHolidayIdRe.hasMatch(market.trim())) return basket;
-    return HolidayTarget(
-      type: kHolidayTargetMarket,
-      market: market.trim(),
-      categories: [
-        if (cats is List)
-          for (final c in cats)
-            if (c is String && kHolidayIdRe.hasMatch(c.trim())) c.trim(),
-      ],
-    );
-  }
-
-  Map<String, Object> toMap() => {'type': kHolidayTargetMarket, 'market': market, 'categories': categories};
 }
 
 /// Қурбон ҳайит байрами id ва даври (эга 2026-11-27: байрамгача 15 кун ичида бозорда баннер ва чип).
@@ -137,7 +213,7 @@ const kQurbonReadyAttr = 'qurbon_ready';
 
 /// Шу бозор Қурбон ҳайит мақсади ва давр фаол (бозор id байрам `target`идан — hardcode эмас).
 bool qurbonMarketActive(Iterable<HolidayOccasion> occasions, String marketId, DateTime today) {
-  final q = occasions.where((o) => o.id == kQurbonOccasionId && o.target.isMarket && o.target.market == marketId);
+  final q = occasions.where((o) => o.id == kQurbonOccasionId && (o.target?.isMarket ?? false) && o.target!.market == marketId);
   return q.isNotEmpty && qurbonPeriodActive(q, today);
 }
 
@@ -170,15 +246,16 @@ class HolidayOccasion {
     this.order = 0,
     this.image = '',
     this.nextDate = '',
-    this.target = HolidayTarget.basket,
-    this.selfReminders = const [],
+    this.target,
+    this.selfReminders,
   });
 
-  /// Байрам босилганда нима очилади (сукут — саватча; Қурбон ҳайит — Мол бозори).
-  final HolidayTarget target;
+  /// Байрам босилганда нима очилади (`null` — байрам саватчаси; Қурбон ҳайит — Мол бозори).
+  final HolidayTarget? target;
 
-  /// Фақат туғилган кун (`birthday`): фойдаланувчининг ЎЗ туғилган куни эслатмалари (админ).
-  final List<HolidaySelfReminder> selfReminders;
+  /// Фақат туғилган кун (`birthday`): фойдаланувчининг ЎЗ туғилган куни эслатмалари (админ). `null` — майдон йўқ
+  /// (сервер сукути D-7..D-3); бўш рўйхат — ўчиқ.
+  final List<HolidaySelfReminder>? selfReminders;
 
   final String id;
   final Map<String, String> names;
@@ -232,10 +309,9 @@ class HolidayOccasion {
       image: s(raw['image']),
       nextDate: s(raw['nextDate']),
       target: HolidayTarget.fromMap(raw['target']),
-      selfReminders: [
-        if (raw['selfReminders'] is List)
-          ...(raw['selfReminders'] as List).map(HolidaySelfReminder.fromMap).whereType<HolidaySelfReminder>(),
-      ],
+      selfReminders: raw['selfReminders'] is List
+          ? [...(raw['selfReminders'] as List).map(HolidaySelfReminder.fromMap).whereType<HolidaySelfReminder>()]
+          : null,
     );
   }
 
@@ -255,9 +331,9 @@ class HolidayOccasion {
         'order': order,
         'image': image,
         // Эга 2026-11-27: байрамда `target` (null — саватча, тозалаш учун ҳам юборилади); туғилган кунда эслатмалар
-        // (бўш рўйхат — ҳаммаси ўчирилади).
-        if (!isBirthday) 'target': target.isMarket ? target.toMap() : null,
-        if (isBirthday) 'selfReminders': [for (final r in selfReminders) r.toMap()],
+        // (йўқ — сервер сукути D-7..D-3; бўш рўйхат — ўчиқ).
+        if (!isBirthday) 'target': target?.toMap(),
+        if (isBirthday && selfReminders != null) 'selfReminders': [for (final r in selfReminders!) r.toMap()],
       };
 }
 
@@ -756,48 +832,67 @@ const kRelativeBirthdayPush = 'holiday_birthday_reminder';
 const kHolidayBonusPush = 'holiday_relatives_bonus';
 const kGiftReceivedPush = 'sm_gift_received';
 
+/// Ўз туғилган куни эслатмаси (сервер holiday-srv 2f51b761, эга 2026-11-27).
+const kSelfBirthdayPush = 'holiday_self_birthday';
+
 final _docId = RegExp(r'^[A-Za-z0-9_-]{1,128}$');
 
-enum HolidayPushKind { occasion, birthday, bonus }
+/// [self] — фойдаланувчининг ЎЗ туғилган куни (совғасиз).
+enum HolidayPushKind { occasion, self, birthday, bonus }
 
-/// [target] — ўз туғилган куни эслатмаси мақсади ([kSelfReminderTargets]) ёки бўш.
-typedef HolidayPushTarget = ({HolidayPushKind kind, String occasionId, String personId, String target});
+/// [target] — сервер `targetType` (+ `occasionId`, `mode`, `market`, `categories`) ёки `null`.
+typedef HolidayPushTarget = ({HolidayPushKind kind, String occasionId, String personId, HolidayTarget? target});
 
-/// Байрам push'и → мақсад; бошқа push — `null`. ID фақат Firestore шаклида (бошқаси — бўш); `target` фақат
-/// маълум рўйхатдан (эга 2026-11-27: ўз туғилган куни D-7..D-3 эслатмалари `holiday_reminder` + `target`).
-HolidayPushTarget? holidayPushTarget(Map<String, String> data) {
+/// Байрам push'и → мақсад; бошқа push — `null`. ID фақат Firestore шаклида (бошқаси — бўш); мақсад фақат маълум
+/// турлардан ([HolidayTarget.fromMap]).
+HolidayPushTarget? holidayPushTarget(Map<String, String> data, {Object? targetObject}) {
   final type = (data['type'] ?? '').trim();
   String id(String k) {
     final v = (data[k] ?? '').trim();
     return _docId.hasMatch(v) ? v : '';
   }
 
+  // Push'да `type` — push тури; мақсад тури `targetType` сатрида.
+  HolidayTarget? target() =>
+      HolidayTarget.fromMap(targetObject) ?? HolidayTarget.fromMap({...data, 'type': data['targetType'] ?? ''});
+
   if (type == kHolidayReminderPush) {
-    final t = (data['target'] ?? '').trim();
-    return (
-      kind: HolidayPushKind.occasion,
-      occasionId: id('occasionId'),
-      personId: '',
-      target: kSelfReminderTargets.contains(t) ? t : '',
-    );
+    return (kind: HolidayPushKind.occasion, occasionId: id('occasionId'), personId: '', target: target());
+  }
+  if (type == kSelfBirthdayPush) {
+    return (kind: HolidayPushKind.self, occasionId: id('occasionId'), personId: '', target: target());
   }
   if (type == kRelativeBirthdayPush) {
-    return (kind: HolidayPushKind.birthday, occasionId: id('occasionId'), personId: id('personId'), target: '');
+    return (kind: HolidayPushKind.birthday, occasionId: id('occasionId'), personId: id('personId'), target: null);
   }
-  if (type == kHolidayBonusPush) return (kind: HolidayPushKind.bonus, occasionId: '', personId: '', target: '');
+  if (type == kHolidayBonusPush) return (kind: HolidayPushKind.bonus, occasionId: '', personId: '', target: null);
   return null;
 }
 
 /// Push/хабар мақсади қаерга олиб боради (тоза — тест учун).
-enum HolidayRoute { bonus, occasionList, birthdayBasket, birthdayGuests, restaurantsPreorder, relativeBirthday }
+enum HolidayRoute { bonus, occasionList, basket, basketGuests, basketGift, restaurantsPreorder, supermarket, market, relativeBirthday }
 
 HolidayRoute holidayRouteOf(HolidayPushTarget t) {
   if (t.kind == HolidayPushKind.bonus) return HolidayRoute.bonus;
   if (t.kind == HolidayPushKind.birthday) return HolidayRoute.relativeBirthday;
-  return switch (t.target) {
-    kSelfTargetBasket => HolidayRoute.birthdayBasket,
-    kSelfTargetGuests => HolidayRoute.birthdayGuests,
-    kSelfTargetPreorder => HolidayRoute.restaurantsPreorder,
-    _ => HolidayRoute.occasionList,
+  final tg = t.target;
+  if (tg == null) return t.kind == HolidayPushKind.self ? HolidayRoute.basket : HolidayRoute.occasionList;
+  return switch (tg.type) {
+    kTargetRestaurantsPreorder => HolidayRoute.restaurantsPreorder,
+    kTargetSupermarket => HolidayRoute.supermarket,
+    kTargetMarket => HolidayRoute.market,
+    _ => tg.mode == kTargetModeGuests
+        ? HolidayRoute.basketGuests
+        : tg.mode == kTargetModeGift
+            ? HolidayRoute.basketGift
+            : HolidayRoute.basket,
   };
+}
+
+/// Саватча очиладиган байрам: мақсаддаги → push'даги → ўз туғилган кунида `birthday`.
+String holidayRouteOccasion(HolidayPushTarget t) {
+  final fromTarget = t.target?.occasionId ?? '';
+  if (fromTarget.isNotEmpty) return fromTarget;
+  if (t.occasionId.isNotEmpty) return t.occasionId;
+  return t.kind == HolidayPushKind.self ? kHolidayKindBirthday : '';
 }

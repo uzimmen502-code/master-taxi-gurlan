@@ -6370,5 +6370,9 @@
   "restaurants_preorder_err_lead": "Savatdagi taom kamida {lead} kun oldin buyurtma qilinadi — {date} yoki keyingi kunni tanlang.",
   "market_qurbon_badge": "Qurbonlikka",
   "market_qurbon_banner": "Qurbon hayit yaqinlaşmoqda",
-  "market_qurbon_chip": "Qurbonlikka mos"
+  "market_qurbon_chip": "Qurbonlikka mos",
+  "restaurants_err_PREORDER_ITEM_REQUIRED": "Savatdagi taom faqat oldindan buyurtma qilinadi — «Keyinroq»ni tanlang.",
+  "restaurants_err_PREORDER_ITEM_LEAD_TOO_SHORT": "Savatdagi taom kamida {lead} kun oldin buyurtma qilinadi — keçroq kunni tanlang.",
+  "restaurants_err_PREORDER_ITEM_NOT_ALLOWED": "Savatdagi taomni oldindan buyurtma qilib bölmaydi — uni olib taşlang yoki «Hozir»ni tanlang.",
+  "restaurants_err_MENU_ITEM_PREORDER_INVALID": "Taomning oldindan buyurtma sozlamasi notöğri (0–14 kun)."
 }

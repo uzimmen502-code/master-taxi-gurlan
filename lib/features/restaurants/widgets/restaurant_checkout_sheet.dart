@@ -27,7 +27,9 @@ String restaurantsErrorText(BuildContext context, Object e) {
   if (e is RestaurantsException) {
     final k = e.l10nKey;
     final s = context.tr(k);
-    if (s != k) return s;
+    // Олдиндан буюртма хатолари (сервер `details.leadDays`, эга 2026-11-27) — `{lead}` / `{days}`.
+    final lead = e.details?['leadDays'];
+    if (s != k) return s.replaceAll('{lead}', lead is num ? '${lead.toInt()}' : '').replaceAll('{days}', '${Preorder.maxDays}');
   }
   return context.tr('restaurants_err_generic');
 }

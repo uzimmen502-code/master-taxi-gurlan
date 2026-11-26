@@ -6370,5 +6370,9 @@
   "restaurants_preorder_err_lead": "Саватдаги таом камида {lead} кун олдин буюртма қилинади — {date} ёки кейинги кунни танланг.",
   "market_qurbon_badge": "Қурбонликка",
   "market_qurbon_banner": "Қурбон ҳайит яқинлашмоқда",
-  "market_qurbon_chip": "Қурбонликка мос"
+  "market_qurbon_chip": "Қурбонликка мос",
+  "restaurants_err_PREORDER_ITEM_REQUIRED": "Саватдаги таом фақат олдиндан буюртма қилинади — «Кейинроқ»ни танланг.",
+  "restaurants_err_PREORDER_ITEM_LEAD_TOO_SHORT": "Саватдаги таом камида {lead} кун олдин буюртма қилинади — кечроқ кунни танланг.",
+  "restaurants_err_PREORDER_ITEM_NOT_ALLOWED": "Саватдаги таомни олдиндан буюртма қилиб бўлмайди — уни олиб ташланг ёки «Ҳозир»ни танланг.",
+  "restaurants_err_MENU_ITEM_PREORDER_INVALID": "Таомнинг олдиндан буюртма созламаси нотўғри (0–14 кун)."
 }

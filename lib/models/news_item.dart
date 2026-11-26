@@ -30,11 +30,12 @@ class NewsItem {
     this.smListId = '',
     this.occasionId = '',
     this.personId = '',
-    this.target = '',
+    this.target = const {},
   });
 
-  /// Ўз туғилган куни эслатмаси мақсади (эга 2026-11-27, `holiday_reminder` + `target`); бошқаларда бўш.
-  final String target;
+  /// Байрам/ўз туғилган куни хабари мақсади — сервер `target` объекти (`{type, occasionId?, mode?, market?,
+  /// categories?}`, эга 2026-11-27); бошқаларда бўш.
+  final Map<String, Object?> target;
 
   /// «Байрам саватчаси» эслатмаси (source: holiday_reminder / holiday_birthday_reminder, сервер 5eb77906) —
   /// байрам ва қариндош id. Бошқаларда бўш.
@@ -162,7 +163,7 @@ class NewsItem {
       smListId: d['smListId'] is String ? (d['smListId'] as String).trim() : '',
       occasionId: d['occasionId'] is String ? (d['occasionId'] as String).trim() : '',
       personId: d['personId'] is String ? (d['personId'] as String).trim() : '',
-      target: d['target'] is String ? (d['target'] as String).trim() : '',
+      target: d['target'] is Map ? {for (final e in (d['target'] as Map).entries) '${e.key}': e.value as Object?} : const {},
     );
   }
 

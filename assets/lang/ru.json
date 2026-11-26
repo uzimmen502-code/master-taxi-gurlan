@@ -6370,5 +6370,9 @@
   "restaurants_preorder_err_lead": "Блюдо в корзине заказывается минимум за {lead} дн. — выберите {date} или позже.",
   "market_qurbon_badge": "Для курбана",
   "market_qurbon_banner": "Скоро Курбан-хайит",
-  "market_qurbon_chip": "Подходит для курбана"
+  "market_qurbon_chip": "Подходит для курбана",
+  "restaurants_err_PREORDER_ITEM_REQUIRED": "Блюдо в корзине только под предзаказ — выберите «Позже».",
+  "restaurants_err_PREORDER_ITEM_LEAD_TOO_SHORT": "Блюдо в корзине заказывается минимум за {lead} дн. — выберите день позже.",
+  "restaurants_err_PREORDER_ITEM_NOT_ALLOWED": "Блюдо в корзине нельзя заказать заранее — уберите его или выберите «Сейчас».",
+  "restaurants_err_MENU_ITEM_PREORDER_INVALID": "Неверная настройка предзаказа блюда (0–14 дней)."
 }

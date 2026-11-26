@@ -190,8 +190,10 @@ void main() {
       // Эга 2026-11-27: байрамда `target` (null — саватча), туғилган кунда `selfReminders`.
       expect(m.keys.toSet(), {'id', 'names', 'kind', 'bigHoliday', 'dateRule', 'remindDaysBefore', 'stage', 'order', 'image', 'target'});
       expect(m['target'], isNull);
-      expect(const HolidayOccasion(id: 'b', names: names, kind: 'birthday').toAdminMap().keys,
-          containsAll(['selfReminders']));
+      // Эслатмалар майдони йўқ — сервер сукути (D-7..D-3); бўш рўйхат — ўчиқ.
+      expect(const HolidayOccasion(id: 'b', names: names, kind: 'birthday').toAdminMap().containsKey('selfReminders'), isFalse);
+      expect(const HolidayOccasion(id: 'b', names: names, kind: 'birthday', selfReminders: []).toAdminMap()['selfReminders'],
+          isEmpty);
     });
 
     test('саватча: такрор гуруҳ, меҳмон 0, бўш — хато; тўғриси — бўш; шакл', () {

@@ -224,33 +224,47 @@ void main() {
 
   // ─── 4) Ўз туғилган куни эслатмалари ───────────────────────────────────────
   group('ўз туғилган куни эслатмалари', () {
-    test('модел: ўқиш, admin харита; бузилгани ташланади', () {
+    Map<String, Object> tx(String s) => {
+          for (final l in const ['uz_Cyrl', 'uz_Latn', 'ru']) l: {'title': '$s $l', 'body': '$s матн $l'},
+        };
+    Map<String, ({String title, String body})> rtx(String s) => {
+          for (final l in const ['uz_Cyrl', 'uz_Latn', 'ru']) l: (title: '$s $l', body: '$s матн $l'),
+        };
+
+    test('модел: сервер шакли (texts{title,body}, target объект) ↔ админ танлови; бузилгани ташланади', () {
       final o = HolidayOccasion.fromMap({
         'id': 'birthday',
         'names': _n('Туғилган кун'),
         'kind': 'birthday',
         'selfReminders': [
-          {'daysBefore': 7, 'texts': _n('Ресторан'), 'target': 'restaurants_preorder'},
-          {'daysBefore': 3, 'texts': _n('Меҳмон'), 'target': 'birthday_basket_guests'},
-          {'daysBefore': 'x', 'target': 'birthday_basket'},
+          {'daysBefore': 7, 'texts': tx('Ресторан'), 'target': {'type': 'restaurants_preorder'}},
+          {'daysBefore': 3, 'texts': tx('Меҳмон'), 'target': {'type': 'holiday_basket', 'occasionId': 'birthday', 'mode': 'guests'}},
+          {'daysBefore': 5, 'texts': tx('Саватча'), 'target': {'type': 'holiday_basket', 'occasionId': 'birthday'}},
+          {'daysBefore': 'x', 'target': {'type': 'supermarket'}},
           'junk',
         ],
       })!;
-      expect(o.selfReminders.map((r) => '${r.daysBefore}:${r.target}'), ['7:restaurants_preorder', '3:birthday_basket_guests']);
+      expect(o.selfReminders!.map((r) => '${r.daysBefore}:${r.target}'),
+          ['7:restaurants_preorder', '3:birthday_basket_guests', '5:birthday_basket']);
+      expect(o.selfReminders!.first.texts['ru']?.title, 'Ресторан ru');
       final m = o.toAdminMap();
-      expect((m['selfReminders'] as List).first, {
-        'daysBefore': 7,
-        'texts': _n('Ресторан'),
-        'target': 'restaurants_preorder',
+      expect((m['selfReminders'] as List)[1], {
+        'daysBefore': 3,
+        'texts': tx('Меҳмон'),
+        'target': {'type': 'holiday_basket', 'occasionId': 'birthday', 'mode': 'guests'},
       });
+      expect((m['selfReminders'] as List).first['target'], {'type': 'restaurants_preorder'});
       expect(m.containsKey('target'), isFalse, reason: 'туғилган кунда мақсад йўқ');
-      // Бўш рўйхат ҳам юборилади — админ ҳаммасини ўчира олади.
-      expect(const HolidayOccasion(id: 'birthday', names: {}, kind: 'birthday').toAdminMap()['selfReminders'], isEmpty);
+      // Майдон йўқ — сервер сукути (юборилмайди); бўш рўйхат — ўчиқ (юборилади).
+      expect(HolidayOccasion.fromMap({'id': 'birthday', 'names': {}, 'kind': 'birthday'})!.selfReminders, isNull);
+      expect(const HolidayOccasion(id: 'birthday', names: {}, kind: 'birthday').toAdminMap().containsKey('selfReminders'), isFalse);
+      expect(const HolidayOccasion(id: 'birthday', names: {}, kind: 'birthday', selfReminders: []).toAdminMap()['selfReminders'],
+          isEmpty);
     });
 
-    test('текширув: 1..14 кун, такрорсиз, мақсад рўйхатдан, 3 тилда матн; D-7..D-3 тўғри', () {
+    test('текширув: 1..14 кун, такрорсиз, ≤10, мақсад рўйхатдан, 3 тилда сарлавҳа ≤80 + матн ≤300', () {
       List<HolidaySelfReminder> list(List<(int, String)> v) =>
-          [for (final e in v) HolidaySelfReminder(daysBefore: e.$1, texts: _n('Матн'), target: e.$2)];
+          [for (final e in v) HolidaySelfReminder(daysBefore: e.$1, texts: rtx('Матн'), target: e.$2)];
       expect(
           holidaySelfReminderProblems(list([
             (7, kSelfTargetPreorder),
@@ -264,37 +278,74 @@ void main() {
       expect(holidaySelfReminderProblems(list([(0, kSelfTargetBasket)])), hasLength(1));
       expect(holidaySelfReminderProblems(list([(15, kSelfTargetBasket)])), hasLength(1));
       expect(holidaySelfReminderProblems(list([(5, kSelfTargetBasket), (5, kSelfTargetGuests)])), hasLength(1));
-      expect(holidaySelfReminderProblems(list([(5, 'market')])), hasLength(1));
+      expect(holidaySelfReminderProblems(list([(5, '')])), hasLength(1));
+      expect(holidaySelfReminderProblems(list([for (var d = 1; d <= 11; d++) (d, kSelfTargetBasket)])), hasLength(1),
+          reason: '10 тадан кўп');
+      final long = HolidaySelfReminder(
+        daysBefore: 5,
+        target: kSelfTargetBasket,
+        texts: {...rtx('a'), 'ru': (title: 'x' * 81, body: 'y' * 301)},
+      );
+      expect(holidaySelfReminderProblems([long]), hasLength(2));
       expect(
           holidaySelfReminderProblems(
-              [const HolidaySelfReminder(daysBefore: 5, texts: {'uz_Cyrl': 'a'}, target: kSelfTargetBasket)]),
-          hasLength(2),
+              [const HolidaySelfReminder(daysBefore: 5, texts: {'uz_Cyrl': (title: 'a', body: 'b')}, target: kSelfTargetBasket)]),
+          hasLength(4),
           reason: 'лотин ва рус йўқ');
     });
 
-    test('push → мақсад: target маълум рўйхатдан; бошқаси — оддий байрам', () {
+    test('push: holiday_self_birthday / holiday_reminder + targetType сатрлари → йўл', () {
       HolidayRoute r(Map<String, String> d) => holidayRouteOf(holidayPushTarget(d)!);
-      expect(r({'type': 'holiday_reminder', 'occasionId': 'birthday', 'target': 'birthday_basket'}), HolidayRoute.birthdayBasket);
-      expect(r({'type': 'holiday_reminder', 'occasionId': 'birthday', 'target': 'birthday_basket_guests'}), HolidayRoute.birthdayGuests);
-      expect(r({'type': 'holiday_reminder', 'occasionId': 'birthday', 'target': 'restaurants_preorder'}), HolidayRoute.restaurantsPreorder);
-      expect(r({'type': 'holiday_reminder', 'occasionId': 'navruz', 'target': 'evil'}), HolidayRoute.occasionList);
+      const self = 'holiday_self_birthday';
+      expect(r({'type': self, 'targetType': 'holiday_basket', 'occasionId': 'birthday', 'daysBefore': '6'}), HolidayRoute.basket);
+      expect(r({'type': self, 'targetType': 'holiday_basket', 'occasionId': 'birthday', 'mode': 'guests'}), HolidayRoute.basketGuests);
+      expect(r({'type': self, 'targetType': 'restaurants_preorder', 'daysBefore': '7'}), HolidayRoute.restaurantsPreorder);
+      expect(r({'type': self}), HolidayRoute.basket, reason: 'мақсадсиз ўз туғилган куни — саватча');
+      expect(r({'type': 'holiday_reminder', 'occasionId': 'navruz', 'targetType': 'supermarket'}), HolidayRoute.supermarket);
+      expect(r({'type': 'holiday_reminder', 'occasionId': 'navruz', 'targetType': 'holiday_basket', 'mode': 'gift'}),
+          HolidayRoute.basketGift);
+      expect(r({'type': 'holiday_reminder', 'occasionId': 'navruz', 'targetType': 'evil'}), HolidayRoute.occasionList);
       expect(r({'type': 'holiday_reminder', 'occasionId': 'navruz'}), HolidayRoute.occasionList);
-      expect(r({'type': 'holiday_birthday_reminder', 'personId': 'p1', 'target': 'birthday_basket'}), HolidayRoute.relativeBirthday);
+      expect(r({'type': 'holiday_birthday_reminder', 'personId': 'p1', 'targetType': 'supermarket'}), HolidayRoute.relativeBirthday);
       expect(r({'type': 'holiday_relatives_bonus'}), HolidayRoute.bonus);
-      expect(holidayPushTarget({'type': 'other', 'target': 'birthday_basket'}), isNull);
+      expect(holidayPushTarget({'type': 'other', 'targetType': 'supermarket'}), isNull);
+
+      final q = holidayPushTarget({
+        'type': 'holiday_reminder',
+        'occasionId': 'qurbon_hayit',
+        'targetType': 'market',
+        'market': 'livestock',
+        'categories': 'sheep_goat,cattle',
+      })!;
+      expect(holidayRouteOf(q), HolidayRoute.market);
+      expect([q.target!.market, ...q.target!.categories], ['livestock', 'sheep_goat', 'cattle']);
+      expect(holidayRouteOf(holidayPushTarget({'type': 'holiday_reminder', 'targetType': 'market'})!), HolidayRoute.occasionList,
+          reason: 'бозор id йўқ — нотўғри мақсад');
+      // Ўз туғилган кунида байрам id йўқ бўлса — birthday.
+      expect(holidayRouteOccasion(holidayPushTarget({'type': self, 'targetType': 'holiday_basket'})!), 'birthday');
+      expect(holidayRouteOccasion(holidayPushTarget({'type': 'holiday_reminder', 'occasionId': 'navruz'})!), 'navruz');
     });
 
-    test('«Хабарлар» ёзуви push билан бир хил мақсад (target)', () {
+    test('«Хабарлар» ёзуви (extraNews.target объекти) push билан бир хил йўл', () {
       final n = NewsItem(
         id: 'n1',
         title: 't',
         body: 'b',
         createdAt: DateTime(2027),
-        source: 'holiday_reminder',
+        source: 'holiday_self_birthday',
         occasionId: 'birthday',
-        target: 'restaurants_preorder',
+        target: const {'type': 'restaurants_preorder'},
       );
       expect(holidayRouteOf(holidayInboxTarget(n)!), HolidayRoute.restaurantsPreorder);
+      final g = NewsItem(
+        id: 'n2',
+        title: 't',
+        body: 'b',
+        createdAt: DateTime(2027),
+        source: 'holiday_self_birthday',
+        target: const {'type': 'holiday_basket', 'occasionId': 'birthday', 'mode': 'guests'},
+      );
+      expect(holidayRouteOf(holidayInboxTarget(g)!), HolidayRoute.basketGuests);
     });
 
     testWidgets('«меҳмонлар учун» — туғилган кун очилади, меҳмонлар изоҳи билан', (t) async {
@@ -326,7 +377,7 @@ void main() {
             for (final d in [7, 6, 5, 4, 3])
               HolidaySelfReminder(
                 daysBefore: d,
-                texts: _n('Матн $d'),
+                texts: {for (final l in const ['uz_Cyrl', 'uz_Latn', 'ru']) l: (title: 'Сарлавҳа $d', body: 'Матн $d')},
                 target: d == 7 ? kSelfTargetPreorder : (d >= 5 ? kSelfTargetBasket : kSelfTargetGuests),
               ),
           ],
@@ -357,7 +408,7 @@ void main() {
       await t.ensureVisible(_k('hb_admin_save'));
       await t.tap(_k('hb_admin_save'));
       await t.pumpAndSettle();
-      expect(api.saved.single.selfReminders.map((r) => r.daysBefore), [6, 5, 4, 3]);
+      expect(api.saved.single.selfReminders!.map((r) => r.daysBefore), [6, 5, 4, 3]);
       expect(api.saved.single.toAdminMap()['selfReminders'], hasLength(4));
     });
 
@@ -380,6 +431,47 @@ void main() {
       await t.pumpAndSettle();
       expect(api.saved, isEmpty, reason: 'матнлар бўш');
     });
+
+    testWidgets('админ: эслатмаларга тегилмаса — сукут (майдон юборилмайди)', (t) async {
+      final api = _FakeAdminApi([HolidayOccasion(id: 'birthday', names: _n('Туғилган кун'), kind: 'birthday', stage: 'off')]);
+      await t.binding.setSurfaceSize(const Size(1000, 3000));
+      addTearDown(() => t.binding.setSurfaceSize(null));
+      await t.pumpWidget(_app(Scaffold(
+        body: HolidayAdminScreen(api: api, loadTaxonomy: () async => smTaxonomyFixture, loadOffers: (_) async => const []),
+      )));
+      await t.pumpAndSettle();
+      await t.tap(_k('hb_admin_occasion_birthday'));
+      await t.pumpAndSettle();
+      expect(_k('hb_admin_self_default_note'), findsOneWidget);
+      await t.ensureVisible(_k('hb_admin_save'));
+      await t.tap(_k('hb_admin_save'));
+      await t.pumpAndSettle();
+      expect(api.saved.single.selfReminders, isNull);
+      expect(api.saved.single.toAdminMap().containsKey('selfReminders'), isFalse);
+    });
+
+    testWidgets('админ: байрамда мақсад — «Ресторанда олдиндан буюртма» → target объекти', (t) async {
+      final api = _FakeAdminApi([
+        const HolidayOccasion(id: 'navruz', names: {'uz_Cyrl': 'Наврўз', 'uz_Latn': 'Navröz', 'ru': 'Навруз'}, ruleType: 'fixed', md: '03-21', stage: 'off'),
+      ]);
+      await t.binding.setSurfaceSize(const Size(1000, 3000));
+      addTearDown(() => t.binding.setSurfaceSize(null));
+      await t.pumpWidget(_app(Scaffold(
+        body: HolidayAdminScreen(api: api, loadTaxonomy: () async => smTaxonomyFixture, loadOffers: (_) async => const []),
+      )));
+      await t.pumpAndSettle();
+      await t.tap(_k('hb_admin_occasion_navruz'));
+      await t.pumpAndSettle();
+      expect(_k('hb_admin_self'), findsNothing);
+      await t.tap(_k('hb_admin_target_type'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Ресторанда олдиндан буюртма').last);
+      await t.pumpAndSettle();
+      await t.ensureVisible(_k('hb_admin_save'));
+      await t.tap(_k('hb_admin_save'));
+      await t.pumpAndSettle();
+      expect(api.saved.single.toAdminMap()['target'], {'type': 'restaurants_preorder'});
+    });
   });
 
   // ─── 5) Қурбон ҳайит ───────────────────────────────────────────────────────
@@ -387,13 +479,15 @@ void main() {
     final qurbon = HolidayOccasion.fromMap(_qurbonRaw)!;
 
     test('мақсад: бозор + бўлимлар; бузилгани — саватча; admin харитада target', () {
-      expect(qurbon.target.isMarket, isTrue);
-      expect(qurbon.target.market, 'livestock');
-      expect(qurbon.target.initialCategory, 'sheep_goat');
+      expect(qurbon.target!.isMarket, isTrue);
+      expect(qurbon.target!.market, 'livestock');
+      expect(qurbon.target!.initialCategory, 'sheep_goat');
       expect(qurbon.toAdminMap()['target'], {'type': 'market', 'market': 'livestock', 'categories': ['sheep_goat', 'cattle']});
-      expect(HolidayTarget.fromMap({'type': 'market', 'market': 'Bad Id'}).isMarket, isFalse);
-      expect(HolidayTarget.fromMap({'type': 'basket'}).isMarket, isFalse);
-      expect(HolidayTarget.fromMap(null).isMarket, isFalse);
+      expect(HolidayTarget.fromMap({'type': 'market', 'market': 'Bad Id'}), isNull);
+      expect(HolidayTarget.fromMap({'type': 'basket'}), isNull);
+      expect(HolidayTarget.fromMap(null), isNull);
+      expect(HolidayTarget.fromMap({'type': 'supermarket'})!.toMap(), {'type': 'supermarket'});
+      expect(HolidayOccasion.fromMap({'id': 'navruz', 'names': {}, 'target': null})!.target, isNull, reason: 'каталогда null');
       expect(const HolidayOccasion(id: 'navruz', names: {}, ruleType: 'fixed', md: '03-21').toAdminMap()['target'], isNull,
           reason: 'саватча — null (тозалаш учун ҳам)');
     });
@@ -415,7 +509,10 @@ void main() {
         api: _FakeHolidayApi(cat),
         listsStore: _FakeLists(),
         today: _today,
-        openTarget: (ctx, tg, {bool replace = false}) async => opened.add('${tg.market}/${tg.initialCategory}/$replace'),
+        openTarget: (ctx, tg, {bool replace = false}) async {
+          opened.add('${tg.market}/${tg.initialCategory}/$replace');
+          return true;
+        },
       )));
       await t.pumpAndSettle();
       await t.tap(_k('hb_occasion_qurbon_hayit'));
@@ -431,7 +528,10 @@ void main() {
         api: _FakeHolidayApi(HolidayCatalog(occasions: [qurbon])),
         listsStore: _FakeLists(),
         initialOccasionId: 'qurbon_hayit',
-        openTarget: (ctx, tg, {bool replace = false}) async => opened.add(replace),
+        openTarget: (ctx, tg, {bool replace = false}) async {
+          opened.add(replace);
+          return true;
+        },
       )));
       await t.pumpAndSettle();
       expect(opened, [true]);

@@ -31,5 +31,6 @@ HolidayPushTarget? holidayInboxTarget(Object? payload) {
     last = payload.messages.reduce((a, b) => b.createdAt.isAfter(a.createdAt) ? b : a);
   }
   if (last == null) return null;
-  return holidayPushTarget({'type': last.source, 'occasionId': last.occasionId, 'personId': last.personId, 'target': last.target});
+  return holidayPushTarget({'type': last.source, 'occasionId': last.occasionId, 'personId': last.personId},
+      targetObject: last.target);
 }

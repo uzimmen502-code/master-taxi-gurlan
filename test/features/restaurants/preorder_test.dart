@@ -50,6 +50,10 @@ void main() {
         'restaurants_preorder_err_${Preorder.errClosed}', 'restaurants_preorder_err_${Preorder.errPaused}',
         'restaurants_err_PREORDER_NOT_ACCEPTED', 'restaurants_err_PREORDER_TOO_SOON', 'restaurants_err_PREORDER_TOO_FAR',
         'restaurants_err_PREORDER_CLOSED_AT_TIME', 'restaurants_err_PREORDER_TOO_EARLY', 'restaurants_err_PREORDER_TIME_INVALID',
+        // Эга 2026-11-27 (сервер fix/restaurant-preorder-dish 1ad28ad8): таом даражаси.
+        'restaurants_err_PREORDER_ITEM_REQUIRED', 'restaurants_err_PREORDER_ITEM_LEAD_TOO_SHORT',
+        'restaurants_err_PREORDER_ITEM_NOT_ALLOWED', 'restaurants_err_MENU_ITEM_PREORDER_INVALID',
+        'restaurants_preorder_err_${Preorder.errLead}', 'restaurants_preorder_lead_note',
       ]) {
         for (final lang in ['uz_Cyrl', 'uz_Latn', 'ru']) {
           expect(JsonL10nDelegate(lang).tr(k), isNot(k), reason: '$lang $k');
@@ -181,6 +185,25 @@ void main() {
       await t.pumpAndSettle();
       final s = Preorder.suggest(_now);
       expect(placed.single, DateTime(2026, 10, 21, s.hour, s.minute));
+    });
+
+    testWidgets('сервер хатоси PREORDER_ITEM_LEAD_TOO_SHORT: details.leadDays матнга қўйилади; TOO_FAR — 14', (t) async {
+      String? lead;
+      String? far;
+      await t.pumpWidget(l10nApp(
+        home: Builder(builder: (ctx) {
+          lead = restaurantsErrorText(
+              ctx,
+              const RestaurantsException('failed-precondition', 'PREORDER_ITEM_LEAD_TOO_SHORT', 'x',
+                  details: {'code': 'PREORDER_ITEM_LEAD_TOO_SHORT', 'itemId': 'cake', 'leadDays': 3}));
+          far = restaurantsErrorText(ctx, const RestaurantsException('failed-precondition', 'PREORDER_TOO_FAR', 'x'));
+          return const SizedBox();
+        }),
+      ));
+      expect(lead, tr('restaurants_err_PREORDER_ITEM_LEAD_TOO_SHORT').replaceAll('{lead}', '3'));
+      expect(lead, contains('3'));
+      expect(lead, isNot(contains('{lead}')));
+      expect(far, contains('14'));
     });
 
     testWidgets('таом формаси: калит → кунлар (+/−, 0..14); 320 px / 1.5 синмайди', (t) async {

@@ -7,6 +7,7 @@ import '../../../core/utils/formatters.dart';
 import '../../restaurants/domain/restaurants_access.dart' show kRestaurantsModuleId;
 import '../../restaurants/screens/restaurants_list_screen.dart';
 import '../../markets/open_market.dart';
+import '../../home/home_module_gate.dart';
 import '../data/holiday_repository.dart';
 import '../data/sm_lists_repository.dart';
 import '../data/supermarket_repository.dart';
@@ -20,7 +21,7 @@ import '../widgets/sm_compare_dialog.dart';
 import '../widgets/sm_widgets.dart';
 import 'sm_checkout_screen.dart';
 import 'sm_weekly_screen.dart' show SmListEditorScreen;
-import 'supermarket_home_screen.dart' show smOpenCart;
+import 'supermarket_home_screen.dart' show openSupermarketWith, smOpenCart;
 
 /// «Туғилган кун ва байрам саватчаси»ни очиш (эга 2026-11-26).
 /// [occasionId] — шу байрам дарҳол очилади (push); [birthday] — туғилган кун байрами (қариндошдан);
@@ -46,6 +47,33 @@ Future<void> openHolidayMarketTarget(BuildContext context, HolidayTarget t, {boo
       initialCategory: t.initialCategory,
       push: replace ? (s) => Navigator.of(context).pushReplacement<void, void>(MaterialPageRoute(builder: (_) => s)) : null,
     );
+
+/// Байрам мақсади саватча ЭМАС (бозор / ресторанда олдиндан буюртма / супермаркет) — мавжуд экранлар, ўз модул
+/// дарвозалари билан. Саватча тури — `false` (чақирувчи байрам экранини очади).
+Future<bool> openHolidayNonBasketTarget(BuildContext context, HolidayTarget t, {bool replace = false}) async {
+  final nav = Navigator.of(context);
+  Future<void> go(Widget s) => replace
+      ? nav.pushReplacement<void, void>(MaterialPageRoute(builder: (_) => s))
+      : nav.push<void>(MaterialPageRoute(builder: (_) => s));
+  switch (t.type) {
+    case kTargetMarket:
+      await openHolidayMarketTarget(context, t, replace: replace);
+      return true;
+    case kTargetRestaurantsPreorder:
+      if (!ServiceConfigHolder.isOpenable(kRestaurantsModuleId)) {
+        HomeModuleGate.onTapBlocked(context, kRestaurantsModuleId);
+        return true;
+      }
+      await go(const RestaurantsListScreen(preorderOnly: true));
+      return true;
+    case kTargetSupermarket:
+      // Супермаркет дарвозаси байрам экранига киришда текширилган.
+      await openSupermarketWith(nav);
+      return true;
+    default:
+      return false;
+  }
+}
 
 String _two(int n) => n.toString().padLeft(2, '0');
 
@@ -76,8 +104,8 @@ class SmHolidayScreen extends StatefulWidget {
   /// Ўз туғилган куни «меҳмонлар учун саватча» эслатмасидан (эга 2026-11-27) — меҳмонлар сони изоҳи.
   final bool guestsHint;
 
-  /// Тест учун; бўлмаса — [openHolidayMarketTarget].
-  final Future<void> Function(BuildContext context, HolidayTarget target, {bool replace})? openTarget;
+  /// Тест учун; бўлмаса — [openHolidayNonBasketTarget] (саватча тури — `false`).
+  final Future<bool> Function(BuildContext context, HolidayTarget target, {bool replace})? openTarget;
 
   @override
   State<SmHolidayScreen> createState() => _SmHolidayScreenState();
@@ -131,8 +159,9 @@ class _SmHolidayScreenState extends State<SmHolidayScreen> {
   }
 
   void _open(HolidayOccasion o, {bool auto = false}) {
-    if (o.target.isMarket) {
-      (widget.openTarget ?? openHolidayMarketTarget)(context, o.target, replace: auto);
+    final t = o.target;
+    if (t != null && !t.isBasket) {
+      (widget.openTarget ?? openHolidayNonBasketTarget)(context, t, replace: auto);
       return;
     }
     Navigator.of(context).push(MaterialPageRoute<void>(
@@ -142,8 +171,9 @@ class _SmHolidayScreenState extends State<SmHolidayScreen> {
         occasion: o,
         baskets: holidayBasketsFor(_catalog?.baskets ?? const [], o.id),
         listsStore: widget.listsStore,
-        gift: o.isBirthday ? widget.gift : null,
-        guestsHint: o.isBirthday && widget.guestsHint,
+        // Қариндош совғаси — туғилган кунда; push «совға» режими — шу push очган байрамда.
+        gift: o.isBirthday || o.id == widget.initialOccasionId ? widget.gift : null,
+        guestsHint: (auto && widget.guestsHint) || t?.mode == kTargetModeGuests,
       ),
     ));
   }

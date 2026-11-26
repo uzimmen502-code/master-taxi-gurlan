@@ -11,7 +11,15 @@
       "names": { "uz_Cyrl": "Рамазон ҳайити", "uz_Latn": "Ramazon hayiti", "ru": "Рамазан хайит" } },
     { "id": "new_year", "kind": "holiday", "order": 4, "stage": "off", "bigHoliday": true, "remindDaysBefore": 10,
       "dateRule": { "type": "fixed", "md": "01-01" },
-      "names": { "uz_Cyrl": "Янги йил", "uz_Latn": "Yangi yil", "ru": "Новый год" } }
+      "names": { "uz_Cyrl": "Янги йил", "uz_Latn": "Yangi yil", "ru": "Новый год" } },
+    { "id": "qurbon_hayit", "kind": "holiday", "order": 5, "stage": "off", "bigHoliday": true, "remindDaysBefore": 10,
+      "dateRule": { "type": "list", "dates": [] },
+      "names": { "uz_Cyrl": "Қурбон ҳайит", "uz_Latn": "Qurbon hayit", "ru": "Курбан-хайит" },
+      "target": { "type": "market", "market": "livestock", "categories": ["sheep_goat", "cattle"] },
+      "reminderTexts": {
+        "uz_Cyrl": { "title": "Қурбон ҳайит яқинлашмоқда", "body": "Қурбон ҳайитга {days} кун қолди — жонлиқни Мол бозоридан яқин сотувчилардан танланг" },
+        "uz_Latn": { "title": "Qurbon hayit yaqinlaşmoqda", "body": "Qurbon hayitga {days} kun qoldi — jonliqni Mol bozoridan yaqin sotuvçilardan tanlang" },
+        "ru": { "title": "Скоро Курбан-хайит", "body": "До Курбан-хайита осталось {days} дн. — выберите животное на Рынке скота у продавцов поблизости" } } }
   ],
   "baskets": [
     { "id": "birthday_simple", "occasionId": "birthday", "tier": "simple", "baseGuests": 10, "active": true,

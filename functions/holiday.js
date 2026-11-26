@@ -46,12 +46,14 @@ const DAY_MS = 86400000;
 const MAX_AHEAD_DAYS = 14; // етказиш санаси (эга 2026-11-26)
 const DEFAULT_REMIND = 5;
 const BIG_REMIND = 10;
-const GIFT_PURGE_DAYS = 7;
+const GIFT_PURGE_DAYS = 1; // эга 2026-11-27 (аввал 7): етказилган/бекор қилингандан 1 кун кейин
+const SELF_BD_INDEX = 'holiday_self_birthday_index'; // {ownerId, personId, md} — фойдаланувчининг ЎЗ туғилган куни (исмсиз)
 const BONUS_PROGRAM_ID = 'relatives_birthdays';
 const BONUS_BUCKET = 'supermarket';
 const LIMITS = Object.freeze({
   name: 60, items: 60, dates: 30, guestsMax: 500, budgetMax: 100000000, recipientName: 60, giftMessage: 200,
   remindMax: 30, image: 500, bdPage: 300, usersPage: 300, maxPerRun: 2000, giftSweep: 200, peopleScan: 200,
+  selfReminders: 10, textTitle: 80, textBody: 300, targetCategories: 10,
 });
 
 // ── Хабарлар (3 тил, 25-банд) ──
@@ -82,11 +84,44 @@ const HOLIDAY_TEXT = Object.freeze({
   uz_Latn: { title: 'Bayram yaqinlaşmoqda', body: '{holiday}ga {days} kun qoldi — bayram savatçasini tayyorlaymizmi?' },
   ru: { title: 'Скоро праздник', body: 'До праздника «{holiday}» осталось {days} дн. — соберём праздничную корзину?' },
 });
+// Совға олувчига — курьер олиб йўлга чиққанда (эга 2026-11-27: буюртма берилганда ЭМАС). Нарх йўқ.
 const GIFT_TEXT = Object.freeze({
-  uz_Cyrl: { title: 'Сизга совға!', body: 'Сизга AVA орқали совға юборилди. Курьер {date} куни олиб келади ва олдиндан қўнғироқ қилади.' },
-  uz_Latn: { title: "Sizga sovğa!", body: "Sizga AVA orqali sovğa yuborildi. Kuryer {date} kuni olib keladi va oldindan qöngiroq qiladi." },
-  ru: { title: 'Вам подарок!', body: 'Вам отправили подарок через AVA. Курьер привезёт его {date} и заранее позвонит.' },
+  uz_Cyrl: { title: 'Сизга совға!', body: 'Сизга AVA орқали совға юборилди. Курьер уни олиб йўлга чиқди ва олдиндан қўнғироқ қилади.' },
+  uz_Latn: { title: "Sizga sovğa!", body: "Sizga AVA orqali sovğa yuborildi. Kuryer uni olib yölga çiqdi va oldindan qöngiroq qiladi." },
+  ru: { title: 'Вам подарок!', body: 'Вам отправили подарок через AVA. Курьер уже везёт его и заранее позвонит.' },
 });
+// Фойдаланувчининг ЎЗ туғилган куни (эга 2026-11-27): D-7..D-3, ҳар куни бошқа таклиф. Матн/мақсад — PROPOSED сукут,
+// админ `holiday_occasions/birthday.selfReminders` орқали ўзгартиради ([] — ўчирилган).
+const T = (c, l, r) => ({ uz_Cyrl: c, uz_Latn: l, ru: r });
+const SELF_TITLE = T('Туғилган кунингиз яқин', 'Tuğilgan kuningiz yaqin', 'Скоро ваш день рождения');
+const selfText = (c, l, r) => ({
+  uz_Cyrl: { title: SELF_TITLE.uz_Cyrl, body: c }, uz_Latn: { title: SELF_TITLE.uz_Latn, body: l }, ru: { title: SELF_TITLE.ru, body: r },
+});
+const DEFAULT_SELF_REMINDERS = Object.freeze([
+  { daysBefore: 7, target: { type: 'holiday_basket', occasionId: 'birthday', mode: 'guests' }, texts: selfText(
+    'Туғилган кунингизга 7 кун қолди — меҳмонлар учун байрам саватчасини тайёрлаймизми?',
+    'Tuğilgan kuningizga 7 kun qoldi — mehmonlar uçun bayram savatçasini tayyorlaymizmi?',
+    'До вашего дня рождения 7 дней — собрать праздничную корзину для гостей?') },
+  { daysBefore: 6, target: { type: 'restaurants_preorder' }, texts: selfText(
+    'Туғилган кунингизга 6 кун қолди. Торт ва таомларни олдиндан буюртма қилинг.',
+    'Tuğilgan kuningizga 6 kun qoldi. Tort va taomlarni oldindan buyurtma qiling.',
+    'До вашего дня рождения 6 дней. Закажите торт и блюда заранее.') },
+  { daysBefore: 5, target: { type: 'holiday_basket', occasionId: 'birthday', mode: 'guests' }, texts: selfText(
+    'Яқинларингизни таклиф қилинг — сават ва етказишни AVA ўз зиммасига олади.',
+    'Yaqinlaringizni taklif qiling — savat va yetkazişni AVA öz zimmasiga oladi.',
+    'Пригласите близких — корзину и доставку AVA берёт на себя.') },
+  { daysBefore: 4, target: { type: 'holiday_basket', occasionId: 'birthday', mode: 'gift' }, texts: selfText(
+    'Совға ва гуллар учун яқинларингизга эслатма юборамизми?',
+    'Sovğa va gullar uçun yaqinlaringizga eslatma yuboramizmi?',
+    'Напомнить близким о подарке и цветах?') },
+  { daysBefore: 3, target: { type: 'holiday_basket', occasionId: 'birthday' }, texts: selfText(
+    'Сўнгги имконият: саватча ва тортни ҳозир буюртма қилинг — етказишга улгурамиз.',
+    "Sönggi imkoniyat: savatça va tortni hozir buyurtma qiling — yetkazişga ulguramiz.",
+    'Последний шанс: закажите корзину и торт сейчас — успеем доставить.') },
+]);
+// Байрам эслатмаси CTA мақсадлари (эга 2026-11-27). Қурбон ҳайит — Мол бозори (сават эмас).
+const TARGET_TYPES = Object.freeze(['holiday_basket', 'restaurants_preorder', 'supermarket', 'market']);
+const BASKET_MODES = Object.freeze(['guests', 'gift']);
 const BONUS_TEXT = Object.freeze({
   uz_Cyrl: { title: 'Бонус берилди', body: 'Қариндошларингиз туғилган кунлари учун {amount} сўм бонус — Супермаркетда {min} сўмдан ортиқ буюртмада ишлатинг.' },
   uz_Latn: { title: 'Bonus berildi', body: "Qarindoşlaringiz tuğilgan kunlari uçun {amount} söm bonus — Supermarketda {min} sömdan ortiq buyurtmada işlating." },
@@ -184,11 +219,63 @@ function checkNames(v, p, errors, max = LIMITS.name) {
   }
   for (const k of Object.keys(v)) if (!LANGS.includes(k)) errors.push(`UNKNOWN_KEY ${p}.${k}`);
 }
-const OCC_KEYS = ['id', 'names', 'kind', 'bigHoliday', 'dateRule', 'remindDaysBefore', 'stage', 'order', 'image'];
+/** Эслатма матнлари: {uz_Cyrl|uz_Latn|ru: {title, body}}; {days}/{holiday} ўрин белгилари рухсат. */
+function checkTexts(v, p, errors) {
+  if (!isObj(v)) { errors.push(`TEXTS_INVALID ${p}`); return; }
+  for (const k of Object.keys(v)) if (!LANGS.includes(k)) errors.push(`UNKNOWN_KEY ${p}.${k}`);
+  for (const l of LANGS) {
+    const x = v[l];
+    if (!isObj(x) || Object.keys(x).some((k) => !['title', 'body'].includes(k))) { errors.push(`TEXTS_INVALID ${p}.${l}`); continue; }
+    if (typeof x.title !== 'string' || !x.title.trim() || x.title.length > LIMITS.textTitle) errors.push(`TEXT_TITLE_INVALID ${p}.${l}`);
+    if (typeof x.body !== 'string' || !x.body.trim() || x.body.length > LIMITS.textBody) errors.push(`TEXT_BODY_INVALID ${p}.${l}`);
+  }
+}
+/** CTA мақсади (клиент навигацияси учун; сервер ҳеч нарса бермайди). */
+function checkTarget(t, p, errors) {
+  if (!isObj(t) || !TARGET_TYPES.includes(t.type)) { errors.push(`TARGET_INVALID ${p}`); return; }
+  const allowed = { holiday_basket: ['type', 'occasionId', 'mode'], restaurants_preorder: ['type'], supermarket: ['type'], market: ['type', 'market', 'categories'] }[t.type];
+  for (const k of Object.keys(t)) if (!allowed.includes(k)) errors.push(`UNKNOWN_KEY ${p}.${k}`);
+  if (t.type === 'holiday_basket') {
+    if (typeof t.occasionId !== 'string' || !ID_RE.test(t.occasionId)) errors.push(`TARGET_OCCASION_INVALID ${p}.occasionId`);
+    if (t.mode != null && !BASKET_MODES.includes(t.mode)) errors.push(`TARGET_MODE_INVALID ${p}.mode`);
+  }
+  if (t.type === 'market') {
+    if (typeof t.market !== 'string' || !/^[a-z][a-z0-9_]{1,39}$/.test(t.market)) errors.push(`TARGET_MARKET_INVALID ${p}.market`);
+    const c = t.categories;
+    if (c != null && (!Array.isArray(c) || c.length > LIMITS.targetCategories || new Set(c).size !== c.length
+      || !c.every((x) => typeof x === 'string' && /^[a-z][a-z0-9_]{1,39}$/.test(x)))) errors.push(`TARGET_CATEGORIES_INVALID ${p}.categories`);
+  }
+}
+function checkSelfReminders(list, errors) {
+  if (!Array.isArray(list) || list.length > LIMITS.selfReminders) { errors.push('SELF_REMINDERS_INVALID selfReminders'); return; }
+  const seen = new Set();
+  list.forEach((r, i) => {
+    const p = `selfReminders[${i}]`;
+    if (!isObj(r)) { errors.push(`SELF_REMINDER_INVALID ${p}`); return; }
+    for (const k of Object.keys(r)) if (!['daysBefore', 'texts', 'target'].includes(k)) errors.push(`UNKNOWN_KEY ${p}.${k}`);
+    if (!isInt(r.daysBefore, 1, LIMITS.remindMax)) errors.push(`DAYS_INVALID ${p}.daysBefore`);
+    else if (seen.has(r.daysBefore)) errors.push(`DAYS_DUPLICATE ${p}.daysBefore`);
+    seen.add(r.daysBefore);
+    checkTexts(r.texts, `${p}.texts`, errors);
+    checkTarget(r.target, `${p}.target`, errors);
+  });
+}
+
+const OCC_KEYS = ['id', 'names', 'kind', 'bigHoliday', 'dateRule', 'remindDaysBefore', 'stage', 'order', 'image',
+  'selfReminders', 'target', 'reminderTexts'];
 function validateOccasion(o) {
   const errors = [];
   if (!isObj(o)) return { ok: false, errors: ['OCCASION_NOT_OBJECT'] };
   for (const k of Object.keys(o)) if (!OCC_KEYS.includes(k)) errors.push(`UNKNOWN_KEY ${k}`);
+  if (o.target != null) checkTarget(o.target, 'target', errors);
+  if (o.reminderTexts != null) {
+    if (o.kind !== 'holiday') errors.push('REMINDER_TEXTS_FORBIDDEN reminderTexts'); // туғилган кун (қариндош) — исмли қатъий матн
+    else checkTexts(o.reminderTexts, 'reminderTexts', errors);
+  }
+  if (o.selfReminders != null) {
+    if (o.kind !== 'birthday') errors.push('SELF_REMINDERS_FORBIDDEN selfReminders');
+    else checkSelfReminders(o.selfReminders, errors);
+  }
   if (typeof o.id !== 'string' || !ID_RE.test(o.id)) errors.push('ID_INVALID id');
   checkNames(o.names, 'names', errors);
   if (!KINDS.includes(o.kind)) errors.push('KIND_INVALID kind');
@@ -225,6 +312,9 @@ function normalizeOccasion(o) {
   const out = {
     id: o.id, names: o.names, kind: o.kind, bigHoliday: o.bigHoliday === true, stage: o.stage, order: o.order,
     remindDaysBefore: remindDaysOf(o), image: o.image || '', dateRule: o.kind === 'holiday' ? o.dateRule : null,
+    target: o.target || null, reminderTexts: o.reminderTexts || null,
+    // null — сукут (DEFAULT_SELF_REMINDERS); [] — ўчирилган.
+    selfReminders: o.kind === 'birthday' && Array.isArray(o.selfReminders) ? o.selfReminders : null,
   };
   if (out.dateRule && out.dateRule.type === 'list') out.dateRule = { type: 'list', dates: [...out.dateRule.dates].sort() };
   return out;
@@ -401,9 +491,20 @@ function terminalOf(od) {
   if (DELIVERED.has(s) || fs === 'completed' || fs === 'delivered') return 'delivered';
   return null;
 }
+/**
+ * Совға курьерга ўтдими (эга 2026-11-27: олувчига хабар шу пайтда): status courier|in_delivery ёки
+ * fulfillmentStatus courier_picked|arrived; бекор қилинган/якунланган — йўқ.
+ */
+function giftDispatched(od) {
+  const x = od || {};
+  if (terminalOf(x)) return false;
+  const s = String(x.status || '');
+  const fs = String(x.fulfillmentStatus || '').toLowerCase();
+  return s === 'courier' || s === 'in_delivery' || fs === 'courier_picked' || fs === 'arrived';
+}
 const msOf = (v) => (v && typeof v.toMillis === 'function' ? v.toMillis() : (typeof v === 'number' ? v : null));
 /**
- * Совға PII тозалаш қарори: якунланган + 7 кун → redact; якунланган, 7 кун ўтмаган → шу вақтга кўчир;
+ * Совға PII тозалаш қарори: якунланган + GIFT_PURGE_DAYS (1) кун → redact; якунланган, муддат ўтмаган → шу вақтга кўчир;
  * ҳали фаол → эртага қайта қара.
  */
 function giftPurgeDecision(od, nowMs) {
@@ -414,7 +515,61 @@ function giftPurgeDecision(od, nowMs) {
   return due <= nowMs ? { action: 'redact' } : { action: 'reschedule', nextMs: due };
 }
 
+// ══════════════════════ ЎЗ ТУҒИЛГАН КУН (тоза) ══════════════════════
+
+/**
+ * users/{uid}.birthDate — сатр (рўйхатдан ўтиш: 'YYYY-MM-DD' ёки 'D.M.YYYY', lib/core/utils/formatters.dart parseBirthDate)
+ * ёки Timestamp (эски) → 'MM-DD'; ҳақиқий бўлмаса null.
+ */
+function mdOfUserBirth(v) {
+  if (typeof v === 'string') {
+    const s = v.trim();
+    let m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+    let key = null;
+    if (m) key = `${m[1]}-${m[2]}-${m[3]}`;
+    else if ((m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(s))) key = `${m[3]}-${pad(Number(m[2]))}-${pad(Number(m[1]))}`;
+    return key && validDateKey(key) ? key.slice(5) : null;
+  }
+  return v && typeof v.toMillis === 'function' ? mdOfBirth(v) : null; // рақам/бошқа — сақланадиган шакл эмас
+}
+/** Самарали рўйхат: null → сукут; бузуқ ёзув — ташланади (ҳимоя). */
+function selfRemindersOf(occ) {
+  const list = occ && Array.isArray(occ.selfReminders) ? occ.selfReminders : DEFAULT_SELF_REMINDERS;
+  return list.filter((r) => { const e = []; checkSelfReminders([r], e); return e.length === 0; });
+}
+/** Бугун учун: {md: {reminder, target(date)}} — ҳар эслатма ўз кун сони бўйича (кабиса қоидаси birthdayMdTargets'дан). */
+function selfDueMap(todayKey, reminders) {
+  const out = {};
+  for (const r of reminders) {
+    const { target, mds } = birthdayMdTargets(todayKey, r.daysBefore);
+    for (const md of mds) if (!out[md]) out[md] = { reminder: r, date: target };
+  }
+  return out;
+}
+/** Пуш data (FCM — фақат сатрлар) ва экран: клиент мақсадга шу орқали ўтади. */
+function targetPush(target) {
+  const t = target || { type: 'supermarket' };
+  const data = { targetType: t.type };
+  if (t.occasionId) data.occasionId = t.occasionId;
+  if (t.mode) data.mode = t.mode;
+  if (t.market) data.market = t.market;
+  if (Array.isArray(t.categories) && t.categories.length) data.categories = t.categories.join(',');
+  const screen = { holiday_basket: 'supermarket', supermarket: 'supermarket', restaurants_preorder: 'restaurants', market: 'market' }[t.type] || 'supermarket';
+  return { screen, data };
+}
+
 // ══════════════════════ ҚАРИНДОШЛАР БОНУСИ (тоза) ══════════════════════
+
+/**
+ * Шахс калити (эга 2026-11-27): телефоннинг охирги 9 рақами → '998XXXXXXXXX'. users/998… ва эски 9 хонали
+ * ҳужжатлар БИР шахс — битта грант. 9 ёки 998+9 хонали бўлмаса — null.
+ */
+function personKeyOf(id) {
+  const d = String(id || '').replace(/\D/g, '');
+  if (d.length === 9) return `998${d}`;
+  if (d.length === 12 && d.startsWith('998')) return d;
+  return null;
+}
 
 /** Исм + туғилган сана бор, «Мен» эмас. */
 function relativeEligible(d) {
@@ -516,7 +671,9 @@ function attachHoliday(exportsObj, deps) {
   /** Фойдаланувчи учун кўринадими: супермаркет дарвозаси + байрам босқичи (internal/pilot — админ ва тестерлар). */
   function occasionVisibleFor(occ, settings, uid, role, districtId) {
     if (!occ || occ.stage === 'off' || !STAGES.includes(occ.stage)) return false;
-    if (!sm.gateDecision(settings, { uid, role, districtId, requireDistrict: false }).allowed) return false;
+    // Бозор мақсадли байрам (Қурбон ҳайит → Мол бозори) супермаркет дарвозасига боғлиқ эмас (эга 2026-11-27).
+    const marketTarget = isObj(occ.target) && occ.target.type === 'market';
+    if (!marketTarget && !sm.gateDecision(settings, { uid, role, districtId, requireDistrict: false }).allowed) return false;
     if (occ.stage === 'public') return true;
     return ADMIN_ROLES.includes(role) || (Array.isArray((settings || {}).testerIds) && settings.testerIds.includes(uid));
   }
@@ -596,6 +753,7 @@ function attachHoliday(exportsObj, deps) {
       .map((o) => ({
         id: o.id, names: o.names, kind: o.kind, bigHoliday: o.bigHoliday === true, image: o.image || '', order: o.order,
         remindDaysBefore: remindDaysOf(o), nextDate: o.kind === 'holiday' ? occasionNextDate(o, today) : null,
+        target: o.target || null,
       }));
     const ids = occasions.map((o) => o.id);
     const baskets = [];
@@ -651,13 +809,24 @@ function attachHoliday(exportsObj, deps) {
       const after = change.after.exists ? (change.after.data() || {}) : null;
       const md = after && relativeEligible(after) ? mdOfBirth(after.birthDate) : null;
       const ref = db.collection(BD_INDEX).doc(`${ownerId}_${personId}`);
+      // «Мен» ёзуви (isSelf) — профилдан синхронланади (index.js syncSelfRelativePerson, users.birthDate) →
+      // фойдаланувчининг ЎЗ туғилган куни индекси (эга 2026-11-27). Юбориш олдидан users.birthDate қайта текширилади.
+      const selfMd = after && after.isSelf === true ? mdOfBirth(after.birthDate) : null;
+      const selfRef = db.collection(SELF_BD_INDEX).doc(ownerId);
       const res = await db.runTransaction(async (t) => {
-        const s = await t.get(ref);
+        const [s, ss] = await Promise.all([t.get(ref), t.get(selfRef)]);
         const cur = s.exists ? (s.data() || {}).md : null;
-        if (cur === md) return 'noop';
-        if (md == null) { t.delete(ref); return 'removed'; }
-        t.set(ref, { ownerId, personId, md, updatedAt: ts() });
-        return 'indexed';
+        const sc = ss.exists ? (ss.data() || {}) : null;
+        let r = 'noop';
+        if (cur !== md) {
+          if (md == null) { t.delete(ref); r = 'removed'; } else { t.set(ref, { ownerId, personId, md, updatedAt: ts() }); r = 'indexed'; }
+        }
+        if (selfMd != null && (!sc || sc.md !== selfMd || sc.personId !== personId)) {
+          t.set(selfRef, { ownerId, personId, md: selfMd, updatedAt: ts() }); r = `${r}+self`;
+        } else if (selfMd == null && sc && sc.personId === personId) {
+          t.delete(selfRef); r = `${r}+self_removed`;
+        }
+        return r;
       });
       let bonus = null;
       if (md != null) {
@@ -669,35 +838,49 @@ function attachHoliday(exportsObj, deps) {
 
   /**
    * Қариндошлар бонуси (бир марта, умрбод): ≥ minRelatives қариндошда исм+сана → грант (мавжуд рағбат тизими).
-   * Грант id = `${programId}_${uid}` — детерминистик, қайта берилмайди; қариндош ўчирилса ҳам қайтариб олинмайди.
-   * Фақат канон `users/998…` ҳужжати (мавжуд claimIncentive билан бир хил чеклов; эски 9 хонали ҳисоб — NOT_ELIGIBLE).
+   * БАРЧА телефон шакллари (эга 2026-11-27): шахс калити = охирги 9 рақам ('998'+9). Грант id =
+   * `${programId}_${personKey}` — users/998… ва эски 9 хонали ҳужжат БИР грантга тўқнашади (t.create — фақат битта ғолиб).
+   * Грант `uid` = ҳисоб ҳужжати id'си (канон бор бўлса — канон, йўқ бўлса — эски 9 хонали): мавжуд incentives.js
+   * (сарф/қайтариш/муддат/бекор) `users/{grant.uid}` га ёзади — ҳужжат мавжуд бўлиши шарт. Қариндошлар иккала
+   * relatives/{…} ҳужжатидан санолади (исм+сана бўйича такрорсиз). Қариндош ўчирилса ҳам грант қайтариб олинмайди.
    */
   async function grantRelativesBonus(ownerDocId) {
-    const uid = canonicalUid(ownerDocId);
-    if (!/^998\d{9}$/.test(uid)) return { result: 'skip', code: 'UID_INVALID' };
+    const personKey = personKeyOf(ownerDocId);
+    if (!personKey) return { result: 'skip', code: 'UID_INVALID' };
     const progRef = db.collection('incentive_programs').doc(BONUS_PROGRAM_ID);
-    const userRef = db.collection('users').doc(uid);
-    const [pSnap, uSnap] = await Promise.all([progRef.get(), userRef.get()]);
+    const [pSnap, user] = await Promise.all([progRef.get(), userDoc(personKey)]);
     if (!pSnap.exists || (pSnap.data() || {}).kind !== BONUS_PROGRAM_ID) return { result: 'skip', code: 'PROGRAM_OFF' };
-    if (!uSnap.exists) return { result: 'skip', code: 'NOT_ELIGIBLE' };
+    if (!user) return { result: 'skip', code: 'NOT_ELIGIBLE' };
+    const userRef = user.ref;
     const p0 = pSnap.data();
-    if (!bonusStageAllows(p0, uid, (uSnap.data() || {}).districtId)) return { result: 'skip', code: 'NOT_IN_STAGE' };
-    const people = await db.collection('relatives').doc(ownerDocId).collection('people').limit(LIMITS.peopleScan).get();
-    const count = people.docs.filter((x) => relativeEligible(x.data())).length;
+    if (!bonusStageAllows(p0, personKey, user.data.districtId)) return { result: 'skip', code: 'NOT_IN_STAGE' };
+    const seen = new Set();
+    let count = 0;
+    for (const owner of [personKey, personKey.slice(3)]) {
+      const people = await db.collection('relatives').doc(owner).collection('people').limit(LIMITS.peopleScan).get();
+      for (const x of people.docs) {
+        const d = x.data() || {};
+        if (!relativeEligible(d)) continue;
+        const key = `${String(d.firstName || d.fullName || '').trim().toLowerCase()}|${mdOfBirth(d.birthDate)}`;
+        if (seen.has(key)) continue;
+        seen.add(key); count += 1;
+      }
+    }
     if (count < p0.minRelatives) return { result: 'skip', code: 'NOT_ENOUGH_RELATIVES', count };
-    const grantId = inc.grantIdOf(BONUS_PROGRAM_ID, uid);
+    const grantId = inc.grantIdOf(BONUS_PROGRAM_ID, personKey);
     const grantRef = db.collection('incentive_grants').doc(grantId);
+    const uid = userRef.id;
     const out = await db.runTransaction(async (t) => {
       const nowMs = now();
       const [ps, gs, us] = await Promise.all([t.get(progRef), t.get(grantRef), t.get(userRef)]);
       if (gs.exists) return { result: 'duplicate' };
       const p = ps.data() || {};
-      if (!us.exists || !bonusStageAllows(p, uid, (us.data() || {}).districtId)) return { result: 'skip', code: 'NOT_IN_STAGE' };
+      if (!us.exists || !bonusStageAllows(p, personKey, (us.data() || {}).districtId)) return { result: 'skip', code: 'NOT_IN_STAGE' };
       const granted = Number.isSafeInteger((p.counters || {}).grantedAmount) ? p.counters.grantedAmount : 0;
       if (granted + p.amount > p.budgetTotal) return { result: 'skip', code: 'BUDGET_EXHAUSTED' };
       const buckets = { [BONUS_BUCKET]: p.amount };
       t.create(grantRef, {
-        uid, programId: BONUS_PROGRAM_ID, programKey: BONUS_PROGRAM_ID, amount: p.amount, remaining: p.amount, buckets,
+        uid, personKey, programId: BONUS_PROGRAM_ID, programKey: BONUS_PROGRAM_ID, amount: p.amount, remaining: p.amount, buckets,
         maxOrderSharePct: p.maxOrderSharePct, minOrderAmount: p.minOrderAmount, scope: BONUS_BUCKET, status: 'active',
         expiresAt: TS.fromMillis(nowMs + p.validityDays * DAY_MS), relativesCount: count, createdAt: ts(), updatedAt: ts(),
       });
@@ -711,7 +894,7 @@ function attachHoliday(exportsObj, deps) {
     if (out.result === 'granted') {
       log({ action: 'relativesBonus', result: 'granted', userId: tail(uid), amount: out.amount });
       try {
-        const m = BONUS_TEXT[normalizeLang((uSnap.data() || {}).appLang)] || BONUS_TEXT.uz_Cyrl;
+        const m = BONUS_TEXT[normalizeLang(user.data.appLang)] || BONUS_TEXT.uz_Cyrl;
         const params = { amount: out.amount, min: out.minOrderAmount };
         await notifyUserInApp({ userId: uid, title: m.title, body: fill(m.body, params), category: 'info', source: 'holiday_relatives_bonus', dataType: 'holiday_relatives_bonus', screen: 'supermarket' });
       } catch (e) { log({ action: 'relativesBonus', result: 'notify_error', errorCode: 'NOTIFY_FAILED' }); }
@@ -838,8 +1021,11 @@ function attachHoliday(exportsObj, deps) {
         if (u.holidayRemindersOptIn === false) { stat.skipped += 1; return; }
         if (!occasionVisibleFor(occ, settings, uid, String(u.role || 'user'), String(u.districtId || ''))) { stat.skipped += 1; return; }
         try {
-          await notifyText(uid, u.appLang, HOLIDAY_TEXT, params(u), {
-            source: 'holiday_reminder', dataType: 'holiday_reminder', extraNews: { occasionId: occ.id }, extraData: { occasionId: occ.id },
+          // Админ матни (масалан Қурбон ҳайит → Мол бозори) ва CTA мақсади бўлса — шу; йўқ бўлса — умумий сават матни.
+          const tp = targetPush(occ.target || { type: 'holiday_basket', occasionId: occ.id });
+          await notifyText(uid, u.appLang, occ.reminderTexts || HOLIDAY_TEXT, params(u), {
+            source: 'holiday_reminder', dataType: 'holiday_reminder', screen: tp.screen,
+            extraNews: { occasionId: occ.id, target: occ.target || null }, extraData: { occasionId: occ.id, ...tp.data },
           });
           stat.sent += 1;
         } catch (e) { stat.skipped += 1; }
@@ -875,15 +1061,78 @@ function attachHoliday(exportsObj, deps) {
     return stat;
   }
 
+  /**
+   * (в) фойдаланувчининг ЎЗ туғилган куни (эга 2026-11-27): D-7…D-3 (сукут) — ҳар куни бошқа таклиф.
+   * Манба — users/{uid}.birthDate (индекс — «Мен» ёзувидан; юборишдан олдин профилдаги сана қайта текширилади).
+   * holidayRemindersOptIn === false — юборилмайди. Идемпотент: бир шахсга (охирги 9 рақам) бир йилда ҳар кун сонига
+   * бир марта (holiday_reminder_log/self_{personKey}_{йил}_d{N}); кун курсори holiday_reminder_runs/self_{сана}.
+   */
+  async function runSelfBirthdayReminders(nowMs, settings, occasions, budget) {
+    const occ = occasions.find((o) => o.kind === 'birthday');
+    const stat = { sent: 0, skipped: 0, scanned: 0 };
+    if (!occ || occ.stage === 'off') return { ...stat, reason: 'OCCASION_OFF' };
+    const reminders = selfRemindersOf(occ);
+    if (!reminders.length) return { ...stat, reason: 'NO_REMINDERS' };
+    const today = dateKeyOf(nowMs);
+    const due = selfDueMap(today, reminders);
+    const mds = Object.keys(due);
+    const runRef = db.collection(RUNS).doc(`self_${today}`);
+    const run = (await runRef.get()).data() || {};
+    if (run.done === true) return { ...stat, reason: 'DONE' };
+    let cursor = run.cursor || null;
+    let done = false;
+    while (budget.left > 0) {
+      let q = db.collection(SELF_BD_INDEX).where('md', 'in', mds).orderBy(admin.firestore.FieldPath.documentId()).limit(Math.min(LIMITS.bdPage, budget.left));
+      if (cursor) q = q.startAfter(cursor);
+      const snap = await q.get();
+      if (snap.empty) { done = true; break; }
+      cursor = snap.docs[snap.docs.length - 1].id;
+      await runRef.set({ kind: 'self_birthday', date: today, cursor, updatedAt: ts() }, { merge: true });
+      for (const d of snap.docs) {
+        budget.left -= 1; stat.scanned += 1;
+        const x = d.data() || {};
+        const personKey = personKeyOf(x.ownerId);
+        const us = personKey ? await db.collection('users').doc(String(x.ownerId)).get() : null;
+        const u = us && us.exists ? (us.data() || {}) : null;
+        const md = u ? mdOfUserBirth(u.birthDate) : null;
+        const hit = md ? due[md] : null;
+        if (!u || !hit || u.holidayRemindersOptIn === false
+          || !occasionVisibleFor(occ, settings, personKey, String(u.role || 'user'), String(u.districtId || ''))) { stat.skipped += 1; continue; }
+        const r = hit.reminder;
+        const logRef = db.collection(REMIND_LOG).doc(`self_${personKey}_${hit.date.slice(0, 4)}_d${r.daysBefore}`);
+        const claimed = await db.runTransaction(async (t) => {
+          const s = await t.get(logRef);
+          if (s.exists) return false;
+          t.create(logRef, { kind: 'self_birthday', personKey, daysBefore: r.daysBefore, year: Number(hit.date.slice(0, 4)), at: ts() });
+          return true;
+        });
+        if (!claimed) { stat.skipped += 1; continue; }
+        const tp = targetPush(r.target);
+        try {
+          await notifyText(personKey, u.appLang, r.texts, { days: r.daysBefore }, {
+            source: 'holiday_self_birthday', dataType: 'holiday_self_birthday', screen: tp.screen,
+            extraNews: { occasionId: occ.id, daysBefore: r.daysBefore, target: r.target },
+            extraData: { daysBefore: String(r.daysBefore), ...tp.data },
+          });
+          stat.sent += 1;
+        } catch (e) { stat.skipped += 1; log({ action: 'holidayReminders', result: 'notify_error', errorCode: 'NOTIFY_FAILED' }); }
+      }
+      if (snap.size < LIMITS.bdPage) { done = true; break; }
+    }
+    if (done) await runRef.set({ done: true, updatedAt: ts() }, { merge: true });
+    return { ...stat, done };
+  }
+
   async function runHolidayRemindersAll(opts = {}) {
     const nowMs = now();
     const [settings, occSnap] = await Promise.all([smSettings(), db.collection(OCCASIONS).get()]);
     const occasions = occSnap.docs.map((d) => d.data() || {});
     const budget = { left: Number.isInteger(opts.maxPerRun) ? opts.maxPerRun : LIMITS.maxPerRun };
     const birthdays = await runBirthdayReminders(nowMs, settings, occasions, budget);
+    const self = await runSelfBirthdayReminders(nowMs, settings, occasions, budget);
     const holidays = await runHolidayReminders(nowMs, settings, occasions, budget);
-    log({ action: 'holidayReminders', result: 'ok', birthdays, holidays, budgetLeft: budget.left });
-    return { birthdays, holidays };
+    log({ action: 'holidayReminders', result: 'ok', birthdays, self, holidays, budgetLeft: budget.left });
+    return { birthdays, self, holidays };
   }
 
   // Ҳар куни 09:00 дан бошлаб (Тошкент); 15 дақиқалик давомлар — фақат курсор тугамаган бўлса иш қилади
@@ -893,7 +1142,7 @@ function attachHoliday(exportsObj, deps) {
     .timeZone('Asia/Tashkent')
     .onRun(() => runHolidayRemindersAll());
 
-  // ── 7. Совға PII тозалаш (етказилгандан 7 кун кейин) ──
+  // ── 7. Совға PII тозалаш (етказилган/бекор қилингандан 1 кун кейин, ҳар соат) ──
   async function runGiftPiiSweep() {
     const nowMs = now();
     const snap = await db.collection(ORDERS).where('giftPurgeAfter', '<=', TS.fromMillis(nowMs)).orderBy('giftPurgeAfter').limit(LIMITS.giftSweep).get();
@@ -921,22 +1170,11 @@ function attachHoliday(exportsObj, deps) {
     log({ action: 'smGiftPiiSweep', result: 'ok', scanned: snap.size, redacted, rescheduled });
     return { scanned: snap.size, redacted, rescheduled };
   }
-  exportsObj.smGiftPiiSweep = functions.pubsub.schedule('every day 04:20').timeZone('Asia/Tashkent').onRun(() => runGiftPiiSweep());
+  // Ҳар соатда (эга 2026-11-27: 1 кунлик муддат кун бўйи кечикмасин). Индекс: giftPurgeAfter (бир майдон, автоматик).
+  exportsObj.smGiftPiiSweep = functions.pubsub.schedule('every 60 minutes').timeZone('Asia/Tashkent').onRun(() => runGiftPiiSweep());
 
-  /** Совға олувчи AVA фойдаланувчиси бўлса — нархсиз хабар (placeSupermarketOrder'дан кейин, best-effort). */
-  async function notifyGiftRecipient({ gift, buyerUid, date }) {
-    if (!gift || gift.recipientPhone === canonicalUid(buyerUid)) return false;
-    const u = await userDoc(gift.recipientPhone);
-    if (!u) return false;
-    try {
-      await notifyText(gift.recipientPhone, u.data.appLang, GIFT_TEXT, { date }, {
-        category: 'order', screen: 'home', source: 'sm_gift_received', dataType: 'sm_gift_received',
-      });
-      return true;
-    } catch (e) { log({ action: 'notifyGiftRecipient', result: 'notify_error', errorCode: 'NOTIFY_FAILED' }); return false; }
-  }
-
-  return { runHolidayRemindersAll, runGiftPiiSweep, grantRelativesBonus, notifyGiftRecipient };
+  // Совға олувчига хабар — supermarket.js onSupermarketOrderCancelStock (буюртма курьерга ўтганда, бир марта).
+  return { runHolidayRemindersAll, runGiftPiiSweep, grantRelativesBonus };
 }
 
 module.exports = {
@@ -945,6 +1183,8 @@ module.exports = {
   dateKeyOf, validDateKey, addDays, daysBetween, startOfKeyMs, mdOfBirth, birthdayMdTargets, remindDaysOf, occasionNextDate,
   holidayDue, validateOccasion, normalizeOccasion, validateBasket, wantedMilli, buildBasketPure, parseGift, slotsForDate,
   terminalOf, giftPurgeDecision, relativeEligible, validateBonusProgram, bonusStageAllows, supermarketGrants, messagesOf,
+  mdOfUserBirth, selfRemindersOf, selfDueMap, targetPush, personKeyOf, giftDispatched,
+  DEFAULT_SELF_REMINDERS, TARGET_TYPES, SELF_BD_INDEX,
   OCCASIONS, BASKETS, BD_INDEX, REMIND_LOG, RUNS, MAX_AHEAD_DAYS, GIFT_PURGE_DAYS, BONUS_PROGRAM_ID, BONUS_BUCKET,
   BIRTHDAY_TEXT, HOLIDAY_TEXT, GIFT_TEXT, BONUS_TEXT, LIMITS, TIERS, KINDS,
 };

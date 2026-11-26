@@ -1220,11 +1220,12 @@ function attachSupermarket(exportsObj, deps) {
         if (!priced.ok) throw fail('failed-precondition', priced.code, priced.details);
         // Рағбат (қариндошлар бонуси, эга 2026-11-26): фақат `supermarket` туркумли грантлар, minOrderAmount ≤ goods,
         // фақат маҳсулот суммасидан (етказиш ҳақи — ҳамёндан). Мавжуд рағбат тизимининг computeIncentivePlan'и.
-        // Грант фақат канон users/998… ҳужжатига берилади (claimIncentive билан бир хил) — эски 9 хонали ҳисобда йўқ.
+        // БАРЧА супермаркет буюртмаларида (эга 2026-11-27, фақат байрам эмас) ва барча телефон шаклларида: грант `uid` —
+        // ҳисоб ҳужжати id'си (users/998… ёки эски 9 хонали; holiday.js grantRelativesBonus), сарф ҳам шу ҳужжатга.
         let incentiveGrants = [];
         let plan = { total: 0, perGrant: [] };
-        if (useIncentive && userRef.id === uid) {
-          const gSnap = await t.get(db.collection('incentive_grants').where('uid', '==', uid).where('status', '==', 'active'));
+        if (useIncentive) {
+          const gSnap = await t.get(db.collection('incentive_grants').where('uid', '==', userRef.id).where('status', '==', 'active'));
           incentiveGrants = hol().supermarketGrants(gSnap.docs, priced.goods);
           plan = incentivesLib.computeIncentivePlan(incentiveGrants, [{ category: hol().BONUS_BUCKET, total: priced.goods }], now());
         }
@@ -1251,7 +1252,7 @@ function attachSupermarket(exportsObj, deps) {
             createdAt: ts(), createdBy: 'client',
           });
         }
-        if (incentiveApplied > 0) incentivesLib.applyIncentiveSpendInTx(t, db, admin, { uid, grants: incentiveGrants, plan, orderId: orderRef.id });
+        if (incentiveApplied > 0) incentivesLib.applyIncentiveSpendInTx(t, db, admin, { uid: userRef.id, grants: incentiveGrants, plan, orderId: orderRef.id });
         const addrText = [address.mahalla, address.street, address.house, address.landmark].filter(Boolean).join(', ');
         const order = {
           type: 'platform',
@@ -1300,11 +1301,11 @@ function attachSupermarket(exportsObj, deps) {
         if (address.lat != null) { order.lat = address.lat; order.lng = address.lng; }
         if (incentiveApplied > 0) {
           // Мавжуд рағбат майдонлари (placeOrderPostPaid билан бир хил): бекор қилишда грант тикланади.
-          Object.assign(order, { grossTotal: priced.hold, incentiveApplied, incentiveUid: uid, incentiveGrants: plan.perGrant });
+          Object.assign(order, { grossTotal: priced.hold, incentiveApplied, incentiveUid: userRef.id, incentiveGrants: plan.perGrant });
         }
         if (gift) {
           order.gift = gift;
-          // PII тозалаш (smGiftPiiSweep): етказиш санасидан кейин кўрилади, етказилгандан 7 кун ўтгач — тозаланади.
+          // PII тозалаш (smGiftPiiSweep, ҳар соат): етказиш санасидан кейин кўрилади, етказилган/бекор қилингандан 1 кун ўтгач — тозаланади.
           order.giftPurgeAfter = admin.firestore.Timestamp.fromMillis(hol().startOfKeyMs(slot.date) + (hol().GIFT_PURGE_DAYS + 1) * DAY_MS);
         }
         t.set(orderRef, order);
@@ -1327,24 +1328,23 @@ function attachSupermarket(exportsObj, deps) {
       rethrow(e, 'placeSupermarketOrder', { userTail: uid.slice(-4), items: parsed.items.length, duration: Date.now() - started });
     }
     if (dup) return { ...dup, duplicate: true };
-    let giftNotified = false;
-    if (gift) giftNotified = await notifyGiftRecipient(gift, uid, slot.date);
+    // Совға олувчига хабар бу ерда ЮБОРИЛМАЙДИ (эга 2026-11-27) — курьер олганда (onSupermarketOrderCancelStock).
     log({
       action: 'placeSupermarketOrder', result: 'ok', orderId: out.orderId, userTail: uid.slice(-4),
-      items: parsed.items.length, total: out.total, incentive: out.incentiveApplied || 0, gift: !!gift, giftNotified, duration: Date.now() - started,
+      items: parsed.items.length, total: out.total, incentive: out.incentiveApplied || 0, gift: !!gift, duration: Date.now() - started,
     });
     return out;
   });
 
   /** Совға олувчи AVA фойдаланувчиси бўлса — нархсиз ички хабар (best-effort; харидорнинг ўзи бўлса — йўқ). */
-  async function notifyGiftRecipient(gift, buyerUid, date) {
-    if (!gift || gift.recipientPhone === buyerUid) return false;
+  async function notifyGiftRecipient(gift, buyerUid) {
+    if (!gift || !gift.recipientPhone || gift.redacted === true || gift.recipientPhone === canonicalUid(buyerUid)) return false;
     try {
       const u = await userDocRef(gift.recipientPhone);
       if (!u) return false;
       const m = hol().GIFT_TEXT[normalizeLang(u.data.appLang)] || hol().GIFT_TEXT.uz_Cyrl;
       await notifyUserInApp({
-        userId: gift.recipientPhone, title: m.title, body: m.body.replace('{date}', date), category: 'order', screen: 'home',
+        userId: gift.recipientPhone, title: m.title, body: m.body, category: 'order', screen: 'home',
         source: 'sm_gift_received', dataType: 'sm_gift_received',
       });
       return true;
@@ -1730,12 +1730,34 @@ function attachSupermarket(exportsObj, deps) {
     .timeZone('Asia/Tashkent')
     .onRun(() => runWeeklyReminders());
 
-  // ── Бекор/рад → stock қайтади (бир марта) ──
+  /**
+   * Совға олувчига хабар (эга 2026-11-27): буюртма курьерга ўтганда (courier|in_delivery / courier_picked|arrived),
+   * БИР марта — `giftNotifiedAt` транзакцияда даъво қилинади (қайта ишга тушиш/retry — такрор йўқ). Хабар best-effort.
+   */
+  async function maybeNotifyGiftDispatch(change, orderId) {
+    const claimed = await db.runTransaction(async (t) => {
+      const s = await t.get(change.after.ref);
+      const od = s.exists ? (s.data() || {}) : {};
+      if (!od.gift || od.giftNotifiedAt || !hol().giftDispatched(od)) return null;
+      t.update(change.after.ref, { giftNotifiedAt: ts() });
+      return od;
+    });
+    if (!claimed) return 'noop';
+    const sent = await notifyGiftRecipient(claimed.gift, claimed.userPhone);
+    log({ action: 'notifyGiftRecipient', orderId, result: sent ? 'sent' : 'skipped' });
+    return sent ? 'sent' : 'skipped';
+  }
+
+  // ── Бекор/рад → stock қайтади (бир марта); совға курьерга ўтди → олувчига хабар (бир марта) ──
   exportsObj.onSupermarketOrderCancelStock = functions.firestore
     .document(`${ORDERS}/{orderId}`)
     .onUpdate(async (change, context) => {
       const after = change.after.data() || {};
-      if (after.subtype !== 'supermarket' || after.smStockRestored === true) return null;
+      if (after.subtype !== 'supermarket') return null;
+      if (after.gift && !after.giftNotifiedAt && hol().giftDispatched(after)) {
+        await maybeNotifyGiftDispatch(change, context.params.orderId);
+      }
+      if (after.smStockRestored === true) return null;
       if (!isCancelled(after) || isCancelled(change.before.data() || {})) return null;
       const orderId = context.params.orderId;
       const result = await db.runTransaction(async (t) => {

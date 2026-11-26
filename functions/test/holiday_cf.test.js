@@ -143,7 +143,7 @@ async function main() {
   });
 
   let giftOrderId;
-  await check('C5 совға: +10 кун, олувчи телефони contactPhone, нархсиз хабар олувчига; +15 кун ва бузуқ gift — рад', async () => {
+  await check('C5 совға: +10 кун, олувчи телефони contactPhone, нархсиз хабар олувчига ФАҚАТ курьер олганда (бир марта); +15 кун ва бузуқ gift — рад', async () => {
     const date = h.addDays(todayKey, 10);
     const r = await place([{ productId: 'soda_cola_1', qty: 3 }], {
       deliveryDate: date, origin: 'holiday', occasionId: 'birthday', basketId: 'birthday_simple',
@@ -155,10 +155,36 @@ async function main() {
     assert.deepStrictEqual(o.gift, { recipientName: 'Онам', recipientPhone: RECIP, message: 'Туғилган кунингиз билан!', hidePrice: true });
     assert.strictEqual(o.contactPhone, RECIP); assert.strictEqual(o.userPhone, USER);
     assert.deepStrictEqual([o.slot.date, o.slot.day, o.smOrigin, o.smOccasionId, o.smBasketId], [date, 'scheduled', 'holiday', 'birthday', 'birthday_simple']);
-    assert.strictEqual(o.giftPurgeAfter.toMillis(), h.startOfKeyMs(date) + 8 * 86400000);
-    const n = await news('sm_gift_received');
+    assert.strictEqual(o.giftPurgeAfter.toMillis(), h.startOfKeyMs(date) + 2 * 86400000);
+    // Буюртма берилганда олувчига хабар ЙЎҚ (эга 2026-11-27).
+    assert.strictEqual((await news('sm_gift_received')).length, 0);
+    // Курьерга ўтгач (trigger) — бир марта; қайта ишга тушса — такрор йўқ.
+    const ref = db.doc(`orders/${r.orderId}`);
+    const fire = async (patch) => { const before = await ref.get(); await ref.update(patch); await fns.onSupermarketOrderCancelStock.run({ before, after: await ref.get() }, { params: { orderId: r.orderId } }); };
+    await fire({ status: 'accepted' });
+    await fire({ status: 'ready' });
+    assert.strictEqual((await news('sm_gift_received')).length, 0);
+    await fire({ status: 'in_delivery', fulfillmentStatus: 'courier_picked' });
+    let n = await news('sm_gift_received');
     assert.strictEqual(n.length, 1); assert.strictEqual(n[0].targetUserId, RECIP);
-    assert.ok(n[0].body.includes(date) && !n[0].body.includes('36') && !n[0].body.includes('сум'), n[0].body);
+    assert.ok(!/\d/.test(n[0].body) && !n[0].body.includes('сум'), n[0].body); // нарх йўқ
+    assert.ok((await get(ref.path)).giftNotifiedAt);
+    await fire({ fulfillmentStatus: 'arrived' });
+    const snap = await ref.get();
+    await fns.onSupermarketOrderCancelStock.run({ before: snap, after: snap }, { params: { orderId: r.orderId } }); // retry
+    n = await news('sm_gift_received');
+    assert.strictEqual(n.length, 1);
+    // Совғасиз буюртма курьерга ўтса — хабар йўқ; бекор қилинган совға — хабар йўқ.
+    const plain = await place([{ productId: 'bread_non_1', qty: 1 }]);
+    const pRef = db.doc(`orders/${plain.orderId}`);
+    let b = await pRef.get(); await pRef.update({ status: 'in_delivery' });
+    await fns.onSupermarketOrderCancelStock.run({ before: b, after: await pRef.get() }, { params: { orderId: plain.orderId } });
+    const g2 = await place([{ productId: 'bread_non_1', qty: 1 }], { gift: { recipientName: 'Ака', recipientPhone: '912000005' } });
+    const g2Ref = db.doc(`orders/${g2.orderId}`);
+    b = await g2Ref.get(); await g2Ref.update({ status: 'cancelled' });
+    await fns.onSupermarketOrderCancelStock.run({ before: b, after: await g2Ref.get() }, { params: { orderId: g2.orderId } });
+    assert.strictEqual((await news('sm_gift_received')).length, 1);
+    assert.strictEqual((await get(g2Ref.path)).giftNotifiedAt, undefined);
     await expectCode(place([{ productId: 'soda_cola_1', qty: 1 }], { deliveryDate: h.addDays(todayKey, 15) }), 'SLOT_UNAVAILABLE');
     await expectCode(place([{ productId: 'soda_cola_1', qty: 1 }], { gift: { recipientName: 'A', recipientPhone: '12' } }), 'INVALID_REQUEST');
     // эски клиент (day) ўзгармади
@@ -167,15 +193,16 @@ async function main() {
     assert.ok((await call('getSupermarketAccess', { withDates: true }, USER)).dateSlots.length >= 14);
   });
 
-  await check('C6 совға PII тозалаш: етказилгандан 7 кун кейин; олдин — кўчирилади; иккинчи марта — ҳеч нарса', async () => {
+  await check('C6 совға PII тозалаш (эга 2026-11-27): етказилгандан 1 кун кейин; олдин — кўчирилади; иккинчи марта — ҳеч нарса', async () => {
     const ref = db.doc(`orders/${giftOrderId}`);
     const date = h.addDays(todayKey, 10);
-    fakeNow = h.startOfKeyMs(date) + 9 * 86400000;
-    await ref.update({ status: 'delivered', deliveredAt: admin.firestore.Timestamp.fromMillis(fakeNow - 3 * 86400000) });
+    fakeNow = h.startOfKeyMs(date) + 2 * 86400000 + 3600000; // giftPurgeAfter дан 1 соат кейин (соатлик сканер)
+    await ref.update({ status: 'delivered', deliveredAt: admin.firestore.Timestamp.fromMillis(fakeNow - 23 * 3600000) });
     let r = await api.runGiftPiiSweep();
-    assert.deepStrictEqual([r.redacted, r.rescheduled], [0, 1]);
+    assert.deepStrictEqual([r.redacted, r.rescheduled], [1, 1]); // C5 даги бекор қилинган совға (g2) — тозаланди
     assert.strictEqual((await get(ref.path)).gift.recipientPhone, RECIP);
-    fakeNow += 5 * 86400000;
+    assert.strictEqual((await get(ref.path)).giftPurgeAfter.toMillis(), fakeNow + 3600000);
+    fakeNow += 3600000;
     r = await api.runGiftPiiSweep();
     assert.deepStrictEqual([r.redacted, r.rescheduled], [1, 0]);
     const o = await get(ref.path);
@@ -277,6 +304,136 @@ async function main() {
     sent.length = 0;
     await api.runHolidayRemindersAll();
     assert.strictEqual(sent.length, 0);
+    fakeNow = Date.now();
+  });
+
+  // ── эга 2026-11-27 ──
+  const LEG = '912000009'; const LEGC = `998${LEG}`; // фақат эски 9 хонали users ҳужжати
+  const DUAL = '998912000011'; const DUAL9 = DUAL.slice(3); // бир шахснинг иккала ҳужжати
+  const bdTs = (y, m, d) => admin.firestore.Timestamp.fromMillis(Date.UTC(y, m - 1, d - 1, 19));
+  await check('C12 бонус барча телефон шаклларида: эски 9 хонали ҳисоб олади; бир шахснинг 2 ҳужжати — БИТТА грант', async () => {
+    await db.doc(`users/${LEG}`).set({ role: 'user', name: 'Eski', bonusBalance: 500000, districtId: 'gurlan', appLang: 'ru' });
+    await db.doc(`users/${DUAL}`).set({ role: 'user', name: 'Dual', bonusBalance: 0, districtId: 'gurlan' });
+    await db.doc(`users/${DUAL9}`).set({ role: 'user', name: 'Dual old', bonusBalance: 0, districtId: 'gurlan' });
+    const st = (await db.doc('settings/supermarket').get()).data();
+    await db.doc('settings/supermarket').update({ testerIds: [...st.testerIds, LEGC, DUAL] });
+    await call('adminUpsertRelativesBonusProgram', { program: { ...PROGRAM, internalPhones: [USER, LEGC, DUAL] } }, ADMIN);
+    // эски ҳисоб: қариндошлар иккала relatives ҳужжатида (2 + 1 = 3, такрор санолмайди)
+    await relTrigger(LEG, 'a', { firstName: 'Ona', birthDate: bdTs(1960, 4, 1) });
+    await relTrigger(LEG, 'b', { firstName: 'Ota', birthDate: bdTs(1958, 5, 2) });
+    await relTrigger(LEGC, 'a2', { firstName: 'ona', birthDate: bdTs(1960, 4, 1) }); // ўша одам (исм+сана) — санолмайди
+    assert.strictEqual(await get(`incentive_grants/relatives_birthdays_${LEGC}`), undefined);
+    await relTrigger(LEGC, 'c', { firstName: 'Opa', birthDate: bdTs(1985, 6, 3) });
+    const g = await get(`incentive_grants/relatives_birthdays_${LEGC}`);
+    assert.deepStrictEqual([g.uid, g.personKey, g.amount, g.status], [LEG, LEGC, 10000, 'active']);
+    assert.strictEqual((await get(`users/${LEG}`)).incentiveBalance, 10000);
+    assert.strictEqual(await get(`users/${LEGC}`), undefined); // канон ҳужжат яратилмади
+    assert.strictEqual((await call('claimRelativesBonus', {}, LEGC)).result, 'duplicate');
+    // иккала ҳужжат: 9 хонали — 3 қариндош, канон — 3 қариндош → фақат БИТТА грант (канон ҳисобга)
+    for (const p of ['x', 'y', 'z']) await relTrigger(DUAL9, p, { firstName: `Q${p}`, birthDate: bdTs(1970, 1, 10) });
+    for (const p of ['u', 'v', 'w']) await relTrigger(DUAL, p, { firstName: `R${p}`, birthDate: bdTs(1971, 2, 11) });
+    const grants = (await db.collection('incentive_grants').where('personKey', '==', DUAL).get()).docs;
+    assert.strictEqual(grants.length, 1);
+    assert.deepStrictEqual([grants[0].id, grants[0].data().uid], [`relatives_birthdays_${DUAL}`, DUAL]);
+    assert.strictEqual((await get(`users/${DUAL}`)).incentiveBalance, 10000);
+    assert.strictEqual((await get(`users/${DUAL9}`)).incentiveBalance, undefined);
+    assert.strictEqual((await get('incentive_programs/relatives_birthdays')).counters.grantedCount, 3);
+    // бузуқ id — грант йўқ
+    assert.strictEqual((await api.grantRelativesBonus('12345')).code, 'UID_INVALID');
+  });
+
+  await check('C13 бонус ОДДИЙ буюртмада (байрам эмас) ва эски 9 хонали ҳисобда; бекорда тикланади', async () => {
+    const ctxLeg = (d) => call('placeSupermarketOrder', { clientRequestId: rid('leg'), address: ADDR, slotId: 'morning', deliveryDate: h.addDays(todayKey, 1), ...d }, LEGC);
+    const r = await ctxLeg({ items: [{ productId: 'beef_lean_1', qty: 1 }, { productId: 'soda_cola_1', qty: 3 }], origin: 'quick', useIncentive: true });
+    assert.deepStrictEqual([r.grossTotal, r.incentiveApplied, r.total], [136760, 10000, 126760]);
+    const o = await get(`orders/${r.orderId}`);
+    assert.deepStrictEqual([o.smOrigin, o.incentiveUid, o.walletUserDocId, o.smOccasionId], ['quick', LEG, LEG, undefined]);
+    assert.deepStrictEqual([(await get(`users/${LEG}`)).incentiveBalance, (await get(`users/${LEG}`)).bonusBalance], [0, 500000 - 126760]);
+    assert.strictEqual((await get(`incentive_grants/relatives_birthdays_${LEGC}`)).status, 'spent');
+    const ref = db.doc(`orders/${r.orderId}`);
+    const before = await ref.get();
+    await ref.update({ status: 'cancelled' });
+    await fns.onSupermarketOrderCancelStock.run({ before, after: await ref.get() }, { params: { orderId: r.orderId } });
+    assert.strictEqual((await get(`users/${LEG}`)).incentiveBalance, 10000);
+    // useIncentive юборилмаса — ишлатилмайди (клиент танлови)
+    const plain = await ctxLeg({ items: [{ productId: 'beef_lean_1', qty: 1 }, { productId: 'soda_cola_1', qty: 3 }] });
+    assert.strictEqual(plain.incentiveApplied, undefined);
+  });
+
+  await check('C14 ўз туғилган куни: D-7..D-3 ҳар куни бошқа таклиф, opt-out, профил санаси текшируви, бир шахсга бир марта, админ матни', async () => {
+    // «Мен» ёзувлари (профилдан синхронланади) → self индекс; users.birthDate — манба
+    await db.doc(`users/${USER}`).update({ birthDate: '1990-07-10' });
+    await relTrigger(USER, 'me', { firstName: 'Ali', isSelf: true, birthDate: bdTs(1990, 7, 10) });
+    assert.deepStrictEqual((await get(`holiday_self_birthday_index/${USER}`)).md, '07-10');
+    await db.doc(`users/${LEG}`).update({ birthDate: '10.7.1991' });
+    await relTrigger(LEG, 'me', { firstName: 'Eski', isSelf: true, birthDate: bdTs(1991, 7, 10) });
+    await db.doc(`users/${OPTOUT}`).update({ birthDate: '1990-07-10' });
+    await relTrigger(OPTOUT, 'me', { firstName: 'O', isSelf: true, birthDate: bdTs(1990, 7, 10) });
+    await db.doc(`users/${DUAL}`).update({ birthDate: '1980-01-15' }); // индекс 07-10 (эскирган), профил 01-15 → юборилмайди
+    await relTrigger(DUAL, 'me', { firstName: 'D', isSelf: true, birthDate: bdTs(1980, 7, 10) });
+    const bodies = [];
+    for (const [i, dd] of ['2027-07-03', '2027-07-04', '2027-07-05', '2027-07-06', '2027-07-07'].entries()) {
+      fakeNow = h.startOfKeyMs(dd) + 9 * 3600000;
+      sent.length = 0;
+      await api.runHolidayRemindersAll();
+      const s = sent.filter((m) => m.source === 'holiday_self_birthday');
+      assert.deepStrictEqual(s.map((m) => m.userId).sort(), [LEGC, USER].sort(), `${dd} ${JSON.stringify(s.map((m) => m.userId))}`);
+      const days = 7 - i;
+      const def = h.DEFAULT_SELF_REMINDERS.find((r) => r.daysBefore === days);
+      const u = s.find((m) => m.userId === USER);
+      assert.strictEqual(u.body, def.texts.uz_Latn.body);
+      assert.strictEqual(s.find((m) => m.userId === LEGC).body, def.texts.ru.body);
+      assert.deepStrictEqual([u.extraData.targetType, u.extraData.daysBefore, u.screen], [def.target.type, String(days), days === 6 ? 'restaurants' : 'supermarket']);
+      bodies.push(u.body);
+      sent.length = 0;
+      await api.runHolidayRemindersAll(); // қайта ишга тушиш — такрор йўқ
+      assert.strictEqual(sent.filter((m) => m.source === 'holiday_self_birthday').length, 0);
+    }
+    assert.strictEqual(new Set(bodies).size, 5);
+    fakeNow = h.startOfKeyMs('2027-07-08') + 9 * 3600000; // D-2 — сукутда йўқ
+    sent.length = 0; await api.runHolidayRemindersAll();
+    assert.strictEqual(sent.filter((m) => m.source === 'holiday_self_birthday').length, 0);
+    assert.ok(!(await db.collection('holiday_reminder_log').where('personKey', '==', DUAL).get()).size);
+    // админ: ўз матни, D-1, бошқа мақсад; [] — ўчирилган
+    const T3 = { uz_Cyrl: { title: 'Т', body: 'Туғилган кунга {days} кун' }, uz_Latn: { title: 'T', body: 'Tuğilgan kunga {days} kun' }, ru: { title: 'Т', body: 'До ДР {days} дн.' } };
+    const occ = { id: 'birthday', kind: 'birthday', names: N('Туғилган кун', 'Tuğilgan kun', 'День рождения'), stage: 'internal', order: 1 };
+    await expectCode(call('adminUpsertHolidayOccasion', { occasion: { ...occ, selfReminders: [{ daysBefore: 2, texts: T3, target: { type: 'cinema' } }] } }, ADMIN), 'OCCASION_INVALID');
+    await call('adminUpsertHolidayOccasion', { occasion: { ...occ, selfReminders: [{ daysBefore: 1, texts: T3, target: { type: 'supermarket' } }] } }, ADMIN);
+    fakeNow = h.startOfKeyMs('2027-07-09') + 9 * 3600000;
+    sent.length = 0; await api.runHolidayRemindersAll();
+    const s2 = sent.filter((m) => m.source === 'holiday_self_birthday');
+    assert.deepStrictEqual(s2.map((m) => m.body).sort(), ['До ДР 1 дн.', 'Tuğilgan kunga 1 kun'].sort());
+    await call('adminUpsertHolidayOccasion', { occasion: { ...occ, selfReminders: [] } }, ADMIN);
+    fakeNow = h.startOfKeyMs('2028-07-03') + 9 * 3600000;
+    sent.length = 0; await api.runHolidayRemindersAll();
+    assert.strictEqual(sent.filter((m) => m.source === 'holiday_self_birthday').length, 0);
+    await call('adminUpsertHolidayOccasion', { occasion: occ }, ADMIN); // сукутга қайтди
+    // «Мен» ўчирилса — индекс ҳам
+    await relTrigger(OPTOUT, 'me', null);
+    assert.strictEqual(await get(`holiday_self_birthday_index/${OPTOUT}`), undefined);
+    fakeNow = Date.now();
+  });
+
+  await check('C15 Қурбон ҳайит: Мол бозори мақсади, 10 кун олдин, супермаркет дарвозасисиз; каталогда target', async () => {
+    const seed = require('../tools/data/holiday_seed_v1.json').occasions.find((o) => o.id === 'qurbon_hayit');
+    await call('adminUpsertHolidayOccasion', { occasion: { ...seed, stage: 'public', dateRule: { type: 'list', dates: ['2027-05-16'] } } }, ADMIN);
+    const cat = await call('getHolidayCatalog', {}, OTHER); // OTHER — супермаркет тестери эмас
+    const q = cat.occasions.find((o) => o.id === 'qurbon_hayit');
+    assert.deepStrictEqual([q.target, q.nextDate, q.remindDaysBefore], [{ type: 'market', market: 'livestock', categories: ['sheep_goat', 'cattle'] }, '2027-05-16', 10]);
+    fakeNow = h.startOfKeyMs('2027-05-07') + 9 * 3600000; // 9 кун — ҳали эмас
+    sent.length = 0; await api.runHolidayRemindersAll();
+    assert.strictEqual(sent.filter((m) => m.source === 'holiday_reminder').length, 0);
+    fakeNow = h.startOfKeyMs('2027-05-06') + 9 * 3600000;
+    sent.length = 0; await api.runHolidayRemindersAll();
+    const s = sent.filter((m) => m.source === 'holiday_reminder');
+    assert.ok(s.some((m) => m.userId === OTHER), JSON.stringify(s.map((m) => m.userId)));
+    assert.ok(!s.some((m) => m.userId === OPTOUT));
+    const u = s.find((m) => m.userId === USER);
+    assert.strictEqual(u.body, 'Qurbon hayitga 10 kun qoldi — jonliqni Mol bozoridan yaqin sotuvçilardan tanlang');
+    assert.deepStrictEqual([u.screen, u.extraData.targetType, u.extraData.market, u.extraData.categories], ['market', 'market', 'livestock', 'sheep_goat,cattle']);
+    assert.ok(s.find((m) => m.userId === OTHER).body.startsWith('Қурбон ҳайитга 10 кун'));
+    sent.length = 0; await api.runHolidayRemindersAll();
+    assert.strictEqual(sent.filter((m) => m.source === 'holiday_reminder').length, 0);
     fakeNow = Date.now();
   });
 

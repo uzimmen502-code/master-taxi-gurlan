@@ -40,6 +40,7 @@ async function main() {
     await db.doc(`holiday_birthday_index/${USER}_p1`).set({ ownerId: USER, personId: 'p1', md: '03-21' });
     await db.doc(`holiday_reminder_log/bd_${USER}_p1_2027`).set({ kind: 'birthday' });
     await db.doc('holiday_reminder_runs/bd_2027-03-16').set({ done: true });
+    await db.doc(`holiday_self_birthday_index/${USER}`).set({ ownerId: USER, personId: 'me', md: '07-10' }); // эга 2026-11-27
   });
 
   await check('H1 байрам/сават: фақат visible ўқилади (auth), яширин — фақат админ; anon — йўқ; ёзиш — ҳеч ким', async () => {
@@ -58,7 +59,8 @@ async function main() {
   });
 
   await check('H2 ички коллекциялар (индекс/лог/курсор) — мижоз ҳам, админ ҳам ўқимайди/ёзмайди', async () => {
-    for (const p of [`holiday_birthday_index/${USER}_p1`, `holiday_reminder_log/bd_${USER}_p1_2027`, 'holiday_reminder_runs/bd_2027-03-16']) {
+    for (const p of [`holiday_birthday_index/${USER}_p1`, `holiday_reminder_log/bd_${USER}_p1_2027`, 'holiday_reminder_runs/bd_2027-03-16',
+      `holiday_self_birthday_index/${USER}`, `holiday_reminder_log/self_${USER}_2027_d7`]) {
       await assertFails(user.doc(p).get());
       await assertFails(adm.doc(p).get());
       await assertFails(user.doc(p).set({ x: 1 }));

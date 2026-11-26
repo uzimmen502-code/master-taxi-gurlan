@@ -209,6 +209,20 @@ check('P13 v5 ўтади; v4 дан ФАҚАТ: livestock бўлимлари (al
   // v5 да эски шаклдаги лотин ном қолмаган.
   assert.ok(!/"uz_Latn":"[^"]*([oOgG]['‘’ʻ`]|[sScC]h)/.test(JSON.stringify(V5)));
 });
+check('P13b v6 ўтади; v5 дан ФАҚАТ livestock `qurbon_ready` (bool, ихтиёрий) охирида қўшилган (эга 2026-11-27)', () => {
+  const V6 = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'tools', 'data', 'market_taxonomy_v6.json'), 'utf8'));
+  expectOk(V6);
+  const f = V6.markets.livestock.fields;
+  assert.deepStrictEqual(f[f.length - 1], {
+    key: 'qurbon_ready', type: 'bool', required: false, names: { uz_Cyrl: 'Қурбонликка мос', uz_Latn: 'Qurbonlikka mos', ru: 'Подходит для курбана' },
+  });
+  assert.ok(f.length <= 20);
+  const exp = JSON.parse(JSON.stringify(V5));
+  exp.markets.livestock.fields.push(f[f.length - 1]);
+  assert.deepStrictEqual(V6, exp);
+  // Диний ёш қоидалари кодда ЙЎҚ (эга): майдон фақат белги, min/max/шарт йўқ.
+  assert.deepStrictEqual(Object.keys(f[f.length - 1]).sort(), ['key', 'names', 'required', 'type']);
+});
 check('P14 v5 ↔ rules: ҳар бозор майдонлари ≤ 20 (attrs.size() <= 20); бозор id лари rules рўйхатида', () => {
   const rules = fs.readFileSync(path.join(__dirname, '..', '..', 'firestore.rules'), 'utf8');
   assert.ok(rules.includes('d.attrs is map && d.attrs.size() <= 20'), 'rules attrs чеклови ўзгарган');

@@ -157,14 +157,95 @@ check('P12 sana оралиқлари: бугун cutoff, эртага ва +14 �
   assert.deepStrictEqual(h.slotsForDate(settings, now, 'bad'), []);
 });
 
-check('P13 совға PII: якунлангандан 7 кун кейин redact; эрта — кўчириш; фаол — эртага', () => {
+check('P13 совға PII (эга 2026-11-27): якунлангандан 1 кун кейин redact (чегара), эрта — кўчириш; фаол — эртага', () => {
   const now = Date.UTC(2026, 11, 20);
   const day = 86400000;
+  const hour = 3600000;
+  assert.strictEqual(h.GIFT_PURGE_DAYS, 1);
   assert.deepStrictEqual(h.giftPurgeDecision({ status: 'new' }, now), { action: 'reschedule', nextMs: now + day });
-  assert.deepStrictEqual(h.giftPurgeDecision({ status: 'delivered', deliveredAt: { toMillis: () => now - 8 * day } }, now), { action: 'redact' });
-  assert.deepStrictEqual(h.giftPurgeDecision({ status: 'delivered', deliveredAt: { toMillis: () => now - 7 * day } }, now), { action: 'redact' });
-  assert.deepStrictEqual(h.giftPurgeDecision({ fulfillmentStatus: 'completed', statusUpdatedAt: { toMillis: () => now - 2 * day } }, now), { action: 'reschedule', nextMs: now + 5 * day });
-  assert.deepStrictEqual(h.giftPurgeDecision({ status: 'cancelled', statusUpdatedAt: { toMillis: () => now - 10 * day } }, now), { action: 'redact' });
+  assert.deepStrictEqual(h.giftPurgeDecision({ status: 'delivered', deliveredAt: { toMillis: () => now - day } }, now), { action: 'redact' }); // чегара: айнан 24 соат
+  assert.deepStrictEqual(h.giftPurgeDecision({ status: 'delivered', deliveredAt: { toMillis: () => now - day + 1 } }, now), { action: 'reschedule', nextMs: now + 1 });
+  assert.deepStrictEqual(h.giftPurgeDecision({ fulfillmentStatus: 'completed', statusUpdatedAt: { toMillis: () => now - 2 * hour } }, now), { action: 'reschedule', nextMs: now + 22 * hour });
+  assert.deepStrictEqual(h.giftPurgeDecision({ status: 'cancelled', statusUpdatedAt: { toMillis: () => now - day - 1 } }, now), { action: 'redact' });
+});
+
+check('P13b совға курьерга ўтди (хабар пайти): courier|in_delivery|courier_picked|arrived; new/ready/бекор/етказилган — йўқ', () => {
+  for (const od of [{ status: 'courier' }, { status: 'in_delivery' }, { status: 'ready', fulfillmentStatus: 'courier_picked' }, { fulfillmentStatus: 'arrived' }]) {
+    assert.ok(h.giftDispatched(od), JSON.stringify(od));
+  }
+  for (const od of [{ status: 'new' }, { status: 'accepted' }, { status: 'ready' }, { status: 'cancelled' },
+    { status: 'in_delivery', fulfillmentStatus: 'cancelled' }, { status: 'delivered' }, { fulfillmentStatus: 'completed' }, null]) {
+    assert.ok(!h.giftDispatched(od), JSON.stringify(od));
+  }
+});
+
+check('P13c шахс калити: +998/998/9 хонали → бир калит; бошқа узунлик — null', () => {
+  assert.strictEqual(h.personKeyOf('998901234567'), '998901234567');
+  assert.strictEqual(h.personKeyOf('901234567'), '998901234567');
+  assert.strictEqual(h.personKeyOf('+998 90 123-45-67'), '998901234567');
+  for (const bad of ['', null, '12345678', '9989012345678', '997901234567', '7901234567']) assert.strictEqual(h.personKeyOf(bad), null, String(bad));
+});
+
+check('P13d users.birthDate (сатр) → MM-DD: ISO, D.M.YYYY, Timestamp; хато — null', () => {
+  assert.strictEqual(h.mdOfUserBirth('1990-03-08'), '03-08');
+  assert.strictEqual(h.mdOfUserBirth(' 8.3.1990 '), '03-08');
+  assert.strictEqual(h.mdOfUserBirth('29.02.2000'), '02-29');
+  assert.strictEqual(h.mdOfUserBirth({ toMillis: () => Date.UTC(1990, 2, 7, 19) }), '03-08');
+  for (const bad of ['', '1990-02-30', '31.04.1990', '1990/03/08', '08-03-1990', null, 5]) assert.strictEqual(h.mdOfUserBirth(bad), null, String(bad));
+});
+
+check('P13e ўз туғилган кун: сукут D-7..D-3 (5 та, ҳар бири бошқа таклиф), кун харитаси, кабиса, бузуқ ёзув ташланади', () => {
+  const d = h.selfRemindersOf({ kind: 'birthday' });
+  assert.deepStrictEqual(d.map((r) => r.daysBefore), [7, 6, 5, 4, 3]);
+  assert.deepStrictEqual(d.map((r) => r.target.type), ['holiday_basket', 'restaurants_preorder', 'holiday_basket', 'holiday_basket', 'holiday_basket']);
+  assert.strictEqual(new Set(d.map((r) => r.texts.uz_Cyrl.body)).size, 5);
+  for (const r of d) for (const l of ['uz_Cyrl', 'uz_Latn', 'ru']) assert.ok(r.texts[l].title && r.texts[l].body, `${r.daysBefore} ${l}`);
+  assert.ok(d.every((r) => !/[ʻʼ‘’]|o'|g'/i.test(r.texts.uz_Latn.body)));
+  assert.deepStrictEqual(h.selfRemindersOf({ kind: 'birthday', selfReminders: [] }), []); // админ ўчирди
+  const one = { daysBefore: 2, texts: d[0].texts, target: { type: 'supermarket' } };
+  assert.deepStrictEqual(h.selfRemindersOf({ selfReminders: [one, { daysBefore: 0, texts: d[0].texts, target: { type: 'supermarket' } }] }), [one]);
+  const m = h.selfDueMap('2026-11-26', d);
+  assert.deepStrictEqual(Object.keys(m).sort(), ['11-29', '11-30', '12-01', '12-02', '12-03']);
+  assert.deepStrictEqual([m['12-03'].reminder.daysBefore, m['12-03'].date, m['11-29'].reminder.daysBefore], [7, '2026-12-03', 3]);
+  const leap = h.selfDueMap('2027-02-21', d); // D-7 → 2027-02-28: 29-февралликлар ҳам
+  assert.strictEqual(leap['02-29'].reminder.daysBefore, 7);
+});
+
+check('P13f байрам валидацияси: selfReminders (фақат birthday), target, reminderTexts (фақат holiday), Қурбон шакли', () => {
+  const T3 = h.DEFAULT_SELF_REMINDERS[0].texts;
+  const bd = { id: 'birthday', kind: 'birthday', names: N, stage: 'off', order: 1 };
+  assert.ok(h.validateOccasion({ ...bd, selfReminders: h.DEFAULT_SELF_REMINDERS.map((r) => ({ ...r })) }).ok);
+  assert.ok(h.validateOccasion({ ...bd, selfReminders: [] }).ok);
+  const err = (o) => h.validateOccasion(o).errors.join('|');
+  assert.match(err({ ...bd, selfReminders: [{ daysBefore: 7, texts: T3, target: { type: 'supermarket' } }, { daysBefore: 7, texts: T3, target: { type: 'supermarket' } }] }), /DAYS_DUPLICATE/);
+  assert.match(err({ ...bd, selfReminders: [{ daysBefore: 31, texts: T3, target: { type: 'supermarket' } }] }), /DAYS_INVALID/);
+  assert.match(err({ ...bd, selfReminders: [{ daysBefore: 7, texts: { ...T3, ru: { title: 'x' } }, target: { type: 'supermarket' } }] }), /TEXT_BODY_INVALID/);
+  assert.match(err({ ...bd, selfReminders: [{ daysBefore: 7, texts: T3, target: { type: 'taxi' } }] }), /TARGET_INVALID/);
+  assert.match(err({ ...bd, selfReminders: [{ daysBefore: 7, texts: T3, target: { type: 'holiday_basket', occasionId: 'birthday', mode: 'party' } }] }), /TARGET_MODE_INVALID/);
+  assert.match(err({ ...bd, selfReminders: Array.from({ length: 11 }, (_, i) => ({ daysBefore: i + 1, texts: T3, target: { type: 'supermarket' } })) }), /SELF_REMINDERS_INVALID/);
+  assert.match(err({ ...bd, reminderTexts: T3 }), /REMINDER_TEXTS_FORBIDDEN/);
+  const q = {
+    id: 'qurbon_hayit', kind: 'holiday', names: N, stage: 'off', order: 5, bigHoliday: true, remindDaysBefore: 10,
+    dateRule: { type: 'list', dates: ['2027-05-16'] }, target: { type: 'market', market: 'livestock', categories: ['sheep_goat', 'cattle'] }, reminderTexts: T3,
+  };
+  assert.ok(h.validateOccasion(q).ok);
+  assert.match(err({ ...q, selfReminders: [] }), /SELF_REMINDERS_FORBIDDEN/);
+  assert.match(err({ ...q, target: { type: 'market', market: 'Livestock!' } }), /TARGET_MARKET_INVALID/);
+  assert.match(err({ ...q, target: { type: 'market', market: 'livestock', categories: ['cattle', 'cattle'] } }), /TARGET_CATEGORIES_INVALID/);
+  assert.match(err({ ...q, target: { type: 'market', market: 'livestock', extra: 1 } }), /UNKNOWN_KEY target.extra/);
+  const n = h.normalizeOccasion(q);
+  assert.deepStrictEqual([n.target.market, n.reminderTexts === T3, n.selfReminders, n.remindDaysBefore], ['livestock', true, null, 10]);
+  assert.deepStrictEqual(h.normalizeOccasion(bd).selfReminders, null); // сукут
+  assert.deepStrictEqual(h.holidayDue(q, '2027-05-06'), { due: true, date: '2027-05-16', days: 10 });
+});
+
+check('P13g пуш мақсади: экран + сатр data (FCM)', () => {
+  assert.deepStrictEqual(h.targetPush({ type: 'market', market: 'livestock', categories: ['sheep_goat', 'cattle'] }),
+    { screen: 'market', data: { targetType: 'market', market: 'livestock', categories: 'sheep_goat,cattle' } });
+  assert.deepStrictEqual(h.targetPush({ type: 'holiday_basket', occasionId: 'birthday', mode: 'gift' }),
+    { screen: 'supermarket', data: { targetType: 'holiday_basket', occasionId: 'birthday', mode: 'gift' } });
+  assert.deepStrictEqual(h.targetPush({ type: 'restaurants_preorder' }), { screen: 'restaurants', data: { targetType: 'restaurants_preorder' } });
+  assert.deepStrictEqual(h.targetPush(null).screen, 'supermarket');
 });
 
 check('P14 қариндошлар бонуси: яроқли қариндош, дастур текшируви, босқич, супермаркет грантлари', () => {
@@ -208,7 +289,7 @@ check('P16 3 тил матнлари: ҳар тилда title/body, жойлаг
   }
   assert.ok(h.BIRTHDAY_TEXT.uz_Cyrl.body.includes('{name}') && h.BIRTHDAY_TEXT.ru.body.includes('{days}'));
   assert.ok(!/[ʻʼ‘’]|o'|g'|sh|ch/i.test(h.BIRTHDAY_TEXT.uz_Latn.body.replace('{name}', '').replace(/savat|kun|qoldi/g, ''))); // янги лотин: ş/ç/ğ/ö
-  assert.ok(!/\d/.test(h.GIFT_TEXT.ru.body.replace('{date}', ''))); // нарх йўқ
+  for (const l of ['uz_Cyrl', 'uz_Latn', 'ru']) assert.ok(!/\d|\{date\}/.test(h.GIFT_TEXT[l].body), l); // нарх/сана йўқ (курьер олганда)
 });
 
 const failed = results.filter((x) => !x).length;

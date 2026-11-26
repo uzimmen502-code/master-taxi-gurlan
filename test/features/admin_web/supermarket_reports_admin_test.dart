@@ -6,6 +6,7 @@ import 'package:ava_gurlan/features/admin_web/services/admin_supermarket_service
 import 'package:ava_gurlan/features/supermarket/data/supermarket_repository.dart';
 import 'package:ava_gurlan/features/supermarket/domain/sm_cart.dart';
 import 'package:ava_gurlan/features/supermarket/supermarket_controller.dart';
+import 'package:ava_gurlan/core/utils/formatters.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -45,6 +46,18 @@ Map<String, dynamic> _day(String date, {int? net, bool partial = false}) => {
       if (partial) 'partial': true,
     };
 
+final _payouts = <String, dynamic>{
+  'couriers': [
+    {
+      'courierId': '998931112233', 'name': 'Бек', 'phone': '998931112233', 'total': 6156, 'paid': 156, 'unpaid': 6000, 'missing': 1,
+      'orders': [
+        {'orderId': 'o5', 'date': '2026-11-20', 'deliveryFee': 1200, 'amount': 156, 'paid': true},
+        {'orderId': 'o6', 'date': '2026-11-20', 'deliveryFee': 1200, 'amount': 6000, 'paid': false},
+        {'orderId': 'o2', 'date': '2026-11-20', 'deliveryFee': 1100, 'amount': null, 'paid': false},
+      ],
+    },
+  ],
+};
 class _Fake extends AdminSupermarketService {
   final procDates = <String>[];
   final statsCalls = <({String from, String to, bool backfill})>[];
@@ -64,6 +77,29 @@ class _Fake extends AdminSupermarketService {
     if (procError != null) throw procError!;
     return SmProcurementReport.fromMap({..._proc, 'date': date});
   }
+
+  @override
+  Future<SmCourierPayoutReport> courierPayouts({required String from, required String to}) async {
+    payoutCalls.add((from, to));
+    return SmCourierPayoutReport.fromMap({'from': from, 'to': to, ...payoutResult});
+  }
+
+  @override
+  Future<Map<String, dynamic>> markCourierPaid({
+    required String courierId,
+    required List<String> orderIds,
+    required String clientRequestId,
+    String note = '',
+  }) async {
+    marks.add((courierId, orderIds, clientRequestId, note));
+    if (markError != null) throw markError!;
+    return {'ok': true, 'count': orderIds.length, 'total': 11000};
+  }
+
+  final payoutCalls = <(String, String)>[];
+  final marks = <(String, List<String>, String, String)>[];
+  Map<String, dynamic> payoutResult = {};
+  Object? markError;
 
   @override
   Future<SmStatsReport> stats({required String from, required String to, bool backfill = false}) async {
@@ -242,10 +278,101 @@ void main() {
     });
   });
 
+  group('курьер тўлови', () {
+    test('SmCourierPayout: fromMap/toMap, текширув; SmSettings доим courierPayout юборади (null — созланмаган)', () {
+      expect(SmCourierPayout.fromMap({'mode': 'percent', 'percent': 13})!.toMap(), {'mode': 'percent', 'percent': 13});
+      expect(SmCourierPayout.fromMap({'mode': 'fixed', 'fixedAmount': 6000})!.toMap(), {'mode': 'fixed', 'fixedAmount': 6000});
+      expect(SmCourierPayout.fromMap({'mode': 'x'}), isNull);
+      expect(SmCourierPayout.fromMap(null), isNull);
+      expect(const SmCourierPayout.percent(101).problems(), isNotEmpty);
+      expect(const SmCourierPayout.percent(100).problems(), isEmpty);
+      expect(const SmCourierPayout.fixed(-1).problems(), isNotEmpty);
+      expect(const SmCourierPayout.fixed(0).problems(), isEmpty);
+      final s = SmSettings.fromMap({'stage': 'internal', 'courierPayout': {'mode': 'fixed', 'fixedAmount': 5000}});
+      expect(s.toMap()['courierPayout'], {'mode': 'fixed', 'fixedAmount': 5000});
+      expect(const SmSettings().toMap().containsKey('courierPayout'), isTrue);
+      expect(const SmSettings().toMap()['courierPayout'], isNull);
+      expect(const SmSettings(courierPayout: SmCourierPayout.percent(-5)).problems(), contains('Курьер улуши 0..100%'));
+    });
+
+    test('CSV: курьер, буюртма, ҳолат; карта/мижоз маълумоти йўқ', () {
+      final r = SmCourierPayoutReport.fromMap(_payouts);
+      final csv = smCourierPayoutCsv(r);
+      expect(csv.codeUnitAt(0), 0xFEFF);
+      expect(csv, contains('Курьер,Телефон,Буюртма,Сана,Етказиш ҳақи,Курьерга,Ҳолат\r\n'));
+      expect(csv, contains('Бек,998931112233,o5,2026-11-20,1200,156,тўланган'));
+      expect(csv, contains('Бек,998931112233,o6,2026-11-20,1200,6000,тўланмаган'));
+      expect(csv, contains('Бек,998931112233,o2,2026-11-20,1100,,белгиланмаган'));
+      expect(r.couriers.single.payable.map((o) => o.orderId), ['o6']);
+    });
+
+    testWidgets('таб: эслатма, курьер (исм+телефон), жами тўланмаган; «Тўланди» — фақат тўланмаган+суммали, изоҳ, калит; CSV', (t) async {
+      await _big(t);
+      final s = _Fake()..payoutResult = _payouts;
+      final saved = <String>[];
+      await t.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: SmCourierPayoutsAdminTab(
+            service: s,
+            today: DateTime.utc(2026, 11, 21),
+            newRequestId: () => 'req-key-0001',
+            saveFile: (n, b) async => saved.add(n),
+          ),
+        ),
+      ));
+      await t.pumpAndSettle();
+      expect(s.payoutCalls.single, ('2026-11-15', '2026-11-21'));
+      expect(find.textContaining('тизимдан ТАШҚАРИДА'), findsOneWidget);
+      expect(find.text('Бек · 998931112233'), findsOneWidget);
+      expect(find.textContaining('Жами тўланмаган: ${formatMoney(6000)}'), findsOneWidget);
+      expect(t.widget<Text>(find.byKey(const ValueKey('sm_cpay_state_o2'))).data, 'белгиланмаган');
+      await t.tap(find.byKey(const ValueKey('sm_cpay_mark_998931112233')));
+      await t.pumpAndSettle();
+      await t.enterText(find.byKey(const ValueKey('sm_cpay_note')), 'Humo 26.11');
+      await t.tap(find.byKey(const ValueKey('sm_cpay_confirm')));
+      await t.pumpAndSettle();
+      final m = s.marks.single;
+      expect([m.$1, m.$2, m.$3, m.$4], ['998931112233', ['o6'], 'req-key-0001', 'Humo 26.11']);
+      expect(s.payoutCalls.length, 2, reason: 'belgilangandan keyin qayta yuklanadi');
+      await t.tap(find.byKey(const ValueKey('sm_cpay_csv')));
+      await t.pumpAndSettle();
+      expect(saved.single, 'ava_supermarket_kuryer_2026-11-15_2026-11-21.csv');
+    });
+
+    testWidgets('таб: сервер рад этса (ALREADY_PAID) — қизил матн', (t) async {
+      await _big(t);
+      final s = _Fake()
+        ..payoutResult = _payouts
+        ..markError = const AdminSupermarketException('Бу буюртма аллақачон тўланган деб белгиланган. (ALREADY_PAID)');
+      await t.pumpWidget(MaterialApp(home: Scaffold(body: SmCourierPayoutsAdminTab(service: s, today: DateTime.utc(2026, 11, 21)))));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('sm_cpay_mark_998931112233')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('sm_cpay_confirm')));
+      await t.pumpAndSettle();
+      expect(find.textContaining('ALREADY_PAID'), findsOneWidget);
+    });
+
+    testWidgets('аналитика: тўланган/тўланмаган плиткалари, қисман — «Қисман маълумот»', (t) async {
+      await _big(t);
+      final s = _Fake()
+        ..statsResult = {
+          'days': [{..._day('2026-11-20'), 'netLogistics': null, 'courierPayoutPartial': true}],
+          'summary': {'orders': 4, 'courierPayout': 6156, 'courierPayoutPaid': 156, 'courierPayoutUnpaid': 6000, 'courierPayoutPartial': true, 'netLogistics': null},
+        };
+      await t.pumpWidget(MaterialApp(home: Scaffold(body: SmAnalyticsAdminTab(service: s, today: DateTime.utc(2026, 11, 21)))));
+      await t.pumpAndSettle();
+      expect(find.descendant(of: find.byKey(const ValueKey('sm_kpi_payout_unpaid')), matching: find.text(formatMoney(6000))), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('sm_kpi_payout_paid')), matching: find.text(formatMoney(156))), findsOneWidget);
+      expect(find.text('Қисман маълумот — ҳисобланмади'), findsOneWidget);
+      expect(t.widget<Text>(find.byKey(const ValueKey('sm_stats_net_2026-11-20'))).data, 'қисман');
+    });
+  });
   testWidgets('асосий экран: «Харид режаси» ва «Аналитика» таблари бор', (t) async {
     await _big(t);
     await t.pumpWidget(MaterialApp(home: Scaffold(body: SupermarketAdminScreen(service: _Fake()))));
     expect(find.text('Харид режаси'), findsOneWidget);
     expect(find.text('Аналитика'), findsOneWidget);
+    expect(find.text('Курьерларга тўлов'), findsOneWidget);
   });
 }

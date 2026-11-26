@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/idempotency_keys.dart';
 import '../services/admin_supermarket_service.dart';
 
 typedef SmSaveFile = Future<void> Function(String fileName, Uint8List bytes);
@@ -374,10 +375,16 @@ class _SmAnalyticsAdminTabState extends State<SmAnalyticsAdminTab> {
         _tile('cancelled', 'Бекор / рад', '${r.sumOf('cancelled')}'),
         _tile('gmv', 'Товар айланмаси (GMV)', formatMoney(r.sumOf('gmv'))),
         _tile('fee', 'Етказиш ҳақи (тушум)', formatMoney(r.sumOf('deliveryFeeRevenue'))),
-        _tile('payout', 'Курьерга тўлов', _money(r.courierPayout),
-            hint: r.courierPayout == null ? 'Платформа буюртмаси учун курьер тўлови майдони йўқ' : null),
+        _tile('payout', 'Курьерга тўлов (етказилган)', _money(r.courierPayout),
+            hint: r.courierPayoutPartial ? 'Қисман: баъзи буюртмада сумма белгиланмаган' : null),
+        _tile('payout_paid', 'Курьерга тўланган', formatMoney(r.sumOf('courierPayoutPaid'))),
+        _tile('payout_unpaid', 'Курьерга тўланмаган', formatMoney(r.sumOf('courierPayoutUnpaid')),
+            color: r.sumOf('courierPayoutUnpaid') > 0 ? Colors.orange.shade800 : null),
         _tile('net', 'Соф логистика (ҳақ − курьер)', _money(net),
-            color: _netColor(net), hint: net != null && net < 0 ? 'Етказиш зарар қилмоқда' : null),
+            color: _netColor(net),
+            hint: net == null
+                ? (r.courierPayoutPartial ? 'Қисман маълумот — ҳисобланмади' : null)
+                : (net < 0 ? 'Етказиш зарар қилмоқда' : null)),
         _tile('refunds', 'Қайтимлар', formatMoney(r.sumOf('refundsTotal'))),
         _tile('avg', 'Ўртача сават', formatMoney(r.sumOf('avgBasket'))),
         _tile('reminders', 'Эслатмали ҳафталик рўйхатлар', r.listsWithReminders == null ? '—' : '${r.listsWithReminders}'),
@@ -413,7 +420,7 @@ class _SmAnalyticsAdminTabState extends State<SmAnalyticsAdminTab> {
                 DataCell(Text(formatMoney(d.gmv))),
                 DataCell(Text(formatMoney(d.deliveryFeeRevenue))),
                 DataCell(Text(d.courierPayout == null ? '—' : formatMoney(d.courierPayout!))),
-                DataCell(Text(d.netLogistics == null ? '—' : formatMoney(d.netLogistics!),
+                DataCell(Text(d.netLogistics == null ? (d.courierPayoutPartial ? 'қисман' : '—') : formatMoney(d.netLogistics!),
                     key: ValueKey('sm_stats_net_${d.date}'), style: TextStyle(color: _netColor(d.netLogistics)))),
                 DataCell(Text(formatMoney(d.refundsTotal))),
                 DataCell(Text(formatMoney(d.avgBasket))),
@@ -444,4 +451,269 @@ class _SmAnalyticsAdminTabState extends State<SmAnalyticsAdminTab> {
         ),
     ];
   }
+}
+
+// ─── Курьерларга тўлов (эга 2026-11-26) ───────────────────────────────────
+
+class SmCourierPayoutsAdminTab extends StatefulWidget {
+  const SmCourierPayoutsAdminTab({super.key, required this.service, this.saveFile, this.today, this.newRequestId});
+
+  final AdminSupermarketService service;
+  final SmSaveFile? saveFile;
+  final DateTime? today;
+
+  /// Тест учун; бўлмаса — [IdempotencyKeys] калити.
+  final String Function()? newRequestId;
+
+  @override
+  State<SmCourierPayoutsAdminTab> createState() => _SmCourierPayoutsAdminTabState();
+}
+
+class _SmCourierPayoutsAdminTabState extends State<SmCourierPayoutsAdminTab> {
+  late final DateTime _today = widget.today ?? smTashkentToday();
+  late DateTime _to = _today;
+  late DateTime _from = _today.subtract(const Duration(days: 6));
+  SmCourierPayoutReport? _report;
+  String? _error;
+  String? _info;
+  bool _loading = false;
+  bool _busy = false;
+  final _keys = IdempotencyKeys();
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final r = await widget.service.courierPayouts(from: smDateKey(_from), to: smDateKey(_to));
+      if (mounted) setState(() => _report = r);
+    } catch (e) {
+      debugPrint('[SmCourierPayouts] load failed: $e');
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _pickRange() async {
+    final r = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2026, 1, 1),
+      lastDate: _today.add(const Duration(days: 1)),
+      initialDateRange: DateTimeRange(start: _from, end: _to),
+    );
+    if (r == null) return;
+    final from = DateTime.utc(r.start.year, r.start.month, r.start.day);
+    final to = DateTime.utc(r.end.year, r.end.month, r.end.day);
+    if (to.difference(from).inDays + 1 > 92) {
+      setState(() => _error = 'Оралиқ 92 кундан ошмасин');
+      return;
+    }
+    setState(() {
+      _from = from;
+      _to = to;
+    });
+    _load();
+  }
+
+  Future<void> _markPaid(SmCourierPayoutGroup c) async {
+    final payable = c.payable;
+    if (payable.isEmpty) return;
+    final total = payable.fold<int>(0, (a, o) => a + o.amount!);
+    final noteText = await showDialog<String>(
+      context: context,
+      builder: (_) => _SmMarkPaidDialog(
+        title: '${c.name.isEmpty ? c.phone : c.name} · ${payable.length} та буюртма · ${formatMoney(total)}',
+      ),
+    );
+    final ok = noteText != null;    if (ok != true || !mounted) return;
+    final scope = 'sm_cpay_${c.courierId}_${payable.map((o) => o.orderId).join(',')}';
+    setState(() {
+      _busy = true;
+      _error = null;
+      _info = null;
+    });
+    try {
+      final res = await widget.service.markCourierPaid(
+        courierId: c.courierId,
+        orderIds: [for (final o in payable) o.orderId],
+        clientRequestId: widget.newRequestId?.call() ?? _keys.keyFor(scope),
+        note: noteText ?? '',
+      );
+      _keys.settled(scope);
+      if (mounted) setState(() => _info = 'Белгиланди: ${res['count'] ?? payable.length} та, ${formatMoney((res['total'] as num?)?.toInt() ?? total)}');
+      await _load();
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _export() async {
+    final r = _report;
+    if (r == null) return;
+    final bytes = Uint8List.fromList(utf8.encode(smCourierPayoutCsv(r)));
+    try {
+      await (widget.saveFile ?? _shareCsv)('ava_supermarket_kuryer_${r.from}_${r.to}.csv', bytes);
+    } catch (e) {
+      if (mounted) setState(() => _error = 'CSV сақлаб бўлмади: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final r = _report;
+    final totalUnpaid = r == null ? 0 : r.couriers.fold<int>(0, (a, c) => a + c.unpaid);
+    return ListView(
+      padding: const EdgeInsets.all(12),
+      children: [
+        const Card(
+          key: ValueKey('sm_cpay_note_card'),
+          color: Color(0xFFFFF3E0),
+          child: Padding(
+            padding: EdgeInsets.all(12),
+            child: Text(
+              'Тўлов курьер банк картасига тизимдан ТАШҚАРИДА қўлда ўтказилади. Тизим пул ўтказмайди ва карта '
+              'маълумотини сақламайди — бу ерда фақат ҳисоб ва «тўланди» белгиси.',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+          OutlinedButton.icon(
+            key: const ValueKey('sm_cpay_range'),
+            onPressed: _pickRange,
+            icon: const Icon(Icons.date_range),
+            label: Text('${smDateKey(_from)} — ${smDateKey(_to)}'),
+          ),
+          IconButton(tooltip: 'Янгилаш', onPressed: _loading ? null : _load, icon: const Icon(Icons.refresh)),
+          FilledButton.icon(
+            key: const ValueKey('sm_cpay_csv'),
+            onPressed: r == null || r.couriers.isEmpty ? null : _export,
+            icon: const Icon(Icons.download),
+            label: const Text('CSV'),
+          ),
+        ]),
+        const SizedBox(height: 8),
+        if (_loading) const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator())),
+        if (_error != null) Text(_error!, key: const ValueKey('sm_cpay_error'), style: const TextStyle(color: Colors.red)),
+        if (_info != null) Text(_info!, key: const ValueKey('sm_cpay_info'), style: const TextStyle(color: Colors.green)),
+        if (!_loading && r != null) ...[
+          Text('Жами тўланмаган: ${formatMoney(totalUnpaid)}', key: const ValueKey('sm_cpay_total_unpaid'),
+              style: const TextStyle(fontWeight: FontWeight.bold)),
+          if (r.truncated) const Text('Диққат: рўйхат тўлиқ эмас (3000 гача).', style: TextStyle(color: Colors.red)),
+          if (r.couriers.isEmpty) const Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Етказилган буюртма йўқ'))),
+          for (final c in r.couriers) _courierCard(c),
+        ],
+      ],
+    );
+  }
+
+  Widget _courierCard(SmCourierPayoutGroup c) => Card(
+        key: ValueKey('sm_cpay_courier_${c.courierId}'),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Expanded(
+                child: Text(
+                  c.courierId == 'unknown' ? 'Курьер аниқланмаган' : '${c.name.isEmpty ? '—' : c.name} · ${c.phone}',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ),
+              if (c.courierId != 'unknown')
+                FilledButton(
+                  key: ValueKey('sm_cpay_mark_${c.courierId}'),
+                  onPressed: _busy || c.payable.isEmpty ? null : () => _markPaid(c),
+                  child: Text('Тўланди (${c.payable.length})'),
+                ),
+            ]),
+            Text(
+              'Жами: ${formatMoney(c.total)} · тўланган: ${formatMoney(c.paid)} · тўланмаган: ${formatMoney(c.unpaid)}'
+              '${c.missing > 0 ? ' · суммаси белгиланмаган: ${c.missing} та' : ''}',
+              key: ValueKey('sm_cpay_sum_${c.courierId}'),
+            ),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columnSpacing: 16,
+                columns: const [
+                  DataColumn(label: Text('Сана')),
+                  DataColumn(label: Text('Буюртма')),
+                  DataColumn(label: Text('Етказиш ҳақи'), numeric: true),
+                  DataColumn(label: Text('Курьерга'), numeric: true),
+                  DataColumn(label: Text('Ҳолат')),
+                ],
+                rows: [
+                  for (final o in c.orders)
+                    DataRow(cells: [
+                      DataCell(Text(o.date)),
+                      DataCell(Text(o.orderId)),
+                      DataCell(Text(formatMoney(o.deliveryFee))),
+                      DataCell(Text(o.amount == null ? 'маълум эмас' : formatMoney(o.amount!))),
+                      DataCell(Text(
+                        o.amount == null ? 'белгиланмаган' : (o.paid ? 'тўланган' : 'тўланмаган'),
+                        key: ValueKey('sm_cpay_state_${o.orderId}'),
+                        style: TextStyle(color: o.paid ? Colors.green : (o.amount == null ? Colors.black45 : Colors.orange.shade800)),
+                      )),
+                    ]),
+                ],
+              ),
+            ),
+          ]),
+        ),
+      );
+}
+/// «Тўланди» тасдиғи — изоҳ контроллери диалог ичида (ёпилиш анимациясида dispose муаммоси бўлмасин).
+/// Натижа: изоҳ матни (бўш бўлиши мумкин) ёки null — бекор.
+class _SmMarkPaidDialog extends StatefulWidget {
+  const _SmMarkPaidDialog({required this.title});
+  final String title;
+
+  @override
+  State<_SmMarkPaidDialog> createState() => _SmMarkPaidDialogState();
+}
+
+class _SmMarkPaidDialogState extends State<_SmMarkPaidDialog> {
+  final _note = TextEditingController();
+
+  @override
+  void dispose() {
+    _note.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: const Text('Тўланди деб белгилаш'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(widget.title),
+          const SizedBox(height: 8),
+          const Text('Пулни курьер картасига ўзингиз ўтказганингиздан кейин белгиланг. Тизим пул ўтказмайди.',
+              style: TextStyle(fontSize: 12, color: Colors.black54)),
+          const SizedBox(height: 8),
+          TextField(
+            key: const ValueKey('sm_cpay_note'),
+            controller: _note,
+            decoration: const InputDecoration(labelText: 'Изоҳ (ихтиёрий, карта рақамини ёзманг)', border: OutlineInputBorder()),
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Бекор')),
+          FilledButton(
+            key: const ValueKey('sm_cpay_confirm'),
+            onPressed: () => Navigator.pop(context, _note.text),
+            child: const Text('Тасдиқлаш'),
+          ),
+        ],
+      );
 }

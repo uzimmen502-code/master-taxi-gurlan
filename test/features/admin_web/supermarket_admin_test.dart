@@ -136,7 +136,7 @@ void main() {
         'updatedAt': 'x',
       });
       expect(s.version, 7);
-      expect(s.toMap().keys.toSet(), {'stage', 'testerIds', 'districtIds', 'slots', 'cutoffMin', 'weighHoldPercent'});
+      expect(s.toMap().keys.toSet(), {'stage', 'testerIds', 'districtIds', 'slots', 'cutoffMin', 'weighHoldPercent', 'courierPayout'});
       expect((s.toMap()['slots'] as List).single['names'], _n3('Эрталаб'));
       expect(s.problems(), isEmpty);
       expect(const SmSettings(cutoffMin: 721).problems(), isNotEmpty);

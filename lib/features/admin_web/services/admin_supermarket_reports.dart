@@ -216,6 +216,7 @@ class SmStatsDay {
     this.topGroups = const [],
     this.partial = false,
     this.truncated = false,
+    this.courierPayoutPartial = false,
   });
 
   final String date;
@@ -236,6 +237,9 @@ class SmStatsDay {
   final List<SmTopGroup> topGroups;
   final bool partial;
   final bool truncated;
+
+  /// Бирор етказилган буюртмада курьер тўлови нусхаси йўқ → netLogistics null.
+  final bool courierPayoutPartial;
 
   static Map<String, int> _intMap(Object? v) =>
       v is Map ? {for (final e in v.entries) '${e.key}': _i(e.value)} : const {};
@@ -263,6 +267,7 @@ class SmStatsDay {
         ],
         partial: m['partial'] == true,
         truncated: m['truncated'] == true,
+        courierPayoutPartial: m['courierPayoutPartial'] == true,
       );
 }
 
@@ -305,6 +310,7 @@ class SmStatsReport {
   int sumOf(String key) => _i(summary[key]);
   int? get netLogistics => _iN(summary['netLogistics']);
   int? get courierPayout => _iN(summary['courierPayout']);
+  bool get courierPayoutPartial => summary['courierPayoutPartial'] == true;
 
   /// Манба бўйича буюртмалар (тугалланган кунлар бўйича йиғинди).
   Map<String, int> get byOrigin {
@@ -343,4 +349,134 @@ String smDateKey(DateTime d) =>
 DateTime smTashkentToday([DateTime? nowUtc]) {
   final t = (nowUtc ?? DateTime.now().toUtc()).add(const Duration(hours: 5));
   return DateTime.utc(t.year, t.month, t.day);
+}
+
+// ─── Курьер тўлови (эга 2026-11-26) ───────────────────────────────────────
+// Тўлов — админ курьер КАРТАСИГА тизимдан ташқарида қўлда ўтказади. Тизим пул юрмайди, карта маълумоти САҚЛАНМАЙДИ.
+
+/// `settings/supermarket.courierPayout`: percent (0..100, буюртма етказиш ҳақидан) ёки fixed (сўм).
+class SmCourierPayout {
+  const SmCourierPayout.percent(int this.percent)
+      : mode = 'percent',
+        fixedAmount = null;
+  const SmCourierPayout.fixed(int this.fixedAmount)
+      : mode = 'fixed',
+        percent = null;
+
+  final String mode;
+  final int? percent;
+  final int? fixedAmount;
+
+  static SmCourierPayout? fromMap(Object? v) {
+    if (v is! Map) return null;
+    if (v['mode'] == 'percent' && v['percent'] is num) return SmCourierPayout.percent((v['percent'] as num).toInt());
+    if (v['mode'] == 'fixed' && v['fixedAmount'] is num) return SmCourierPayout.fixed((v['fixedAmount'] as num).toInt());
+    return null;
+  }
+
+  Map<String, dynamic> toMap() =>
+      mode == 'percent' ? {'mode': 'percent', 'percent': percent} : {'mode': 'fixed', 'fixedAmount': fixedAmount};
+
+  /// Сервер `courierPayoutProblems` кўзгуси.
+  List<String> problems() => [
+        if (mode == 'percent' && (percent == null || percent! < 0 || percent! > 100)) 'Курьер улуши 0..100%',
+        if (mode == 'fixed' && (fixedAmount == null || fixedAmount! < 0)) 'Курьер суммаси 0 ёки ундан катта',
+      ];
+}
+
+class SmCourierPayoutOrder {
+  const SmCourierPayoutOrder({required this.orderId, required this.date, this.deliveryFee = 0, this.amount, this.paid = false});
+  final String orderId;
+  final String date;
+  final int deliveryFee;
+  final int? amount;
+  final bool paid;
+
+  factory SmCourierPayoutOrder.fromMap(Map m) => SmCourierPayoutOrder(
+        orderId: '${m['orderId'] ?? ''}',
+        date: '${m['date'] ?? ''}',
+        deliveryFee: _i(m['deliveryFee']),
+        amount: _iN(m['amount']),
+        paid: m['paid'] == true,
+      );
+}
+
+class SmCourierPayoutGroup {
+  const SmCourierPayoutGroup({
+    required this.courierId,
+    this.name = '',
+    this.phone = '',
+    this.orders = const [],
+    this.total = 0,
+    this.paid = 0,
+    this.unpaid = 0,
+    this.missing = 0,
+  });
+
+  final String courierId;
+  final String name;
+  final String phone;
+  final List<SmCourierPayoutOrder> orders;
+  final int total;
+  final int paid;
+  final int unpaid;
+  final int missing;
+
+  /// Белгилаш мумкин бўлганлар: сумма бор ва ҳали тўланмаган.
+  List<SmCourierPayoutOrder> get payable => [for (final o in orders) if (!o.paid && o.amount != null) o];
+
+  factory SmCourierPayoutGroup.fromMap(Map m) => SmCourierPayoutGroup(
+        courierId: '${m['courierId'] ?? ''}',
+        name: '${m['name'] ?? ''}',
+        phone: '${m['phone'] ?? ''}',
+        orders: [
+          if (m['orders'] is List)
+            for (final o in m['orders'] as List)
+              if (o is Map) SmCourierPayoutOrder.fromMap(o),
+        ],
+        total: _i(m['total']),
+        paid: _i(m['paid']),
+        unpaid: _i(m['unpaid']),
+        missing: _i(m['missing']),
+      );
+}
+
+class SmCourierPayoutReport {
+  const SmCourierPayoutReport({required this.from, required this.to, this.couriers = const [], this.truncated = false});
+  final String from;
+  final String to;
+  final List<SmCourierPayoutGroup> couriers;
+  final bool truncated;
+
+  factory SmCourierPayoutReport.fromMap(Map<String, dynamic> m) => SmCourierPayoutReport(
+        from: '${m['from'] ?? ''}',
+        to: '${m['to'] ?? ''}',
+        truncated: m['truncated'] == true,
+        couriers: [
+          if (m['couriers'] is List)
+            for (final c in m['couriers'] as List)
+              if (c is Map) SmCourierPayoutGroup.fromMap(c),
+        ],
+      );
+}
+
+/// CSV: курьер (исм, телефон), буюртма, сана, етказиш ҳақи, курьерга, ҳолат. Мижоз маълумоти ва карта йўқ.
+String smCourierPayoutCsv(SmCourierPayoutReport r) {
+  final rows = <List<String>>[
+    ['Курьер', 'Телефон', 'Буюртма', 'Сана', 'Етказиш ҳақи', 'Курьерга', 'Ҳолат'],
+  ];
+  for (final c in r.couriers) {
+    for (final o in c.orders) {
+      rows.add([
+        c.name,
+        c.phone,
+        o.orderId,
+        o.date,
+        '${o.deliveryFee}',
+        o.amount == null ? '' : '${o.amount}',
+        o.amount == null ? 'белгиланмаган' : (o.paid ? 'тўланган' : 'тўланмаган'),
+      ]);
+    }
+  }
+  return '\uFEFF${rows.map((r) => r.map(smCsvCell).join(',')).join('\r\n')}\r\n';
 }

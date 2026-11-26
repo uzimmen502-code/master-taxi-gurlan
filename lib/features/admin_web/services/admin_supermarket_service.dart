@@ -47,6 +47,7 @@ class SmSettings {
     this.slots = const [],
     this.cutoffMin = 0,
     this.weighHoldPercent = 10,
+    this.courierPayout,
     this.version = 0,
   });
 
@@ -56,6 +57,9 @@ class SmSettings {
   final List<SmSlotDraft> slots;
   final int cutoffMin;
   final int weighHoldPercent;
+
+  /// Курьер тўлови (эга 2026-11-26); null — созланмаган. Карта маълумоти ЙЎҚ.
+  final SmCourierPayout? courierPayout;
 
   /// Ҳужжат версияси (`expectedVersion` учун; ҳужжат йўқ — 0).
   final int version;
@@ -73,6 +77,7 @@ class SmSettings {
       ],
       cutoffMin: (m['cutoffMin'] as num?)?.toInt() ?? 0,
       weighHoldPercent: (m['weighHoldPercent'] as num?)?.toInt() ?? 10,
+      courierPayout: SmCourierPayout.fromMap(m['courierPayout']),
       version: (m['version'] as num?)?.toInt() ?? 0,
     );
   }
@@ -85,6 +90,8 @@ class SmSettings {
         'slots': [for (final s in slots) s.toMap()],
         'cutoffMin': cutoffMin,
         'weighHoldPercent': weighHoldPercent,
+        // Доим юборилади: сервер ҳужжатни тўлиқ алмаштиради — тушириб қолдирилса созлама ўчиб кетарди.
+        'courierPayout': courierPayout?.toMap(),
       };
 
   /// Сервер валидатори кўзгуси (Кирилл матн).
@@ -97,6 +104,7 @@ class SmSettings {
         if (slots.length > 12) 'Вақтлар 12 тадан кўп',
         if (cutoffMin < 0 || cutoffMin > 720) 'Қабул тўхташи 0..720 дақиқа',
         if (weighHoldPercent < 0 || weighHoldPercent > 50) 'Тортиш ушлаши 0..50%',
+        ...?courierPayout?.problems(),
       ];
 }
 
@@ -373,6 +381,29 @@ class AdminSupermarketService {
         'to': to,
         if (backfill) 'backfill': true,
       }, timeout: const Duration(seconds: 120)));
+
+  /// Курьерларга тўлов рўйхати (етказилган, slot.date оралиғи ≤92 кун; admin/superadmin).
+  Future<SmCourierPayoutReport> courierPayouts({required String from, required String to}) async =>
+      SmCourierPayoutReport.fromMap(await _callData('adminSupermarketCourierPayouts', {'from': from, 'to': to}));
+
+  /// «Тўланди» белгиси (пул тизимда юрмайди — админ картага қўлда ўтказгандан кейин). [clientRequestId] — қайта
+  /// юборишда иккинчи марта белгиланмасин.
+  Future<Map<String, dynamic>> markCourierPaid({
+    required String courierId,
+    required List<String> orderIds,
+    required String clientRequestId,
+    String note = '',
+  }) =>
+      _callData('adminMarkSupermarketCourierPaid', {
+        'courierId': courierId,
+        'orderIds': orderIds,
+        'clientRequestId': clientRequestId,
+        if (note.trim().isNotEmpty) 'note': note.trim(),
+      });
+
+  /// Белгини қайтариш — фақат superadmin (сервер текширади), сабаб шарт.
+  Future<void> unmarkCourierPaid(String orderId, String reason) =>
+      _call('adminUnmarkSupermarketCourierPaid', {'orderId': orderId, 'reason': reason});
 
   Future<void> _call(String name, Map<String, dynamic> data) => _callData(name, data);
 

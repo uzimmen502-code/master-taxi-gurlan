@@ -42,7 +42,7 @@ class SupermarketAdminScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = service ?? AdminSupermarketService();
     return DefaultTabController(
-      length: 7,
+      length: 8,
       child: Column(
         children: [
           const TabBar(
@@ -55,6 +55,7 @@ class SupermarketAdminScreen extends StatelessWidget {
               Tab(text: 'Созламалар'),
               Tab(text: 'Харид режаси'),
               Tab(text: 'Аналитика'),
+              Tab(text: 'Курьерларга тўлов'),
             ],
           ),
           Expanded(
@@ -66,6 +67,7 @@ class SupermarketAdminScreen extends StatelessWidget {
               SmSettingsAdminTab(service: s),
               SmProcurementAdminTab(service: s),
               SmAnalyticsAdminTab(service: s),
+              SmCourierPayoutsAdminTab(service: s),
             ]),
           ),
         ],
@@ -883,6 +885,10 @@ class _SmSettingsAdminTabState extends State<SmSettingsAdminTab> {
   final _holdPct = TextEditingController();
   final _reason = TextEditingController();
 
+  /// Курьер тўлови: '' — созланмаган, 'percent' | 'fixed'.
+  String _cpMode = '';
+  final _cpValue = TextEditingController();
+
   /// Юкланган версия — сервер `expectedVersion` (бошқа админ ўзгартирган бўлса — рад, саҳифани янгилаш).
   int _version = 0;
   String? _msg;
@@ -907,6 +913,9 @@ class _SmSettingsAdminTabState extends State<SmSettingsAdminTab> {
         _slots.text = slotLines(s.slots);
         _cutoff.text = '${s.cutoffMin}';
         _holdPct.text = '${s.weighHoldPercent}';
+        final cp = s.courierPayout;
+        _cpMode = cp?.mode ?? '';
+        _cpValue.text = cp == null ? '' : '${cp.mode == 'percent' ? cp.percent : cp.fixedAmount}';
         _loaded = true;
       });
     } catch (e) {
@@ -920,6 +929,12 @@ class _SmSettingsAdminTabState extends State<SmSettingsAdminTab> {
     final slots = parseSlotLines(_slots.text);
     final cutoff = int.tryParse(_cutoff.text.trim().isEmpty ? '0' : _cutoff.text.trim()) ?? -1;
     final hold = int.tryParse(_holdPct.text.trim()) ?? -1;
+    final cpVal = int.tryParse(_cpValue.text.trim()) ?? -1;
+    final cp = _cpMode == 'percent'
+        ? SmCourierPayout.percent(cpVal)
+        : _cpMode == 'fixed'
+            ? SmCourierPayout.fixed(cpVal)
+            : null;
     final settings = SmSettings(
       stage: _stage,
       testerIds: testers,
@@ -927,6 +942,7 @@ class _SmSettingsAdminTabState extends State<SmSettingsAdminTab> {
       slots: slots.slots,
       cutoffMin: cutoff,
       weighHoldPercent: hold,
+      courierPayout: cp,
     );
     final errs = [
       if (bad.isNotEmpty) 'Нотўғри телефон: ${bad.join(', ')}',
@@ -971,6 +987,45 @@ class _SmSettingsAdminTabState extends State<SmSettingsAdminTab> {
         _area('slots', 'Етказиш вақтлари (ҳар қаторда 10:00-12:00)', _slots),
         _field('cutoff', 'Бугунги вақт бошланишидан неча дақиқа олдин қабул тўхтайди (0..720)', _cutoff),
         _field('hold_pct', 'Тортиладиган маҳсулот учун вақтинча ушлаш, % (0..50; эга қарори — 10)', _holdPct),
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Row(children: [
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                key: const ValueKey('sm_admin_cp_mode'),
+                initialValue: _cpMode,
+                decoration: const InputDecoration(labelText: 'Курьерга тўлов (супермаркет буюртмаси)', border: OutlineInputBorder()),
+                items: const [
+                  DropdownMenuItem(value: '', child: Text('Созланмаган')),
+                  DropdownMenuItem(value: 'percent', child: Text('Етказиш ҳақидан %')),
+                  DropdownMenuItem(value: 'fixed', child: Text('Белгиланган сумма (сўм)')),
+                ],
+                onChanged: (v) => setState(() => _cpMode = v ?? ''),
+              ),
+            ),
+            const SizedBox(width: 8),
+            if (_cpMode.isNotEmpty)
+              Expanded(
+                child: TextField(
+                  key: const ValueKey('sm_admin_cp_value'),
+                  controller: _cpValue,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: _cpMode == 'percent' ? 'Фоиз (0..100)' : 'Сумма, сўм',
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+              ),
+          ]),
+        ),
+        const Padding(
+          padding: EdgeInsets.only(top: 4),
+          child: Text(
+            'Сумма ҳар буюртмага яратилганда ёзилади — кейинги ўзгариш эски буюртмаларга таъсир қилмайди. '
+            'Тўлов курьер картасига тизимдан ташқарида қўлда ўтказилади; карта рақами сақланмайди.',
+            style: TextStyle(fontSize: 12, color: Colors.black54),
+          ),
+        ),
         _field('reason', 'Сабаб (audit)', _reason),
         const Padding(
           padding: EdgeInsets.only(top: 8),

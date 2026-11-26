@@ -37,6 +37,10 @@ import '../repositories/rides_repository.dart';
 import '../features/profile/screens/news_hub_screen.dart';
 import '../features/profile/screens/order_news_detail_screen.dart';
 import '../features/supermarket/screens/supermarket_home_screen.dart' show openSupermarketWith;
+import '../features/supermarket/screens/sm_holiday_screen.dart' show openHolidayBasket;
+import '../features/supermarket/domain/sm_holiday.dart' show HolidayPushKind, SmHolidayCheckout, holidayPushTarget;
+import '../features/relatives/utils/relative_birthdays.dart' show relativeGiftCheckout;
+import '../repositories/relatives_repository.dart';
 import '../models/order_news_group.dart';
 import '../features/china_inquiry/screens/china_inquiries_screen.dart';
 import '../features/deal_chat/deal_chat_support.dart';
@@ -208,6 +212,15 @@ class PushNavigation {
           ),
         ));
       }
+      return;
+    }
+
+    // «Байрам саватчаси» (эга 2026-11-26): байрам эслатмаси → шу байрам саватчалари; қариндош туғилган куни →
+    // туғилган кун саватчаси, қариндош (телефони бўлса) совға қабул қилувчиси. Push'га ишонилмайди: қариндош
+    // Firestore'дан ўқилади (rules: фақат эгаси), байрам ва нарх — серверда.
+    final holiday = holidayPushTarget(data);
+    if (holiday != null) {
+      await openHolidayTarget(nav, holiday);
       return;
     }
 
@@ -752,6 +765,35 @@ class PushNavigation {
         builder: (_) => NewsHubScreen(initialTabIndex: newsTab),
       ),
     );
+  }
+
+  /// Push ва «Хабарлар» учун умумий (супермаркет дарвозаси шу ерда текширилади).
+  static Future<void> openHolidayTarget(
+    NavigatorState nav,
+    ({HolidayPushKind kind, String occasionId, String personId}) t,
+  ) async {
+    if (!_moduleOpen(nav, 'supermarket')) return;
+    if (t.kind == HolidayPushKind.bonus) {
+      await openSupermarketWith(nav);
+      return;
+    }
+    final occasionId = t.occasionId.isEmpty ? null : t.occasionId;
+    if (t.kind == HolidayPushKind.occasion) {
+      await openHolidayBasket(nav, occasionId: occasionId);
+      return;
+    }
+    SmHolidayCheckout? gift;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final phone = canonicalPhoneId(prefs.getString('user_phone') ?? '');
+      final p = phone.length >= 12 && t.personId.isNotEmpty ? await RelativesRepository().getPerson(phone, t.personId) : null;
+      if (p != null) gift = relativeGiftCheckout(p);
+    } catch (e) {
+      // Қариндош ўқилмаса ҳам саватча очилади (совғасиз).
+      debugPrint('[PushNavigation] relative read failed: $e');
+    }
+    if (!nav.mounted) return;
+    await openHolidayBasket(nav, occasionId: occasionId, birthday: true, gift: gift);
   }
 
   /// Push'дан очиладиган модул ҳам «＋» ва каталог билан бир қоида (кенгаш P9):

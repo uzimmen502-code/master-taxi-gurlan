@@ -64,7 +64,13 @@ class SmAccess {
     this.feePercent = 0,
     this.weighHoldPercent = kSmWeighedHoldPercent,
     this.tariffVersion = '',
+    this.dateSlots = const {},
+    this.maxAheadDays = 0,
   });
+
+  /// Сана → оралиқлар (`withDates:true` бўлганда; бўш — сўралмаган ёки рухсат йўқ).
+  final Map<String, List<SmSlot>> dateSlots;
+  final int maxAheadDays;
 
   static const denied = SmAccess(allowed: false, reason: 'unavailable');
 
@@ -99,7 +105,22 @@ class SmAccess {
       // Эски шартнома шакли (рўйхат, ҳар бирида `day`).
       slots.addAll(s.map((e) => SmSlot.fromMap(e)).whereType<SmSlot>());
     }
+    // «Байрам саватчаси» (сервер 5eb77906): `withDates:true` → `maxAheadDays`, `dateSlots:[{date, slots[]}]`.
+    final dateSlots = <String, List<SmSlot>>{};
+    final ds = raw['dateSlots'];
+    if (ds is List) {
+      for (final e in ds) {
+        if (e is! Map) continue;
+        final date = e['date'];
+        final list = e['slots'];
+        if (date is! String || !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(date) || list is! List) continue;
+        final parsed = list.map((x) => SmSlot.fromMap(x, day: date)).whereType<SmSlot>().toList();
+        if (parsed.isNotEmpty) dateSlots[date] = parsed;
+      }
+    }
     return SmAccess(
+      dateSlots: dateSlots,
+      maxAheadDays: raw['maxAheadDays'] is num ? (raw['maxAheadDays'] as num).toInt() : 0,
       allowed: raw['allowed'] == true,
       reason: raw['reason']?.toString() ?? '',
       messages: smNames(raw['messages']),
@@ -121,7 +142,15 @@ class SmPlaceResult {
     required this.hold,
     this.weighHold = 0,
     this.duplicate = false,
+    this.incentiveApplied = 0,
+    this.slotDate = '',
   });
+
+  /// Бонусдан ишлатилган (сервер, `useIncentive`); 0 — ишлатилмади.
+  final int incentiveApplied;
+
+  /// Етказиш санаси `YYYY-MM-DD` (сервер).
+  final String slotDate;
 
   final String orderId;
   final int goodsTotal;
@@ -142,6 +171,8 @@ class SmPlaceResult {
       hold: i('total', 'hold'),
       weighHold: i('weighHold'),
       duplicate: m['duplicate'] == true,
+      incentiveApplied: i('incentiveApplied'),
+      slotDate: m['slotDate']?.toString() ?? '',
     );
   }
 }

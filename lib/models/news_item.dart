@@ -28,7 +28,14 @@ class NewsItem {
     this.pushDirect = false,
     this.retractedAt,
     this.smListId = '',
+    this.occasionId = '',
+    this.personId = '',
   });
+
+  /// «Байрам саватчаси» эслатмаси (source: holiday_reminder / holiday_birthday_reminder, сервер 5eb77906) —
+  /// байрам ва қариндош id. Бошқаларда бўш.
+  final String occasionId;
+  final String personId;
 
   final String id;
   final String title;
@@ -149,6 +156,8 @@ class NewsItem {
       pushDirect: d['pushDirect'] == true,
       retractedAt: (d['retractedAt'] as Timestamp?)?.toDate(),
       smListId: d['smListId'] is String ? (d['smListId'] as String).trim() : '',
+      occasionId: d['occasionId'] is String ? (d['occasionId'] as String).trim() : '',
+      personId: d['personId'] is String ? (d['personId'] as String).trim() : '',
     );
   }
 

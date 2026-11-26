@@ -22,6 +22,20 @@ class RelativesRepository {
         .map((s) => s.docs.map(RelativePerson.fromDoc).toList(growable: false));
   }
 
+  /// Туғилган куни киритилган қариндошлар сони («Мен» ёзуви ҳисобланмайди), [cap] гача — бош саҳифа
+  /// карточкаси учун (эга 2026-11-26). Битта сўров, ≤ cap+1 ҳужжат (37-банд).
+  Future<int> countBirthdays(String userId, {int cap = 3}) async {
+    final snap = await _people(userId).where('birthDate', isNull: false).limit(cap + 1).get();
+    final n = snap.docs.where((d) => d.data()['isSelf'] != true).length;
+    return n > cap ? cap : n;
+  }
+
+  /// Битта қариндош (push'дан «Саватча тайёрлаш» учун). Йўқ — `null`.
+  Future<RelativePerson?> getPerson(String userId, String personId) async {
+    final d = await _people(userId).doc(personId).get();
+    return d.exists ? RelativePerson.fromDoc(d) : null;
+  }
+
   /// Tug'ilgan kuni bor qarindoshlar — keyingi BD gacha kun bo'yicha tartiblangan.
   List<RelativePerson> upcomingBirthdays(List<RelativePerson> all) {
     final withBd = all.where((p) => p.birthDate != null).toList()

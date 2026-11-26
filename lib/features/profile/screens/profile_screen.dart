@@ -24,6 +24,7 @@ import '../../onboarding/screens/onboarding_screen.dart';
 import '../../realty/screens/my_realty_listings_screen.dart';
 import '../controllers/profile_controller.dart';
 import '../widgets/cabinet_ui.dart';
+import '../widgets/holiday_reminders_toggle.dart';
 import 'address_edit_screen.dart';
 import 'user_info_screen.dart';
 import '../../../core/theme/app_theme.dart';
@@ -322,6 +323,8 @@ class _ProfileViewState extends State<_ProfileView> {
                     }
                   },
                 ),
+                // «Байрам эслатмалари» (эга 2026-11-26) — ўчириб қўйиш мумкин.
+                const HolidayRemindersToggle(),
                 // «Чиқиш» қатори бу ерда йўқ: у ҳедернинг ўнг юқори бурчагидаги
                 // ихчам стрелкага кўчди (эга, 2026-10-24).
               ],

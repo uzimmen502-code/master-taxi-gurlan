@@ -40,7 +40,12 @@ class RestaurantsListScreen extends StatefulWidget {
     this.onOpenRestaurant,
     this.itemClipsLoader,
     this.itemClipOpener,
+    this.preorderOnly = false,
   });
+
+  /// Туғилган кун саватчасидан «Торт/таомга олдиндан буюртма» (эга 2026-11-26): фақат олдиндан буюртма оладиган
+  /// ресторанлар (мавжуд `acceptsPreorder`, 7 кун — сервер қоидаси ўзгармаган); фойдаланувчи чипни ўчира олади.
+  final bool preorderOnly;
 
   /// Тестда алмаштириш учун; стандарт — [RestaurantScreen] очилади.
   final void Function(Restaurant restaurant)? onOpenRestaurant;
@@ -83,6 +88,7 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
   String _sort = 'distance';
   bool _openOnly = false;
   bool _pickupOnly = false;
+  late bool _preorderOnly = widget.preorderOnly;
   double? _lat;
   double? _lng;
 
@@ -335,6 +341,7 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
     final out = list.where((r) {
       if (_openOnly && !r.isOpenAt(now)) return false;
       if (_pickupOnly && !r.delivery.pickup) return false;
+      if (_preorderOnly && !r.acceptsPreorder) return false;
       if (q.isEmpty) return true;
       return r.name.toLowerCase().contains(q) ||
           r.cuisineTags.any((t) => t.toLowerCase().contains(q)) ||
@@ -568,6 +575,13 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
                       label: Text(context.tr('restaurants_filter_pickup')),
                       selected: _pickupOnly,
                       onSelected: (v) => setState(() => _pickupOnly = v),
+                    ),
+                    const SizedBox(width: 6),
+                    FilterChip(
+                      key: const ValueKey('restaurants_filter_preorder'),
+                      label: Text(context.tr('restaurants_filter_preorder')),
+                      selected: _preorderOnly,
+                      onSelected: (v) => setState(() => _preorderOnly = v),
                     ),
                   ],
                 ),

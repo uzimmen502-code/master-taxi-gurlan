@@ -42,8 +42,9 @@ class CourierOrderTile extends StatelessWidget {
 
   static const Color _green = AppColors.primaryDark;
 
+  /// Совға (эга 2026-11-26): қабул қилувчига қўнғироқ, нарх кўрсатилмайди.
   Future<void> _call() async {
-    await callPhone(order.userPhone);
+    await callPhone(order.courierCallPhone);
   }
 
   Future<void> _navigate() async {
@@ -126,9 +127,12 @@ class CourierOrderTile extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        order.userName.isNotEmpty
-                            ? order.userName
-                            : order.userPhone,
+                        order.isGift
+                            ? '🎁 ${order.giftRecipientName.isNotEmpty ? order.giftRecipientName : order.giftRecipientPhone}'
+                            : order.userName.isNotEmpty
+                                ? order.userName
+                                : order.userPhone,
+                        key: const ValueKey('courier_tile_name'),
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
@@ -161,7 +165,10 @@ class CourierOrderTile extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              '$itemsPreview · ${formatPrice(order.total)} ${context.tr('currency_sum')}',
+              order.isGift && order.giftHidePrice
+                  ? '$itemsPreview · ${context.tr('sm_gift_title')}'
+                  : '$itemsPreview · ${formatPrice(order.total)} ${context.tr('currency_sum')}',
+              key: const ValueKey('courier_tile_items'),
               style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,

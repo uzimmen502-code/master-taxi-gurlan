@@ -204,12 +204,20 @@ List<String> visiblePayModules(bool Function(String moduleId) isVisible) => [
 /// «Эълон ва хизматлар» бўлими карточкалари (эга 2026-11-20), шу ТАРТИБДА:
 /// Танишув (`dating` + ёш 18..45) · Янги эълонлар (`jobs`) · Почта жўнатиш (`logistics`) ·
 /// Пул ўтказмалари (камида битта `pay_*`) · Кафе-ресторанлар (ўз дарвозаси, [restaurantsAllowed]).
+///
+/// Эга 2026-11-26: «Байрам саватчаси» (`holiday`, [holidayVisible] — `holidayCardVisible`) бўлим БОШИДА (жозибали,
+/// юқорига яқин); «Яқинларингиз туғилган кунини қўшинг» (`relatives_bday`, [relativesPromptVisible] —
+/// `relativesPromptVisible`: ≥ 3 туғилган кун бўлса яширин) ундан кейин.
 List<String> homeAdsServicesCardIds({
   required bool Function(String moduleId) isVisible,
   required String viewerBirthDate,
   required bool restaurantsAllowed,
+  bool holidayVisible = false,
+  bool relativesPromptVisible = false,
 }) =>
     [
+      if (holidayVisible) 'holiday',
+      if (holidayVisible && relativesPromptVisible) 'relatives_bday',
       if (isVisible('dating') && datingSectionVisibleFor(viewerBirthDate)) 'dating',
       if (isVisible('jobs')) 'ads',
       if (isVisible('logistics')) 'logistics',

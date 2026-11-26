@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/utils/formatters.dart';
 import '../domain/sm_access.dart';
 import '../domain/sm_cart.dart';
+import '../domain/sm_holiday.dart' show SmGift;
 import '../domain/sm_offer.dart';
 import '../domain/sm_qty.dart';
 import '../domain/sm_shortage.dart';
@@ -41,7 +42,8 @@ abstract class SupermarketApi {
   Future<SmTaxonomy> loadTaxonomy();
   Future<List<SmOffer>> loadOffers(SmTaxonomy taxonomy);
   /// [districtId] берилса — шу туман учун (расмийлаштириш); йўқ — профиль тумани (бош саҳифа).
-  Future<SmAccess> getAccess({String? districtId});
+  /// [withDates] — байрам/совға: бугундан +14 кунгача `dateSlots` ҳам (сервер 5eb77906).
+  Future<SmAccess> getAccess({String? districtId, bool withDates = false});
   Future<SmPlaceResult> placeOrder(Map<String, dynamic> payload);
 
   /// `respondSupermarketShortage` → `{ok, refund, debit, total, duplicate?}`. Хато — [SmCallError].
@@ -93,9 +95,12 @@ class FirebaseSupermarketApi implements SupermarketApi {
   }
 
   @override
-  Future<SmAccess> getAccess({String? districtId}) async => SmAccess.fromMap(await _call(
+  Future<SmAccess> getAccess({String? districtId, bool withDates = false}) async => SmAccess.fromMap(await _call(
         'getSupermarketAccess',
-        {if (districtId != null && districtId.isNotEmpty) 'districtId': districtId},
+        {
+          if (districtId != null && districtId.isNotEmpty) 'districtId': districtId,
+          if (withDates) 'withDates': true,
+        },
       ));
 
   @override
@@ -193,6 +198,9 @@ const smOriginWeekly = 'weekly';
 const smOriginReorder = 'reorder';
 const smOrigins = [smOriginCatalog, smOriginQuick, smOriginWeekly, smOriginReorder];
 
+/// «Байрам саватчаси» буюртмаси (сервер 5eb77906 `ORDER_ORIGINS`) — фақат [smHolidayOrderPayload] орқали.
+const smOriginHoliday = 'holiday';
+
 /// Буюртма тўлови — `placeSupermarketOrder` payload (шартнома). Миқдор серверга оддий сон (1.5).
 Map<String, dynamic> smOrderPayload({
   required String clientRequestId,
@@ -211,4 +219,31 @@ Map<String, dynamic> smOrderPayload({
       'slotId': slotId,
       'day': day,
       'origin': smOrigins.contains(origin) ? origin : smOriginCatalog,
+    };
+
+/// Байрам/совға буюртмаси (сервер 5eb77906): `day` ўрнига `deliveryDate`, `origin: 'holiday'`, ихтиёрий `gift`,
+/// `occasionId`/`basketId`, `useIncentive: true` (сервер фақат супермаркет бонусини қўллайди, ҳамёндан қолгани).
+Map<String, dynamic> smHolidayOrderPayload({
+  required String clientRequestId,
+  required SmCart cart,
+  required Map<String, dynamic> address,
+  required String slotId,
+  required String deliveryDate,
+  SmGift? gift,
+  String occasionId = '',
+  String basketId = '',
+}) =>
+    {
+      'clientRequestId': clientRequestId,
+      'items': [
+        for (final l in cart.lines) {'productId': l.productId, 'qty': smFromMilli(l.qtyMilli)},
+      ],
+      'address': address,
+      'slotId': slotId,
+      'deliveryDate': deliveryDate,
+      'origin': smOriginHoliday,
+      'useIncentive': true,
+      if (gift != null) 'gift': gift.toMap(),
+      if (occasionId.isNotEmpty) 'occasionId': occasionId,
+      if (basketId.isNotEmpty) 'basketId': basketId,
     };

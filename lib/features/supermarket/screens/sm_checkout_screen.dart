@@ -12,7 +12,9 @@ import '../../../core/utils/idempotency_keys.dart';
 import '../../../shared/widgets/wallet_topup_ui.dart';
 import '../data/supermarket_repository.dart';
 import '../domain/sm_access.dart';
+import '../domain/sm_holiday.dart';
 import '../supermarket_controller.dart';
+import '../widgets/sm_gift_form.dart';
 import '../widgets/sm_widgets.dart';
 
 /// 5-экран: расмийлаштириш — манзил, кун + вақт (сервердан), ҳамён тўлови.
@@ -28,9 +30,18 @@ class SmCheckoutScreen extends StatefulWidget {
     @visibleForTesting this.keys,
     @visibleForTesting this.pickArea,
     @visibleForTesting this.openTopUp,
+    this.holiday,
+    @visibleForTesting this.today,
   });
 
   final SupermarketController controller;
+
+  /// «Байрам саватчаси» оқими (эга 2026-11-26): бўлса — совға блоки ва 14 кунлик сана танлови кўрсатилади.
+  /// `null` — расмийлаштириш аввалгидек (бугун/эртага).
+  final SmHolidayCheckout? holiday;
+
+  /// Тест учун; бўлмаса — Тошкент санаси.
+  final DateTime? today;
 
   /// Тест учун; бўлмаса — мавжуд [walletBalanceStream].
   final Stream<int>? balance;
@@ -62,10 +73,38 @@ class _SmCheckoutScreenState extends State<SmCheckoutScreen> {
 
   SupermarketController get _c => widget.controller;
 
+  // ── Байрам оқими ──
+  bool get _holiday => widget.holiday != null;
+  late final DateTime _today = widget.today ?? smTashkentDate();
+  DateTime? _date;
+  late bool _asGift = widget.holiday?.asGift ?? false;
+  late final _giftName = TextEditingController(text: widget.holiday?.recipientName ?? '');
+  late final _giftPhone = TextEditingController(text: widget.holiday?.recipientPhone ?? '');
+  final _giftMsg = TextEditingController();
+  bool _showGiftErrors = false;
+
+  SmGift get _gift => SmGift(recipientName: _giftName.text, recipientPhone: _giftPhone.text, message: _giftMsg.text);
+
+  int get _maxDays => _c.access.maxAheadDays > 0 ? _c.access.maxAheadDays : kSmDeliveryMaxDays;
+
+  /// Сервер оралиқ берган саналар (`getSupermarketAccess({withDates:true}).dateSlots`).
+  List<DateTime> get _dates => smSelectableDates(_c.access.dateSlots, _today, maxDays: _maxDays);
+
+  List<SmSlot> get _holidaySlots => _date == null ? const [] : (_c.access.dateSlots[smIsoDate(_date!)] ?? const []);
+
+  void _pickDefaultDate() {
+    final ds = _dates;
+    if (_date == null || !ds.any((d) => smIsoDate(d) == smIsoDate(_date!))) {
+      _date = ds.isEmpty ? null : ds.first;
+      _slotId = null;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _pickDefaultDay();
+    if (_holiday) _pickDefaultDate();
     _prefillPhone();
     // Танланган туман учун рухсат ва вақтлар — сервердан (getSupermarketAccess({districtId})).
     _refreshAccess();
@@ -92,11 +131,15 @@ class _SmCheckoutScreenState extends State<SmCheckoutScreen> {
   Future<void> _refreshAccess() async {
     final d = _c.deliveryArea.districtId;
     if (d.isEmpty) return;
-    await _c.refreshAccessFor(d);
+    await _c.refreshAccessFor(d, withDates: _holiday);
     if (!mounted) return;
     setState(() {
       _pickDefaultDay();
-      if (!_c.access.slots.any((s) => s.id == _slotId && s.day == _day)) _slotId = null;
+      if (_holiday) _pickDefaultDate();
+      final ok = _holiday
+          ? _holidaySlots.any((s) => s.id == _slotId)
+          : _c.access.slots.any((s) => s.id == _slotId && s.day == _day);
+      if (!ok) _slotId = null;
     });
   }
 
@@ -111,7 +154,7 @@ class _SmCheckoutScreenState extends State<SmCheckoutScreen> {
   @override
   void dispose() {
     _balanceSub?.cancel();
-    for (final t in [_mahalla, _street, _house, _landmark, _phone]) {
+    for (final t in [_mahalla, _street, _house, _landmark, _phone, _giftName, _giftPhone, _giftMsg]) {
       t.dispose();
     }
     super.dispose();
@@ -129,28 +172,52 @@ class _SmCheckoutScreenState extends State<SmCheckoutScreen> {
     };
   }
 
-  bool get _formOk =>
+  bool get _giftOk => !_holiday || !_asGift || smGiftProblems(_gift).isEmpty;
+
+  /// Совғадан ташқари ҳамма шартлар (тугма шу билан ёқилади; совға хатоси босилганда кўрсатилади).
+  bool get _baseOk =>
       _c.access.allowed &&
       _c.deliveryArea.districtId.isNotEmpty &&
       phoneDigits(_phone.text).length >= 9 &&
-      _day != null &&
+      (_holiday
+          ? _date != null && smDeliveryDateOk(_date!, _today, maxDays: _maxDays) && _holidaySlots.any((s) => s.id == _slotId)
+          : _day != null) &&
       _slotId != null &&
       !_c.cart.isEmpty;
 
+  bool get _formOk => _baseOk && _giftOk;
+
   Future<void> _submit() async {
-    if (_submitting || !_formOk) return;
+    if (_submitting) return;
+    if (!_giftOk) {
+      setState(() => _showGiftErrors = true);
+      return;
+    }
+    if (!_formOk) return;
     setState(() {
       _submitting = true;
       _errorKey = null;
     });
-    final payload = smOrderPayload(
-      clientRequestId: _keys.keyFor(_scope),
-      cart: _c.cart,
-      address: _address(),
-      slotId: _slotId!,
-      day: _day!,
-      origin: _c.cartOrigin,
-    );
+    final h = widget.holiday;
+    final payload = h != null
+        ? smHolidayOrderPayload(
+            clientRequestId: _keys.keyFor(_scope),
+            cart: _c.cart,
+            address: _address(),
+            slotId: _slotId!,
+            deliveryDate: smIsoDate(_date!),
+            gift: _asGift ? _gift : null,
+            occasionId: h.occasionId,
+            basketId: h.basketId,
+          )
+        : smOrderPayload(
+            clientRequestId: _keys.keyFor(_scope),
+            cart: _c.cart,
+            address: _address(),
+            slotId: _slotId!,
+            day: _day!,
+            origin: _c.cartOrigin,
+          );
     try {
       final res = await _c.api.placeOrder(payload);
       _keys.settled(_scope);
@@ -169,6 +236,11 @@ class _SmCheckoutScreenState extends State<SmCheckoutScreen> {
             children: [
               SmSumRow(label: ctx.tr('sm_goods_total'), amount: res.goodsTotal),
               SmSumRow(label: ctx.tr('sm_fee'), amount: res.fee),
+              if (res.incentiveApplied > 0)
+                SmSumRow(
+                    label: ctx.tr('sm_incentive_applied'),
+                    amount: res.incentiveApplied,
+                    valueKey: const ValueKey('sm_incentive_applied')),
               SmSumRow(label: ctx.tr('sm_hold_total'), amount: res.hold, bold: true),
               const SizedBox(height: 8),
               Text(ctx.tr('sm_order_placed_body'), style: const TextStyle(fontSize: 15)),
@@ -233,7 +305,24 @@ class _SmCheckoutScreenState extends State<SmCheckoutScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         children: [
-          _Section(title: context.tr('sm_address'), children: [
+          if (_holiday) ...[
+            _Section(title: context.tr('sm_gift_title'), children: [
+              SmGiftSection(
+                asGift: _asGift,
+                onToggle: (v) => setState(() {
+                  _asGift = v;
+                  _showGiftErrors = false;
+                }),
+                name: _giftName,
+                phone: _giftPhone,
+                message: _giftMsg,
+                showErrors: _showGiftErrors,
+                onChanged: () => setState(() {}),
+              ),
+            ]),
+            const SizedBox(height: 12),
+          ],
+          _Section(title: context.tr(_holiday && _asGift ? 'sm_gift_address' : 'sm_address'), children: [
             ListTile(
               key: const ValueKey('sm_checkout_district'),
               contentPadding: EdgeInsets.zero,
@@ -270,7 +359,32 @@ class _SmCheckoutScreenState extends State<SmCheckoutScreen> {
               )
             else if (access.slots.isEmpty)
               Text(context.tr('sm_no_slots'), key: const ValueKey('sm_no_slots'), style: const TextStyle(fontSize: 15))
-            else ...[
+            else if (_holiday) ...[
+              if (_dates.isNotEmpty)
+                SmDeliveryDatePicker(
+                  today: _today,
+                  dates: _dates,
+                  selected: _date ?? _dates.first,
+                  onSelected: (d) => setState(() {
+                    _date = d;
+                    if (!_holidaySlots.any((s) => s.id == _slotId)) _slotId = null;
+                  }),
+                ),
+              const SizedBox(height: 8),
+              if (_holidaySlots.isEmpty)
+                Text(context.tr('sm_no_slots'), key: const ValueKey('sm_no_slots_date'), style: const TextStyle(fontSize: 15))
+              else
+                Wrap(spacing: 8, runSpacing: 8, children: [
+                  for (final s in _holidaySlots)
+                    ChoiceChip(
+                      key: ValueKey('sm_slot_${s.id}'),
+                      label: Text(s.label(lang), style: const TextStyle(fontSize: 15)),
+                      selected: s.id == _slotId,
+                      materialTapTargetSize: MaterialTapTargetSize.padded,
+                      onSelected: (_) => setState(() => _slotId = s.id),
+                    ),
+                ]),
+            ] else ...[
               Wrap(spacing: 8, runSpacing: 8, children: [
                 for (final d in access.days)
                   ChoiceChip(
@@ -350,7 +464,7 @@ class _SmCheckoutScreenState extends State<SmCheckoutScreen> {
           FilledButton(
             key: const ValueKey('sm_confirm'),
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-            onPressed: _submitting || !_formOk || _shortfall > 0 ? null : _submit,
+            onPressed: _submitting || !_baseOk || _shortfall > 0 ? null : _submit,
             child: _submitting
                 ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5))
                 : Text(context.tr('sm_confirm'), style: const TextStyle(fontSize: 16)),

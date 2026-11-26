@@ -97,10 +97,12 @@ class FakeSupermarketApi implements SupermarketApi {
   final placeResults = <Object>[];
 
   final accessDistricts = <String?>[];
+  final accessWithDates = <bool>[];
 
   @override
-  Future<SmAccess> getAccess({String? districtId}) async {
+  Future<SmAccess> getAccess({String? districtId, bool withDates = false}) async {
     accessDistricts.add(districtId);
+    accessWithDates.add(withDates);
     return access;
   }
 

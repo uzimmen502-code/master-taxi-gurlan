@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../supermarket/domain/sm_inbox.dart';
+import '../../../services/push_navigation.dart' show PushNavigation;
 import '../../supermarket/screens/supermarket_home_screen.dart' show openSupermarketWith;
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/ava_tokens.dart';
@@ -237,6 +238,12 @@ class _NewsHubScreenState extends State<NewsHubScreen> {
     final smList = smWeeklyReminderListId(e.payload);
     if (smList != null) {
       await openSupermarketWith(Navigator.of(context), initialWeeklyListId: smList);
+      return;
+    }
+    // «Байрам саватчаси» хабарлари (сервер 5eb77906) — push билан бир хил йўл.
+    final holiday = holidayInboxTarget(e.payload);
+    if (holiday != null) {
+      await PushNavigation.openHolidayTarget(Navigator.of(context), holiday);
       return;
     }
     final Widget? screen = switch (e.kind) {

@@ -137,9 +137,10 @@ class SupermarketController extends ChangeNotifier {
       smCrossSell(cart, taxonomy: taxonomy, offers: offers, offersByGroup: offersByGroup);
 
   /// Танланган туман учун рухсат ва вақтлар (расмийлаштириш). Хато — рад (хавфсиз томон).
-  Future<SmAccess> refreshAccessFor(String districtId) async {
+  /// [withDates] — байрам/совға расмийлаштириши (14 кунлик `dateSlots`).
+  Future<SmAccess> refreshAccessFor(String districtId, {bool withDates = false}) async {
     try {
-      access = await api.getAccess(districtId: districtId);
+      access = await api.getAccess(districtId: districtId, withDates: withDates);
     } on SmCallError catch (e) {
       access = SmAccess(allowed: false, reason: e.code, messages: e.messages);
     } catch (e) {

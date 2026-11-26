@@ -14,6 +14,18 @@ class OrderModel {
 
   final String userName;
   final String userPhone;
+
+  /// Супермаркет совғаси (сервер 5eb77906 `order.gift{recipientName, recipientPhone, message, hidePrice}`):
+  /// курьер қабул қилувчига қўнғироқ қилади, нарх кўрсатилмайди. Етказилгандан 7 кун кейин сервер тозалайди —
+  /// унда бўш (эски буюртмалар ҳам).
+  final String giftRecipientName;
+  final String giftRecipientPhone;
+  final bool giftHidePrice;
+
+  bool get isGift => giftRecipientPhone.isNotEmpty;
+
+  /// Курьер кимга қўнғироқ қилади: совға — қабул қилувчи, акс ҳолда буюртмачи.
+  String get courierCallPhone => isGift ? giftRecipientPhone : userPhone;
   final String? mfy;
   final double? lat;
   final double? lng;
@@ -196,6 +208,9 @@ class OrderModel {
     this.createdAt,
     this.userName = '',
     this.userPhone = '',
+    this.giftRecipientName = '',
+    this.giftRecipientPhone = '',
+    this.giftHidePrice = false,
     this.mfy,
     this.lat,
     this.lng,
@@ -416,6 +431,13 @@ class OrderModel {
       createdAt: _parseDate(d['createdAt']),
       userName: d['userName'] ?? '',
       userPhone: d['userPhone'] ?? '',
+      giftRecipientName: d['gift'] is Map && (d['gift'] as Map)['recipientName'] is String
+          ? ((d['gift'] as Map)['recipientName'] as String).trim()
+          : '',
+      giftRecipientPhone: d['gift'] is Map && (d['gift'] as Map)['recipientPhone'] is String
+          ? ((d['gift'] as Map)['recipientPhone'] as String).trim()
+          : '',
+      giftHidePrice: d['gift'] is Map && (d['gift'] as Map)['hidePrice'] == true,
       mfy: d['mfy'] as String?,
       lat: (d['lat'] as num?)?.toDouble(),
       lng: (d['lng'] as num?)?.toDouble(),

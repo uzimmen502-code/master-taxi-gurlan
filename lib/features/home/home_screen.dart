@@ -128,6 +128,9 @@ import 'widgets/service_spotlight_item.dart';
 import '../restaurants/domain/restaurants_access.dart';
 import '../markets/open_market.dart';
 import '../supermarket/screens/supermarket_home_screen.dart' show openSupermarket;
+import '../supermarket/screens/sm_holiday_screen.dart' show openHolidayBasket;
+import '../supermarket/domain/sm_holiday.dart' show relativesBonusProgress;
+import 'controllers/home_holiday_cards.dart';
 import '../markets/data/market_taxonomy_repository.dart';
 import '../markets/domain/market_taxonomy.dart';
 import '../markets/screens/market_screen.dart';
@@ -231,6 +234,7 @@ class _HomeViewState extends State<_HomeView> {
       setState(() {});
       // Модул дарвозаси ўзгарса — «Кафе-ресторанлар» картаси қайта ҳал қилинади.
       unawaited(_resolveRestaurantsCard());
+      unawaited(_resolveHolidayCards());
     };
     ServiceConfigHolder.revision.addListener(_configListener!);
     GeoContext.revision.addListener(_configListener!);
@@ -254,6 +258,7 @@ class _HomeViewState extends State<_HomeView> {
       unawaited(_refreshDriverRoles());
       unawaited(_refreshShopPresence());
       unawaited(_resolveRestaurantsCard());
+      unawaited(_resolveHolidayCards());
     });
   }
 
@@ -319,6 +324,10 @@ class _HomeViewState extends State<_HomeView> {
       _refreshShopPresence(),
       _syncUnread(),
       _resolveRestaurantsCard(),
+      () async {
+        _holidayCards.invalidate();
+        await _resolveHolidayCards();
+      }(),
       Future<void>.delayed(const Duration(milliseconds: 500)),
     ].map((f) => f.catchError((Object _) {})));
   }
@@ -1261,6 +1270,33 @@ class _HomeViewState extends State<_HomeView> {
   /// ўзгаришида callable чақирилмасин (37-банд).
   bool? _restaurantsTester;
 
+  // «Байрам саватчаси» + «Яқинлар туғилган куни» карточкалари (эга 2026-11-26).
+  HomeHolidayState _holidayState = HomeHolidayState.none;
+  final _holidayCards = HomeHolidayCards();
+  bool _holidayResolving = false;
+
+  Future<void> _resolveHolidayCards() async {
+    if (_holidayResolving || !mounted) return;
+    _holidayResolving = true;
+    try {
+      final s = await _holidayCards.resolve(
+        smOpenable: ServiceConfigHolder.isOpenable('supermarket'),
+        phone: context.read<HomeController>().phone,
+      );
+      if (mounted && s != _holidayState) setState(() => _holidayState = s);
+    } finally {
+      _holidayResolving = false;
+    }
+  }
+
+  /// «Яқинларингиз…» → мавжуд қариндош қўшиш формаси; қайтгач карточка қайта ҳисобланади.
+  Future<void> _openRelativesAdd() async {
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => const RelativesScreen(openAddForm: true),
+    ));
+    if (mounted) unawaited(_resolveHolidayCards());
+  }
+
   Future<void> _resolveRestaurantsCard() async {
     if (_restaurantsResolving) return;
     _restaurantsResolving = true;
@@ -1286,10 +1322,39 @@ class _HomeViewState extends State<_HomeView> {
       isVisible: HomeModuleGate.showInGrid,
       viewerBirthDate: user?.birthDate ?? '',
       restaurantsAllowed: _restaurantsAllowed,
+      holidayVisible: _holidayState.holiday,
+      relativesPromptVisible: _holidayState.showRelativesPrompt,
+    );
+    final progress = relativesBonusProgress(
+      bonusActive: _holidayState.bonusActive,
+      birthdaysCount: _holidayState.birthdays,
     );
     return [
       for (final id in ids)
         switch (id) {
+          // «Байрам саватчаси» (эга 2026-11-26).
+          'holiday' => HomeLiteCardData(
+              id: 'holiday',
+              title: context.tr('hb_home_title'),
+              caption: context.tr('hb_home_caption'),
+              icon: Icons.celebration_rounded,
+              fit: HomeLiteImageFit.contain,
+              onTap: () => openHolidayBasket(Navigator.of(context)),
+            ),
+          'relatives_bday' => HomeLiteCardData(
+              id: 'relatives_bday',
+              title: context.tr('hb_rel_home_title'),
+              caption: progress == null
+                  ? context.tr('hb_rel_home_caption')
+                  : context
+                      .tr('hb_rel_progress')
+                      .replaceAll('{n}', '${progress.n}')
+                      .replaceAll('{goal}', '${progress.goal}')
+                      .replaceAll('{left}', '${progress.left}'),
+              icon: Icons.cake_rounded,
+              fit: HomeLiteImageFit.contain,
+              onTap: _openRelativesAdd,
+            ),
           'dating' => HomeLiteCardData(
               id: 'dating',
               title: context.tr('dating_short_label'),

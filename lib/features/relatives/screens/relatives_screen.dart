@@ -29,6 +29,11 @@ import 'tree_history_screen.dart';
 import 'relative_event_form_screen.dart';
 import 'relative_form_screen.dart';
 import '../../../core/theme/ava_tokens.dart';
+import '../../../core/service_config_holder.dart';
+import '../../supermarket/data/holiday_repository.dart';
+import '../../supermarket/screens/sm_holiday_screen.dart' show openHolidayBasket;
+import '../utils/relative_birthdays.dart';
+import '../widgets/relative_upcoming_birthdays.dart';
 
 /// 👨‍👩‍👧 Qarindoshlarim — shaxsiy ro'yxat + tug'ilgan kunlar.
 class RelativesScreen extends StatefulWidget {
@@ -36,7 +41,12 @@ class RelativesScreen extends StatefulWidget {
     super.key,
     this.initialTabIndex = 0,
     this.openTreeInvites = false,
+    this.openAddForm = false,
   });
+
+  /// Бош саҳифа «Яқинларингиз туғилган кунини қўшинг» карточкасидан: телефон юклангач қўшиш формаси очилади
+  /// (эга 2026-11-26).
+  final bool openAddForm;
 
   /// 0 = Ro'yxat, 1 = Nasab daraxti, 2 = Sanalar.
   final int initialTabIndex;
@@ -62,6 +72,22 @@ class _RelativesScreenState extends State<RelativesScreen>
   String? _reminderSig;
   bool _deleting = false;
   bool _invitesPrompted = false;
+  bool _addFormOpened = false;
+
+  /// «Саватча тайёрлаш» тугмаси — туғилган кун саватчаси очиқ бўлсагина (эга 2026-11-26).
+  bool _birthdayBasket = false;
+
+  Future<void> _checkHoliday() async {
+    final ok = await holidayAvailable(smOpenable: ServiceConfigHolder.isOpenable('supermarket'));
+    final birthday = ok && (HolidayCatalogCache.cached?.occasions ?? const []).any((o) => o.isBirthday);
+    if (mounted && birthday != _birthdayBasket) setState(() => _birthdayBasket = birthday);
+  }
+
+  void _prepareBasket(RelativePerson p) => openHolidayBasket(
+        Navigator.of(context),
+        birthday: true,
+        gift: relativeGiftCheckout(p),
+      );
 
   late final TabController _tab;
 
@@ -94,6 +120,13 @@ class _RelativesScreenState extends State<RelativesScreen>
     final prefs = await SharedPreferences.getInstance();
     final phone = canonicalPhoneId(prefs.getString('user_phone') ?? '');
     if (mounted) setState(() => _phone = phone);
+    unawaited(_checkHoliday());
+    if (widget.openAddForm && !_addFormOpened && phone.length >= 12) {
+      _addFormOpened = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _add();
+      });
+    }
     // Faza 1: global nasab grafiga komponent + migratsiya (idempotent,
     // fonda — UI'ga ta'sir qilmaydi).
     if (phone.length >= 12) {
@@ -477,11 +510,15 @@ class _RelativesScreenState extends State<RelativesScreen>
         if (a.isSelf != b.isSelf) return a.isSelf ? -1 : 1;
         return a.fullName.compareTo(b.fullName);
       });
+    final upcoming = _birthdayBasket ? upcomingBirthdaysWithin(people) : const <RelativePerson>[];
+    final head = upcoming.isEmpty ? 0 : 1;
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
-      itemCount: sorted.length,
+      itemCount: sorted.length + head,
       separatorBuilder: (_, __) => const Divider(height: 1),
-      itemBuilder: (_, i) => _personTile(sorted[i]),
+      itemBuilder: (_, i) => i < head
+          ? RelativeUpcomingBirthdays(people: upcoming, onPrepare: _prepareBasket, avatar: _avatar)
+          : _personTile(sorted[i - head]),
     );
   }
 

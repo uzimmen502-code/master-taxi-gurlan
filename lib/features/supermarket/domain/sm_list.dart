@@ -91,7 +91,12 @@ class SmList {
     this.remind = const SmRemind(),
     this.updatedAt,
     this.invalid = '',
+    this.occasionId = '',
   });
+
+  /// «Байрам саватчаси» (эга 2026-11-26): мижоз йиққан саватча шу байрамга тегишли бўлса — байрам id; бўш —
+  /// оддий ҳафталик рўйхат. Бўш бўлса ёзилмайди (эски ҳужжатлар ўзгармайди).
+  final String occasionId;
 
   /// Сервер-фақат `smInvalid` (муаммо коди) — бўш бўлмаса огоҳлантириш кўрсатилади.
   /// Клиент уни ЁЗМАЙДИ ([toMap]да йўқ; `update` бошқа сервер майдонларига ҳам тегмайди).
@@ -110,6 +115,7 @@ class SmList {
         remind: remind ?? this.remind,
         updatedAt: updatedAt,
         invalid: invalid,
+        occasionId: occasionId,
       );
 
   /// Ёзиш учун (вақт майдонлари — репозиторийда `serverTimestamp`).
@@ -117,6 +123,7 @@ class SmList {
         'name': name.trim(),
         'items': [for (final i in items) i.toMap()],
         'remind': remind.toMap(),
+        if (occasionId.isNotEmpty) 'occasionId': occasionId,
       };
 
   static SmList fromMap(String id, Map<String, dynamic> d, {DateTime? updatedAt}) {
@@ -131,6 +138,7 @@ class SmList {
       items: List.unmodifiable(items),
       remind: SmRemind.fromMap(d['remind']),
       updatedAt: updatedAt,
+      occasionId: d['occasionId'] is String ? (d['occasionId'] as String).trim() : '',
       invalid: d['smInvalid'] is String ? (d['smInvalid'] as String).trim() : (d['smInvalid'] == null || d['smInvalid'] == false ? '' : 'invalid'),
     );
   }

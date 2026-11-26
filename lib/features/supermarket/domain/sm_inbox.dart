@@ -5,6 +5,7 @@ library;
 
 import '../../../models/message_thread_group.dart';
 import '../../../models/news_item.dart';
+import 'sm_holiday.dart' show HolidayPushKind, holidayPushTarget;
 
 const kSmWeeklyReminderSource = 'sm_weekly_reminder';
 
@@ -19,4 +20,16 @@ String? smWeeklyReminderListId(Object? payload) {
   }
   if (last == null || last.source != kSmWeeklyReminderSource) return null;
   return RegExp(r'^[A-Za-z0-9_-]{1,128}$').hasMatch(last.smListId) ? last.smListId : '';
+}
+
+/// «Хабарлар»даги байрам хабари (source = push `type`, сервер 5eb77906) → push билан БИР ХИЛ мақсад; бошқа — `null`.
+({HolidayPushKind kind, String occasionId, String personId})? holidayInboxTarget(Object? payload) {
+  NewsItem? last;
+  if (payload is NewsItem) {
+    last = payload;
+  } else if (payload is MessageThreadGroup && payload.messages.isNotEmpty) {
+    last = payload.messages.reduce((a, b) => b.createdAt.isAfter(a.createdAt) ? b : a);
+  }
+  if (last == null) return null;
+  return holidayPushTarget({'type': last.source, 'occasionId': last.occasionId, 'personId': last.personId});
 }

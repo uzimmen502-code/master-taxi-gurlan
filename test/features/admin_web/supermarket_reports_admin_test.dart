@@ -24,11 +24,11 @@ final _proc = <String, dynamic>{
     {
       'productId': 'pot1', 'name': 'Картошка', 'groupId': 'potato', 'groupNames': _n('Картошка'), 'categoryId': 'veg',
       'categoryNames': _n('Сабзавотлар'), 'varietyId': 'local', 'varietyNames': _n('Маҳаллий'), 'unit': 'kg', 'weighed': true,
-      'demandQty': 12.5, 'stock': 10, 'shortfall': 2.5, 'orderCount': 3,
+      'demandQty': 12.5, 'stock': 0, 'reserved': 10, 'onHand': 10, 'shortfall': 2.5, 'orderCount': 3,
     },
     {
       'productId': 'milk1', 'name': 'Сут 1 л', 'packLabel': '1 л', 'groupId': 'milk', 'groupNames': _n('Сут'), 'categoryId': 'dairy',
-      'categoryNames': _n('Сут маҳсулотлари'), 'unit': 'l', 'demandQty': 4, 'stock': 20, 'shortfall': 0, 'orderCount': 2,
+      'categoryNames': _n('Сут маҳсулотлари'), 'unit': 'l', 'demandQty': 4, 'stock': 16, 'reserved': 4, 'onHand': 20, 'shortfall': 0, 'orderCount': 2,
     },
   ],
 };
@@ -98,10 +98,11 @@ void main() {
         ],
       });
       final csv = smProcurementCsv(r, 10);
-      expect(csv.startsWith('﻿Бўлим,Гуруҳ,Нав,Таклиф,Бирлик,Талаб,Қолдиқ,Етишмайди,Захира %,Тавсия харид,Буюртмалар\r\n'), isTrue);
-      expect(csv, contains('Сабзавотлар,Картошка,Маҳаллий,Картошка,кг,12.5,10,2.5,10,4,3'));
-      expect(csv, contains('Сут маҳсулотлари,Сут,,Сут 1 л 1 л,л,4,20,0,10,1,2'));
-      expect(csv, contains('Бўлимсиз,bread,,"Нон, ""оқ""",дона,2,,2,10,3,1'));
+      expect(csv.startsWith('﻿Бўлим,Гуруҳ,Нав,Таклиф,Бирлик,Талаб,Бўш қолдиқ,Жисмоний қолдиқ,Етишмайди,Захира %,Тавсия харид,Буюртмалар\r\n'), isTrue);
+      expect(csv.codeUnitAt(0), 0xFEFF);
+      expect(csv, contains('Сабзавотлар,Картошка,Маҳаллий,Картошка,кг,12.5,0,10,2.5,10,4,3'));
+      expect(csv, contains('Сут маҳсулотлари,Сут,,Сут 1 л 1 л,л,4,16,20,0,10,1,2'));
+      expect(csv, contains('Бўлимсиз,bread,,"Нон, ""оқ""",дона,2,,,2,10,3,1'));
     });
 
     test('аналитика: топ гуруҳлар кунлардан йиғилади (тугамаган кун кирмайди), манба йиғиндиси', () {
@@ -168,6 +169,9 @@ void main() {
       expect(find.text('Сут маҳсулотлари'), findsOneWidget);
       expect(find.text('2.5'), findsWidgets);
       Text sug(String id) => t.widget<Text>(find.byKey(ValueKey('sm_proc_suggest_$id')));
+      expect(t.widget<Text>(find.byKey(const ValueKey('sm_proc_onhand_pot1'))).data, '10');
+      expect(find.text('Бўш қолдиқ'), findsWidgets);
+      expect(find.text('Жисмоний қолдиқ'), findsWidgets);
       expect(sug('pot1').data, '4');
       expect(sug('milk1').data, '1');
       await t.enterText(find.byKey(const ValueKey('sm_proc_reserve')), '0');

@@ -46,6 +46,8 @@ class SmProcurementOffer {
     this.weighed = false,
     required this.demandQty,
     this.stock,
+    this.reserved = 0,
+    this.onHand,
     required this.shortfall,
     required this.orderCount,
     this.productMissing = false,
@@ -63,7 +65,14 @@ class SmProcurementOffer {
   final String unit;
   final bool weighed;
   final num demandQty;
+  /// «Бўш қолдиқ» — сотилмаган (буюртмада камаяди).
   final num? stock;
+
+  /// Очиқ (new/accepted/ready) буюртмаларда банд.
+  final num reserved;
+
+  /// «Жисмоний қолдиқ» = stock + reserved (сервер ҳисоблайди, эга 2026-11-26).
+  final num? onHand;
   final num shortfall;
   final int orderCount;
   final bool productMissing;
@@ -86,6 +95,8 @@ class SmProcurementOffer {
         weighed: m['weighed'] == true,
         demandQty: m['demandQty'] is num ? m['demandQty'] as num : 0,
         stock: m['stock'] is num ? m['stock'] as num : null,
+        reserved: m['reserved'] is num ? m['reserved'] as num : 0,
+        onHand: m['onHand'] is num ? m['onHand'] as num : null,
         shortfall: m['shortfall'] is num ? m['shortfall'] as num : 0,
         orderCount: _i(m['orderCount']),
         productMissing: m['productMissing'] == true,
@@ -149,7 +160,7 @@ String smCsvCell(String v) {
 /// CSV (UTF-8 BOM — Excel кириллни тўғри очсин). Мижоз маълумоти йўқ.
 String smProcurementCsv(SmProcurementReport r, int reservePercent) {
   final rows = <List<String>>[
-    ['Бўлим', 'Гуруҳ', 'Нав', 'Таклиф', 'Бирлик', 'Талаб', 'Қолдиқ', 'Етишмайди', 'Захира %', 'Тавсия харид', 'Буюртмалар'],
+    ['Бўлим', 'Гуруҳ', 'Нав', 'Таклиф', 'Бирлик', 'Талаб', 'Бўш қолдиқ', 'Жисмоний қолдиқ', 'Етишмайди', 'Захира %', 'Тавсия харид', 'Буюртмалар'],
   ];
   for (final o in r.offers) {
     rows.add([
@@ -160,6 +171,7 @@ String smProcurementCsv(SmProcurementReport r, int reservePercent) {
       smUnitTextRu[o.unit] ?? o.unit,
       _num(o.demandQty),
       o.stock == null ? '' : _num(o.stock!),
+      o.onHand == null ? '' : _num(o.onHand!),
       _num(o.shortfall),
       '$reservePercent',
       '${smSuggestedPurchase(shortfall: o.shortfall, demand: o.demandQty, reservePercent: reservePercent)}',

@@ -170,7 +170,8 @@ class _SmProcurementAdminTabState extends State<SmProcurementAdminTab> {
       ),
       if (r.stockIsNetOfReservations)
         const Text(
-          '«Қолдиқ» — сотилмаган қолдиқ (буюртма берилганда сервер уни камайтиради).',
+          '«Бўш қолдиқ» — сотилмаган (буюртма берилганда сервер камайтиради). «Жисмоний қолдиқ» = бўш + очиқ '
+          '(янги/қабул қилинган/тайёр) буюртмалардаги банд миқдор. Етишмайди = талаб − жисмоний.',
           style: TextStyle(fontSize: 12, color: Colors.black54),
         ),
       if (r.truncated)
@@ -189,7 +190,8 @@ class _SmProcurementAdminTabState extends State<SmProcurementAdminTab> {
               DataColumn(label: Text('Таклиф')),
               DataColumn(label: Text('Бирлик')),
               DataColumn(label: Text('Талаб'), numeric: true),
-              DataColumn(label: Text('Қолдиқ'), numeric: true),
+              DataColumn(label: Text('Бўш қолдиқ'), numeric: true),
+              DataColumn(label: Text('Жисмоний қолдиқ'), numeric: true),
               DataColumn(label: Text('Етишмайди'), numeric: true),
               DataColumn(label: Text('Тавсия харид'), numeric: true),
               DataColumn(label: Text('Буюртмалар'), numeric: true),
@@ -203,6 +205,7 @@ class _SmProcurementAdminTabState extends State<SmProcurementAdminTab> {
                   DataCell(Text('${smUnitTextRu[o.unit] ?? o.unit}${o.weighed ? ' ⚖' : ''}')),
                   DataCell(Text(smReportQty(o.demandQty))),
                   DataCell(Text(o.stock == null ? '—' : smReportQty(o.stock!))),
+                  DataCell(Text(o.onHand == null ? '—' : smReportQty(o.onHand!), key: ValueKey('sm_proc_onhand_${o.productId}'))),
                   DataCell(Text(smReportQty(o.shortfall),
                       style: TextStyle(color: o.shortfall > 0 ? Colors.red : null, fontWeight: o.shortfall > 0 ? FontWeight.w600 : null))),
                   DataCell(Text(

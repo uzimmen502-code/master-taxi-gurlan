@@ -6,10 +6,9 @@
  * A) adminSupermarketProcurementReport({date}) — admin/superadmin/dispatcher, фақат ўқиш:
  *    `orders` (type platform, subtype supermarket, paymentStatus paid, slot.date == date,
  *    status new|accepted, бекор/рад/етказилган эмас) → таклиф бўйича талаб (бирлик бўйича, тортиладиган — кг),
- *    жорий `platform_products.stock`, shortfall = max(0, талаб − stock), буюртмалар сони; нав/гуруҳ/бўлим
- *    бўйича йиғма. Мижоз шахсий маълумоти (телефон/манзил/исм) натижага КИРМАЙДИ.
- *    ЭСЛАТМА (CONFIRMED, supermarket.js placeSupermarketOrder): `stock` буюртма пайтида камаяди —
- *    яъни бу «сотилмаган қолдиқ», талаб ундан аллақачон айирилган. Формула топшириқдагидек қолдирилди.
+ *    `stock` («бўш қолдиқ» — буюртмада камаяди, CONFIRMED), reserved (очиқ new|accepted|ready буюртмаларда
+ *    банд, ҲАР ҚАНДАЙ сана), onHand = stock + reserved («жисмоний қолдиқ»), shortfall = max(0, талаб − onHand)
+ *    (эга 2026-11-26), буюртмалар сони; нав/гуруҳ/бўлим бўйича йиғма. Мижоз PII натижага КИРМАЙДИ.
  * B) smDailyStats (ҳар куни 00:30 Asia/Tashkent) → `supermarket_stats/{YYYY-MM-DD}` (кечаги кун, тўлиқ қайта
  *    ёзиш — идемпотент). Кун асоси — `slot.date` (етказиш куни; PROPOSED). adminSupermarketStats({from,to,backfill})
  *    — ≤92 кун; backfill:true — етишмаган кунни (≤7 та) ҳисоблаб ёзади (фақат admin/superadmin, audit).
@@ -30,6 +29,8 @@ const ADMIN_AUDIT = 'admin_audit';
 const ADMIN_ROLES = Object.freeze(['admin', 'superadmin']);
 const OPERATOR_ROLES = Object.freeze(['admin', 'superadmin', 'dispatcher']);
 const PROCUREMENT_STATUSES = Object.freeze(['new', 'accepted']);
+// Жисмоний қолдиқ учун «очиқ» буюртмалар (stock буюртмада камайган, ҳали етказилмаган) — эга 2026-11-26.
+const RESERVING_STATUSES = Object.freeze(['new', 'accepted', 'ready']);
 const ORIGINS = ORDER_ORIGINS; // ягона манба — supermarket.js
 const STATS_SCHEMA = 'sm-stats-v1';
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -103,12 +104,30 @@ const milliMapOut = (map) => {
 };
 
 /**
+ * Очиқ (new|accepted|ready, бекор/етказилган эмас) supermarket буюртмаларида банд миқдор (милли), таклиф бўйича.
+ * placeSupermarketOrder stock'ни камайтиради, бекор → onSupermarketOrderCancelStock қайтаради, тортиш/олиш фарқни
+ * stock'га қайтаради — шунинг учун жисмоний қолдиқ = stock + шу банд миқдор (lineQtyMilli: тортилган бўлса actualQty).
+ */
+function reservedByOffer(orders) {
+  const out = {};
+  for (const od of orders) {
+    if (!od || od.subtype !== 'supermarket' || !RESERVING_STATUSES.includes(String(od.status || ''))) continue;
+    if (isCancelled(od) || isDelivered(od)) continue;
+    for (const l of (Array.isArray(od.items) ? od.items : [])) {
+      const q = lineQtyMilli(l);
+      if (q > 0 && typeof l.productId === 'string') out[l.productId] = (out[l.productId] || 0) + q;
+    }
+  }
+  return out;
+}
+
+/**
  * Харид режаси (тоза).
  * @param {object[]} orders — буюртма ҳужжатлари (филтрланмаган ҳам бўлиши мумкин — бу ерда procurementEligible)
  * @param {{[productId]: object|null}} products — жорий таклиф ҳужжатлари
  * @param {object|null} taxonomy — taxonomy/supermarket
  */
-function aggregateProcurement(orders, products, taxonomy) {
+function aggregateProcurement(orders, products, taxonomy, reserved = {}) {
   const offers = new Map();
   let orderCount = 0;
   for (const od of orders) {
@@ -140,6 +159,7 @@ function aggregateProcurement(orders, products, taxonomy) {
           demandMilli: 0,
           orders: new Set(),
           stockMilli: p ? Math.max(0, toMilli(Number(p.stock)) || 0) : null,
+          reservedMilli: Math.max(0, Number(reserved[l.productId]) || 0),
           productMissing: !p,
         };
         offers.set(l.productId, o);
@@ -161,12 +181,15 @@ function aggregateProcurement(orders, products, taxonomy) {
     r.offerCount += 1;
   };
   for (const o of offers.values()) {
-    const shortMilli = o.stockMilli == null ? o.demandMilli : Math.max(0, o.demandMilli - o.stockMilli);
+    // Эга 2026-11-26: жисмоний қолдиқ (onHand) = бўш қолдиқ (stock) + очиқ буюртмаларда банд; shortfall = max(0, талаб − onHand).
+    const onHandMilli = o.stockMilli == null ? null : o.stockMilli + o.reservedMilli;
+    const shortMilli = onHandMilli == null ? o.demandMilli : Math.max(0, o.demandMilli - onHandMilli);
     offerRows.push({
       productId: o.productId, name: o.name, packLabel: o.packLabel, groupId: o.groupId, groupNames: o.groupNames,
       categoryId: o.categoryId, categoryNames: o.categoryNames, varietyId: o.varietyId, varietyNames: o.varietyNames,
       unit: o.unit, weighed: o.weighed, demandQty: fromMilli(o.demandMilli),
-      stock: o.stockMilli == null ? null : fromMilli(o.stockMilli), shortfall: fromMilli(shortMilli),
+      stock: o.stockMilli == null ? null : fromMilli(o.stockMilli), reserved: fromMilli(o.reservedMilli),
+      onHand: onHandMilli == null ? null : fromMilli(onHandMilli), shortfall: fromMilli(shortMilli),
       orderCount: o.orders.size, productMissing: o.productMissing, categoryOrder: o.categoryOrder,
     });
     roll(groups, o.groupId, { groupId: o.groupId, groupNames: o.groupNames, categoryId: o.categoryId }, o, shortMilli);
@@ -291,13 +314,12 @@ function attachSupermarketReports(exportsObj, deps) {
     }
   };
 
-  /** slot.date == date бўлган supermarket буюртмалари, саҳифалаб (__name__), MAX_ORDERS гача. */
-  async function ordersForDate(date) {
+  /** Сўров натижаси саҳифалаб (__name__), MAX_ORDERS гача. */
+  async function pagedOrders(base) {
     const out = [];
     let last = null;
     for (;;) {
-      let q = db.collection(ORDERS).where('subtype', '==', 'supermarket').where('slot.date', '==', date)
-        .orderBy(FieldPath.documentId()).limit(PAGE);
+      let q = base.orderBy(FieldPath.documentId()).limit(PAGE);
       if (last) q = q.startAfter(last);
       const snap = await q.get();
       for (const d of snap.docs) out.push({ ...d.data(), __id: d.id });
@@ -306,6 +328,10 @@ function attachSupermarketReports(exportsObj, deps) {
       last = snap.docs[snap.docs.length - 1];
     }
   }
+  /** slot.date == date бўлган supermarket буюртмалари. */
+  const ordersForDate = (date) => pagedOrders(db.collection(ORDERS).where('subtype', '==', 'supermarket').where('slot.date', '==', date));
+  /** Барча очиқ (new|accepted|ready) supermarket буюртмалари — ҳар қандай сана (жисмоний қолдиқ учун). */
+  const openOrders = () => pagedOrders(db.collection(ORDERS).where('subtype', '==', 'supermarket').where('status', 'in', [...RESERVING_STATUSES]));
 
   async function productsByIds(ids) {
     const res = {};
@@ -324,13 +350,15 @@ function attachSupermarketReports(exportsObj, deps) {
     const today = tashkentParts(now()).dateKey;
     if (!validDateKey(date) || Math.abs(daysBetween(today, date)) > REPORT_WINDOW_DAYS) throw fail('invalid-argument', 'DATE_INVALID');
     try {
-      const { orders, truncated } = await ordersForDate(date);
+      const [{ orders, truncated: t1 }, open] = await Promise.all([ordersForDate(date), openOrders()]);
+      const truncated = t1 || open.truncated;
       const eligible = orders.filter(procurementEligible);
+      const reserved = reservedByOffer(open.orders);
       const ids = [...new Set(eligible.flatMap((o) => (Array.isArray(o.items) ? o.items : []).filter((l) => !l.removed).map((l) => l.productId)).filter((x) => typeof x === 'string' && x))];
       const [products, taxSnap] = await Promise.all([productsByIds(ids), db.collection('taxonomy').doc('supermarket').get()]);
-      const agg = aggregateProcurement(eligible, products, taxSnap.exists ? taxSnap.data() : null);
+      const agg = aggregateProcurement(eligible, products, taxSnap.exists ? taxSnap.data() : null, reserved);
       log({ action: 'adminSupermarketProcurementReport', result: 'ok', userTail: uid.slice(-4), date, orders: agg.orderCount, offers: agg.offers.length, truncated, duration: Date.now() - started });
-      return { ok: true, date, generatedAtMs: now(), truncated, stockIsNetOfReservations: true, ...agg };
+      return { ok: true, date, generatedAtMs: now(), truncated, stockIsNetOfReservations: true, onHandSource: 'stock+open_orders', ...agg };
     } catch (e) {
       if (e instanceof HttpsError) throw e;
       console.error(JSON.stringify({ module: MODULE, action: 'adminSupermarketProcurementReport', errorCode: 'INTERNAL', error: String((e && e.message) || e) }));
@@ -440,6 +468,6 @@ function attachSupermarketReports(exportsObj, deps) {
 
 module.exports = {
   attachSupermarketReports,
-  aggregateProcurement, aggregateDailyStats, summarizeDays, procurementEligible, isDelivered, lineQtyMilli,
+  aggregateProcurement, reservedByOffer, RESERVING_STATUSES, aggregateDailyStats, summarizeDays, procurementEligible, isDelivered, lineQtyMilli,
   validDateKey, addDays, daysBetween, ORIGINS, REFUND_BUCKET, STATS, STATS_SCHEMA, MAX_RANGE_DAYS, MAX_BACKFILL, messagesOf,
 };

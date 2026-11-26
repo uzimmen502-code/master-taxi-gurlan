@@ -102,15 +102,29 @@ async function main() {
     await expectCode(call('adminSupermarketProcurementReport', { date: TOMORROW }), 'UNAUTHENTICATED');
     await expectCode(call('adminSupermarketProcurementReport', { date: '2026-02-30' }, DISP), 'DATE_INVALID');
     await expectCode(call('adminSupermarketProcurementReport', { date: '2020-01-01' }, DISP), 'DATE_INVALID');
+    // Бошқа сана (бугун) 'ready' буюртма — жисмоний қолдиқда банд (ҳар қандай сана), харид режасига кирмайди.
+    await db.doc('orders/ready_today').set({ type: 'platform', subtype: 'supermarket', status: 'ready', paymentStatus: 'paid', slot: { date: TODAY }, items: [{ productId: 'beef_lean_1', groupId: 'beef', qty: 0.5, smUnit: 'kg' }] });
+    // Етказилган — банд эмас.
+    await db.doc('orders/delivered_x').set({ type: 'platform', subtype: 'supermarket', status: 'delivered', fulfillmentStatus: 'completed', slot: { date: TODAY }, items: [{ productId: 'beef_lean_1', groupId: 'beef', qty: 9, smUnit: 'kg' }] });
     const r = await call('adminSupermarketProcurementReport', { date: TOMORROW }, DISP);
     assert.strictEqual(r.orderCount, 3);
+    assert.strictEqual(r.onHandSource, 'stock+open_orders');
     const beef = r.offers.find((o) => o.productId === 'beef_lean_1');
-    // stock 4 − 1.5 − 1 − 0.5 = 1 (буюртмада камаяди), талаб 2.5 (рад қилинган 0.5 кирмайди)
-    assert.deepStrictEqual([beef.demandQty, beef.stock, beef.shortfall, beef.orderCount, beef.unit, beef.weighed], [2.5, 1, 1.5, 2, 'kg', true]);
+    // бўш stock 4 − 1.5 − 1 − 0.5 = 1; банд = 1.5 + 1 (эртага) + 0.5 (бугун ready) = 3 (рад 0.5, етказилган 9 кирмайди)
+    // жисмоний = 4; талаб 2.5 → shortfall 0
+    assert.deepStrictEqual([beef.demandQty, beef.stock, beef.reserved, beef.onHand, beef.shortfall, beef.orderCount, beef.unit, beef.weighed], [2.5, 1, 3, 4, 0, 2, 'kg', true]);
     assert.strictEqual(beef.categoryId, 'meat_fish');
     assert.strictEqual(beef.varietyId, 'lean');
     const milk = r.offers.find((o) => o.productId === 'milk_1l_01');
-    assert.deepStrictEqual([milk.demandQty, milk.stock, milk.shortfall, milk.unit], [5, 5, 0, 'l']);
+    assert.deepStrictEqual([milk.demandQty, milk.stock, milk.reserved, milk.onHand, milk.shortfall, milk.unit], [5, 5, 5, 10, 0, 'l']);
+    // Жисмоний қолдиқ талабдан кам бўлса: бўш stock'ни 0 га (админ инвентаризацияси) — onHand = банд 3 + 0, талаб 2.5 → 0;
+    // бугунги ready'ни бекор қилиб, stock 0 → onHand 2.5 = талаб → 0 (чегара); талаб > onHand ҳолати pure тестда.
+    await db.doc('platform_products/beef_lean_1').update({ stock: 0 });
+    await db.doc('orders/ready_today').update({ status: 'cancelled' });
+    const r0 = await call('adminSupermarketProcurementReport', { date: TOMORROW }, DISP);
+    const b0 = r0.offers.find((o) => o.productId === 'beef_lean_1');
+    assert.deepStrictEqual([b0.stock, b0.reserved, b0.onHand, b0.shortfall], [0, 2.5, 2.5, 0]);
+    await db.doc('platform_products/beef_lean_1').update({ stock: 1 });
     assert.ok(r.categories.find((c) => c.categoryId === 'dairy'));
     assert.strictEqual(r.stockIsNetOfReservations, true);
     const json = JSON.stringify(r);

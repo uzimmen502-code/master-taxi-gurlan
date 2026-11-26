@@ -80,6 +80,41 @@ check('P3 харид: чегара — талаб == stock → 0; бўш рўй�
   assert.deepStrictEqual([e.orderCount, e.offers.length, e.groups.length], [0, 0, 0]);
 });
 
+check('P8 жисмоний қолдиқ: reserved = очиқ (new/accepted/ready, ҳар сана) буюртмалар; бекор/рад/етказилган/олинган/бошқа subtype кирмайди', () => {
+  const open = [
+    order('a', [line('beef1', 'beef', 1.5, { smUnit: 'kg' }), line('pot1', 'potato', 9, { removed: true })]),
+    order('b', [line('beef1', 'beef', 1, { smUnit: 'kg', actualQty: 1.05 })], { status: 'accepted' }),
+    order('c', [line('beef1', 'beef', 2, { smUnit: 'kg' })], { status: 'ready', slot: { date: '2026-12-01' } }),
+    order('d', [line('beef1', 'beef', 5)], { status: 'rejected' }),
+    order('e', [line('beef1', 'beef', 5)], { status: 'accepted', fulfillmentStatus: 'cancelled' }),
+    order('f', [line('beef1', 'beef', 5)], { status: 'ready', fulfillmentStatus: 'completed' }),
+    order('g', [line('beef1', 'beef', 5)], { status: 'delivered' }),
+    { ...order('h', [line('beef1', 'beef', 5)]), subtype: 'aralash' },
+  ];
+  const res = R.reservedByOffer(open);
+  assert.deepStrictEqual(res, { beef1: 4550 }); // 1.5 + 1.05 + 2 (милли)
+  assert.deepStrictEqual(R.RESERVING_STATUSES, ['new', 'accepted', 'ready']);
+});
+
+check('P9 shortfall = max(0, талаб − (stock + reserved)) — чегаралар: тенг → 0, +0.001 → 0.001, маҳсулот йўқ → талаб', () => {
+  const P = { beef1: { ...PRODUCTS.beef1, stock: 2 }, gone: null };
+  const ord = (q) => [order('a', [line('beef1', 'beef', q, { smUnit: 'kg' }), line('gone', 'beef', 1, { smUnit: 'kg' })])];
+  const of = (a, id) => a.offers.find((o) => o.productId === id);
+  // stock 2 + reserved 3.5 = onHand 5.5
+  let a = R.aggregateProcurement(ord(5.5), P, TAX, { beef1: 3500 });
+  assert.deepStrictEqual([of(a, 'beef1').stock, of(a, 'beef1').reserved, of(a, 'beef1').onHand, of(a, 'beef1').shortfall], [2, 3.5, 5.5, 0]);
+  a = R.aggregateProcurement(ord(5.501), P, TAX, { beef1: 3500 });
+  assert.strictEqual(of(a, 'beef1').shortfall, 0.001);
+  a = R.aggregateProcurement(ord(1), P, TAX, { beef1: 3500 });
+  assert.strictEqual(of(a, 'beef1').shortfall, 0);
+  a = R.aggregateProcurement(ord(8), P, TAX, {});
+  assert.deepStrictEqual([of(a, 'beef1').onHand, of(a, 'beef1').shortfall], [2, 6], 'reserved yöq → onHand = stock');
+  assert.deepStrictEqual([of(a, 'gone').stock, of(a, 'gone').onHand, of(a, 'gone').shortfall], [null, null, 1]);
+  // shu кун буюртмалари ҳам банд ичида — демак талаб ўз-ўзидан қопланади (stock 0, банд = талаб)
+  a = R.aggregateProcurement(ord(3), { beef1: { ...PRODUCTS.beef1, stock: 0 } }, TAX, R.reservedByOffer(ord(3)));
+  assert.deepStrictEqual([of(a, 'beef1').onHand, of(a, 'beef1').shortfall], [3, 0]);
+});
+
 check('P4 кунлик: сонлар, GMV/fee фақат бекор қилинмаган, қайтим турлари, origin, avg, unique, top', () => {
   const orders = [
     order('d1', [line('beef1', 'beef', 1.2, { smUnit: 'kg', weighed: true, actualQty: 1, total: 96000, finalTotal: 80000 })], { status: 'delivered', itemsTotal: 80000, deliveryFee: 8800, userPhone: '998900000001', smOrigin: 'weekly', smRefundedTotal: 17000, smRefundByAction: { weigh: 17000 } }),

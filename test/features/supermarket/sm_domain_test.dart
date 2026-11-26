@@ -229,6 +229,7 @@ void main() {
         'slotId': 's1',
         'day': 'today',
         'origin': 'catalog',
+        'useIncentive': true, // эга 2026-11-27: бонус ҳамма супермаркет буюртмасида (сервер ҳал қилади)
       });
       final cart = SmCart.empty.add('a', 1000);
       Map<String, dynamic> withOrigin(String o) =>

@@ -35,6 +35,8 @@ class _Repo implements RestaurantsRepository {
     DateTime? stopUntil,
     DishFacts? facts,
     List<QtyTier>? qtyTiers,
+    bool? preorderable,
+    int preorderLeadDays = 0,
   }) async {
     saved.add((id: id, price: price, tiers: qtyTiers));
     return id ?? 'new1';

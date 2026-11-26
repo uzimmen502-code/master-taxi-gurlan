@@ -103,7 +103,13 @@ class SmGiftSection extends StatelessWidget {
                 Icon(Icons.card_giftcard_rounded, color: c.brandText),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(context.tr('sm_gift_info'), style: TextStyle(fontSize: 14, color: c.ink)),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(context.tr('sm_gift_info'), style: TextStyle(fontSize: 14, color: c.ink)),
+                    const SizedBox(height: 4),
+                    // Эга 2026-11-27: қабул қилувчи маълумоти етказилгандан 1 кун кейин ўчирилади (40-банд).
+                    Text(context.tr('sm_gift_privacy'),
+                        key: const ValueKey('sm_gift_privacy'), style: TextStyle(fontSize: 13, color: c.ink2)),
+                  ]),
                 ),
               ],
             ),

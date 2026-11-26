@@ -6,6 +6,7 @@ import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/formatters.dart';
 import '../../restaurants/domain/restaurants_access.dart' show kRestaurantsModuleId;
 import '../../restaurants/screens/restaurants_list_screen.dart';
+import '../../markets/open_market.dart';
 import '../data/holiday_repository.dart';
 import '../data/sm_lists_repository.dart';
 import '../data/supermarket_repository.dart';
@@ -29,11 +30,22 @@ Future<void> openHolidayBasket(
   String? occasionId,
   bool birthday = false,
   SmHolidayCheckout? gift,
+  bool guestsHint = false,
 }) =>
     nav.push(MaterialPageRoute<void>(
       settings: const RouteSettings(name: kSmHomeRouteName),
-      builder: (_) => SmHolidayScreen(initialOccasionId: occasionId, openBirthday: birthday, gift: gift),
+      builder: (_) =>
+          SmHolidayScreen(initialOccasionId: occasionId, openBirthday: birthday, gift: gift, guestsHint: guestsHint),
     ));
+
+/// Байрам мақсади бозор бўлса (Қурбон ҳайит → Мол бозори, эга 2026-11-27) — мавжуд [openMarket] (модул дарвозаси
+/// шу ерда). [replace] — push'дан автоматик очилганда байрамлар рўйхати орқада қолмасин.
+Future<void> openHolidayMarketTarget(BuildContext context, HolidayTarget t, {bool replace = false}) => openMarket(
+      context,
+      t.market,
+      initialCategory: t.initialCategory,
+      push: replace ? (s) => Navigator.of(context).pushReplacement<void, void>(MaterialPageRoute(builder: (_) => s)) : null,
+    );
 
 String _two(int n) => n.toString().padLeft(2, '0');
 
@@ -48,6 +60,8 @@ class SmHolidayScreen extends StatefulWidget {
     this.openBirthday = false,
     this.gift,
     this.today,
+    this.guestsHint = false,
+    this.openTarget,
   });
 
   /// Тест учун; бўлмаса — янги (Firebase).
@@ -58,6 +72,12 @@ class SmHolidayScreen extends StatefulWidget {
   final bool openBirthday;
   final SmHolidayCheckout? gift;
   final DateTime? today;
+
+  /// Ўз туғилган куни «меҳмонлар учун саватча» эслатмасидан (эга 2026-11-27) — меҳмонлар сони изоҳи.
+  final bool guestsHint;
+
+  /// Тест учун; бўлмаса — [openHolidayMarketTarget].
+  final Future<void> Function(BuildContext context, HolidayTarget target, {bool replace})? openTarget;
 
   @override
   State<SmHolidayScreen> createState() => _SmHolidayScreenState();
@@ -106,20 +126,27 @@ class _SmHolidayScreenState extends State<SmHolidayScreen> {
     _autoOpened = true;
     final t = target;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _open(t);
+      if (mounted) _open(t, auto: true);
     });
   }
 
-  void _open(HolidayOccasion o) => Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => SmOccasionScreen(
-          controller: _c,
-          api: _api,
-          occasion: o,
-          baskets: holidayBasketsFor(_catalog?.baskets ?? const [], o.id),
-          listsStore: widget.listsStore,
-          gift: o.isBirthday ? widget.gift : null,
-        ),
-      ));
+  void _open(HolidayOccasion o, {bool auto = false}) {
+    if (o.target.isMarket) {
+      (widget.openTarget ?? openHolidayMarketTarget)(context, o.target, replace: auto);
+      return;
+    }
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => SmOccasionScreen(
+        controller: _c,
+        api: _api,
+        occasion: o,
+        baskets: holidayBasketsFor(_catalog?.baskets ?? const [], o.id),
+        listsStore: widget.listsStore,
+        gift: o.isBirthday ? widget.gift : null,
+        guestsHint: o.isBirthday && widget.guestsHint,
+      ),
+    ));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -231,7 +258,11 @@ class SmOccasionScreen extends StatefulWidget {
     this.memo,
     this.gift,
     this.openRestaurants,
+    this.guestsHint = false,
   });
+
+  /// «Меҳмонлар учун саватча» эслатмасидан — тепада меҳмонлар сони изоҳи.
+  final bool guestsHint;
 
   final SupermarketController controller;
   final HolidayApi api;
@@ -339,6 +370,19 @@ class _SmOccasionScreenState extends State<SmOccasionScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         children: [
+          if (widget.guestsHint) ...[
+            Container(
+              key: const ValueKey('hb_guests_hint'),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: c.brandSoft, borderRadius: BorderRadius.circular(12)),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Icon(Icons.groups_rounded, color: c.brandText),
+                const SizedBox(width: 8),
+                Expanded(child: Text(context.tr('hb_guests_hint'), style: TextStyle(fontSize: 15, color: c.ink))),
+              ]),
+            ),
+            const SizedBox(height: 12),
+          ],
           Text(context.tr('hb_ready_title'), style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: c.ink)),
           const SizedBox(height: 8),
           if (b.isEmpty)

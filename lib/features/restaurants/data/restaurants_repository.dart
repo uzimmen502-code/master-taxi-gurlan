@@ -414,6 +414,13 @@ class RestaurantsRepository {
     await rest.collection('menu_categories').doc(id).delete();
   }
 
+  /// Тест учун очиқ: олдиндан буюртма майдонлари патчи.
+  static Map<String, Object> menuItemPreorderPatch(bool? preorderable, int leadDays, Object deleteSentinel) {
+    if (preorderable == null) return const {};
+    if (!preorderable) return {'preorderable': deleteSentinel, 'preorderLeadDays': deleteSentinel};
+    return {'preorderable': true, 'preorderLeadDays': leadDays.clamp(0, 14)};
+  }
+
   Future<String> upsertMenuItem(
     String restaurantId, {
     String? id,
@@ -427,6 +434,8 @@ class RestaurantsRepository {
     DateTime? stopUntil,
     DishFacts? facts,
     List<QtyTier>? qtyTiers,
+    bool? preorderable,
+    int preorderLeadDays = 0,
   }) async {
     final col = _restaurants.doc(restaurantId).collection('menu_items');
     final ref = id == null ? col.doc() : col.doc(id);
@@ -446,6 +455,9 @@ class RestaurantsRepository {
       // Миқдорга чегирма (D-REST-25): `null` — тегилмайди; бўш рўйхат — майдон ўчирилади (`null` ёзилмайди,
       // rules рад этади); берилса — поғоналар.
       if (qtyTiers != null) 'qtyTiers': qtyTiers.isEmpty ? FieldValue.delete() : [for (final t in qtyTiers) t.toMap()],
+      // Олдиндан буюртма таоми (эга 2026-11-27): `null` — тегилмайди; ўчиқ — майдонлар ЎЧИРИЛАДИ (`false` ёзилмайди:
+      // янги майдонни билмаган rules оддий таом сақлашни рад этмасин).
+      ...menuItemPreorderPatch(preorderable, preorderLeadDays, FieldValue.delete()),
       if (id == null) 'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));

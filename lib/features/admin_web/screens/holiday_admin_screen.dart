@@ -193,6 +193,9 @@ String holidayOccasionSummary(HolidayOccasion o) => [
       if (!o.isBirthday && o.ruleType == 'fixed') 'ҳар йили ${o.md}',
       if (!o.isBirthday && o.ruleType == 'list') '${o.dates.length} та сана',
       'эслатма ${o.remindDaysBefore} кун олдин',
+      if (o.target.isMarket) 'бозор: ${o.target.market}',
+      if (o.isBirthday && o.selfReminders.isNotEmpty)
+        'ўз туғилган куни: ${[for (final r in o.selfReminders) 'D-${r.daysBefore}'].join(', ')}',
     ].join(' · ');
 
 Widget _names(TextEditingController cyr, TextEditingController lat, TextEditingController ru) => Column(children: [
@@ -234,7 +237,143 @@ class _OccasionDialogState extends State<_OccasionDialog> {
   List<String> _errors = const [];
   bool _saving = false;
 
+  // Байрам мақсади (эга 2026-11-27): саватча ёки бозор (Қурбон ҳайит → Мол бозори).
+  late String _targetType = _o?.target.isMarket == true ? kHolidayTargetMarket : kHolidayTargetBasket;
+  late final _market = TextEditingController(text: _o?.target.market ?? '');
+  late final _marketCats = TextEditingController(text: (_o?.target.categories ?? const []).join(', '));
+
+  // Ўз туғилган куни эслатмалари (фақат туғилган кун).
+  late final List<_SelfRow> _self = [for (final r in _o?.selfReminders ?? const <HolidaySelfReminder>[]) _SelfRow.of(r)];
+
+  HolidayTarget get _target => _targetType == kHolidayTargetMarket
+      ? HolidayTarget(
+          type: kHolidayTargetMarket,
+          market: _market.text.trim(),
+          categories: [for (final s in _marketCats.text.split(RegExp(r'[,\s]+'))) if (s.trim().isNotEmpty) s.trim()],
+        )
+      : HolidayTarget.basket;
+
+  /// Тавсия этилган 5 та (эга 2026-11-27: D-7, D-6, D-5, D-4, D-3) — бўш рўйхатга бир босишда.
+  void _addDefaultSelf() => setState(() {
+        for (final d in const [7, 6, 5, 4, 3]) {
+          if (_self.any((r) => int.tryParse(r.days.text.trim()) == d)) continue;
+          _self.add(_SelfRow(days: '$d', target: d == 7 ? kSelfTargetPreorder : (d >= 5 ? kSelfTargetBasket : kSelfTargetGuests)));
+        }
+      });
+
+  Widget _targetEditor() => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        DropdownButtonFormField<String>(
+          key: const ValueKey('hb_admin_target_type'),
+          initialValue: _targetType,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Босилганда нима очилади'),
+          items: const [
+            DropdownMenuItem(value: kHolidayTargetBasket, child: Text('Байрам саватчаси')),
+            DropdownMenuItem(value: kHolidayTargetMarket, child: Text('Бозор (масалан Қурбон ҳайит → Мол бозори)')),
+          ],
+          onChanged: (v) => setState(() => _targetType = v ?? kHolidayTargetBasket),
+        ),
+        if (_targetType == kHolidayTargetMarket) ...[
+          TextField(
+            key: const ValueKey('hb_admin_target_market'),
+            controller: _market,
+            decoration: const InputDecoration(labelText: 'Бозор ID (масалан livestock)'),
+          ),
+          TextField(
+            key: const ValueKey('hb_admin_target_cats'),
+            controller: _marketCats,
+            decoration: const InputDecoration(
+              labelText: 'Бўлимлар (вергул билан, масалан sheep_goat, cattle)',
+              helperText: 'Биринчиси очилишда танланади.',
+            ),
+          ),
+        ],
+      ]);
+
+  Widget _selfEditor() => Column(
+        key: const ValueKey('hb_admin_self'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 12),
+          const Text('Ўз туғилган куни эслатмалари', style: TextStyle(fontWeight: FontWeight.w700)),
+          const Text('Фойдаланувчининг ўз туғилган кунидан неча кун олдин (1–14) ва босилганда нима очилади.',
+              style: TextStyle(color: Colors.black54)),
+          for (var i = 0; i < _self.length; i++)
+            Card(
+              key: ObjectKey(_self[i]),
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Row(children: [
+                    SizedBox(
+                      width: 90,
+                      child: TextField(
+                        key: ValueKey('hb_admin_self_days_$i'),
+                        controller: _self[i].days,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        decoration: const InputDecoration(labelText: 'Кун (D-)'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        key: ValueKey('hb_admin_self_target_$i'),
+                        initialValue: kSelfReminderTargets.contains(_self[i].target) ? _self[i].target : null,
+                        isExpanded: true,
+                        decoration: const InputDecoration(labelText: 'Мақсад'),
+                        items: [
+                          for (final t in kSelfReminderTargets)
+                            DropdownMenuItem(value: t, child: Text(kSelfTargetLabels[t]!, overflow: TextOverflow.ellipsis)),
+                        ],
+                        onChanged: (v) => setState(() => _self[i].target = v ?? ''),
+                      ),
+                    ),
+                    IconButton(
+                      key: ValueKey('hb_admin_self_del_$i'),
+                      tooltip: 'Ўчириш',
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () {
+                        final gone = _self[i];
+                        setState(() => _self.removeAt(i));
+                        WidgetsBinding.instance.addPostFrameCallback((_) => gone.dispose());
+                      },
+                    ),
+                  ]),
+                  TextField(controller: _self[i].cyr, decoration: const InputDecoration(labelText: 'Матн (кирилл)')),
+                  TextField(controller: _self[i].lat, decoration: const InputDecoration(labelText: 'Матн (лотин)')),
+                  TextField(controller: _self[i].ru, decoration: const InputDecoration(labelText: 'Матн (рус)')),
+                ]),
+              ),
+            ),
+          Wrap(spacing: 8, children: [
+            OutlinedButton.icon(
+              key: const ValueKey('hb_admin_self_add'),
+              onPressed: _self.length >= kSelfReminderMaxCount ? null : () => setState(() => _self.add(_SelfRow())),
+              icon: const Icon(Icons.add),
+              label: const Text('Эслатма қўшиш'),
+            ),
+            if (_self.isEmpty)
+              TextButton(
+                key: const ValueKey('hb_admin_self_defaults'),
+                onPressed: _addDefaultSelf,
+                child: const Text('D-7…D-3 тавсия'),
+              ),
+          ]),
+        ],
+      );
+
+  @override
+  void dispose() {
+    for (final r in _self) {
+      r.dispose();
+    }
+    super.dispose();
+  }
+
   Future<void> _save() async {
+    final birthday = _kind == kHolidayKindBirthday;
+    final self = birthday ? [for (final r in _self) r.toReminder()] : const <HolidaySelfReminder>[];
     final o = HolidayOccasion(
       id: _id.text.trim(),
       names: {'uz_Cyrl': _cyr.text.trim(), 'uz_Latn': _lat.text.trim(), 'ru': _ru.text.trim()},
@@ -247,8 +386,14 @@ class _OccasionDialogState extends State<_OccasionDialog> {
       stage: _stage,
       order: int.tryParse(_order.text.trim()) ?? 0,
       image: _image.text.trim(),
+      target: birthday ? HolidayTarget.basket : _target,
+      selfReminders: self,
     );
-    final p = holidayOccasionProblems(o);
+    final p = [
+      ...holidayOccasionProblems(o),
+      if (birthday) ...holidaySelfReminderProblems(self),
+      if (!birthday && _targetType == kHolidayTargetMarket && !o.target.isMarket) 'Бозор ID нотўғри (кичик лотин, масалан livestock).',
+    ];
     setState(() => _errors = p);
     if (p.isNotEmpty) return;
     setState(() => _saving = true);
@@ -317,7 +462,9 @@ class _OccasionDialogState extends State<_OccasionDialog> {
                       helperText: 'Ҳайит санаси ҳар йили расмий эълондан кейин киритилади (30 тагача).',
                     ),
                   ),
+                _targetEditor(),
               ],
+              if (_kind == kHolidayKindBirthday) _selfEditor(),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Катта байрам (эслатма 10 кун олдин)'),
@@ -353,6 +500,47 @@ class _OccasionDialogState extends State<_OccasionDialog> {
           FilledButton(key: const ValueKey('hb_admin_save'), onPressed: _saving ? null : _save, child: const Text('Сақлаш')),
         ],
       );
+}
+
+/// Эслатма мақсадлари (админ, Кирилл).
+const kSelfTargetLabels = {
+  kSelfTargetBasket: 'Туғилган кун саватчаси',
+  kSelfTargetPreorder: 'Ресторанда олдиндан буюртма',
+  kSelfTargetGuests: 'Меҳмонлар учун саватча',
+};
+
+class _SelfRow {
+  _SelfRow({String days = '', this.target = '', String cyr = '', String lat = '', String ru = ''})
+      : days = TextEditingController(text: days),
+        cyr = TextEditingController(text: cyr),
+        lat = TextEditingController(text: lat),
+        ru = TextEditingController(text: ru);
+
+  factory _SelfRow.of(HolidaySelfReminder r) => _SelfRow(
+        days: '${r.daysBefore}',
+        target: r.target,
+        cyr: r.texts['uz_Cyrl'] ?? '',
+        lat: r.texts['uz_Latn'] ?? '',
+        ru: r.texts['ru'] ?? '',
+      );
+
+  final TextEditingController days;
+  String target;
+  final TextEditingController cyr;
+  final TextEditingController lat;
+  final TextEditingController ru;
+
+  HolidaySelfReminder toReminder() => HolidaySelfReminder(
+        daysBefore: int.tryParse(days.text.trim()) ?? 0,
+        texts: {'uz_Cyrl': cyr.text.trim(), 'uz_Latn': lat.text.trim(), 'ru': ru.text.trim()},
+        target: target,
+      );
+
+  void dispose() {
+    for (final c in [days, cyr, lat, ru]) {
+      c.dispose();
+    }
+  }
 }
 
 class _ItemRow {

@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:ava_gurlan/features/restaurants/data/restaurants_repository.dart';
 import 'package:ava_gurlan/features/restaurants/domain/preorder.dart';
 import 'package:ava_gurlan/features/restaurants/domain/restaurant_models.dart';
+import 'package:ava_gurlan/features/restaurants/merchant/menu_item_form_screen.dart' show PreorderDishFields;
 import 'package:ava_gurlan/features/restaurants/merchant/restaurant_register_form.dart';
 import 'package:ava_gurlan/features/restaurants/screens/restaurant_order_screen.dart';
 import 'package:ava_gurlan/features/restaurants/screens/restaurant_screen.dart';
@@ -36,11 +37,11 @@ void main() {
   String tr(String key) => l10n.tr(key);
 
   group('Preorder — сервер билан мослик', () {
-    test('чегаралар сервердаги MIN_LEAD_MIN / MAX_DAYS билан бир хил (эга: 60 дақиқа / 7 кун)', skip: serverParitySkip, () {
+    test('чегаралар сервердаги MIN_LEAD_MIN / MAX_DAYS билан бир хил (эга: 60 дақиқа / 14 кун; 2026-11-27 — аввал 7)', skip: serverParitySkip, () {
       final js = File('functions/restaurant_preorder.js').readAsStringSync();
       expect(int.parse(RegExp(r'const MIN_LEAD_MIN = (\d+);').firstMatch(js)!.group(1)!), Preorder.minLeadMin);
       expect(int.parse(RegExp(r'const MAX_DAYS = (\d+);').firstMatch(js)!.group(1)!), Preorder.maxDays);
-      expect([Preorder.minLeadMin, Preorder.maxDays], [60, 7]);
+      expect([Preorder.minLeadMin, Preorder.maxDays], [60, 14]);
     });
 
     test('3 тилда хато матнлари мавжуд', () {
@@ -58,13 +59,13 @@ void main() {
   });
 
   group('Preorder.check / suggest / days / format', () {
-    test('оралиқ: 59:59 — эрта; 60:00 — ок; 7 кун — ок; 7 кун + 1 с — узоқ; ўтмиш — эрта', () {
+    test('оралиқ: 59:59 — эрта; 60:00 — ок; 14 кун — ок; 14 кун + 1 с — узоқ; ўтмиш — эрта', () {
       final r = _r();
       String? at(Duration d) => Preorder.check(now: _now, scheduled: _now.add(d), restaurant: r);
       expect(at(const Duration(minutes: 59, seconds: 59)), Preorder.errSoon);
       expect(at(const Duration(minutes: 60)), isNull);
-      expect(at(const Duration(days: 7)), isNull);
-      expect(at(const Duration(days: 7, seconds: 1)), Preorder.errFar);
+      expect(at(const Duration(days: 14)), isNull);
+      expect(at(const Duration(days: 14, seconds: 1)), Preorder.errFar);
       expect(at(const Duration(minutes: -5)), Preorder.errSoon);
     });
 
@@ -99,13 +100,123 @@ void main() {
       }
     });
 
-    test('days: бугундан 8 кун (бугун + 7); format: 21.10 07:05', () {
+    test('days: бугундан 15 кун (бугун + 14); format: 21.10 07:05', () {
       final d = Preorder.days(_now);
-      expect(d.length, 8);
+      expect(d.length, 15);
       expect(d.first, DateTime(2026, 10, 19));
-      expect(d.last, DateTime(2026, 10, 26));
+      expect(d.last, DateTime(2026, 11, 2));
       expect(Preorder.format(DateTime(2026, 10, 21, 7, 5)), '21.10 07:05');
       expect(Preorder.combine(DateTime(2026, 10, 21), 19, 30), DateTime(2026, 10, 21, 19, 30));
+    });
+  });
+
+  group('Таом: олдиндан буюртма, «камида N кун олдин» (эга 2026-11-27)', () {
+    const cake = MenuItem(id: 'cake', name: 'Торт', price: 200000, preorderable: true, preorderLeadDays: 2);
+    const lamb = MenuItem(id: 'lamb', name: 'Бутун қўй', price: 2000000, preorderable: true, preorderLeadDays: 5);
+    const osh = MenuItem(id: 'osh', name: 'Osh', price: 40000);
+
+    test('MenuItem: фақат preorderable бўлса кунлар; 0..14 га қисилади; йўқ — оддий', () {
+      expect(MenuItem.fromMap('a', {'name': 'A', 'price': 1, 'preorderable': true, 'preorderLeadDays': 3}).preorderLeadDays, 3);
+      expect(MenuItem.fromMap('a', {'name': 'A', 'price': 1, 'preorderable': true, 'preorderLeadDays': 40}).preorderLeadDays, 14);
+      expect(MenuItem.fromMap('a', {'name': 'A', 'price': 1, 'preorderable': true, 'preorderLeadDays': -2}).preorderLeadDays, 0);
+      final plain = MenuItem.fromMap('a', {'name': 'A', 'price': 1, 'preorderLeadDays': 3});
+      expect([plain.preorderable, plain.preorderLeadDays], [false, 0]);
+    });
+
+    test('сават: энг катта кун (фақат preorderable); бўш — 0', () {
+      expect(Preorder.leadDaysOf(const [osh]), 0);
+      expect(Preorder.leadDaysOf(const [osh, cake, lamb]), 5);
+      expect(Preorder.leadDaysOf(const []), 0);
+    });
+
+    test('check: энг эрта кундан олдин — lead; ярим тундан ўша кун — ок; 0 — аввалгидек', () {
+      final r = _r();
+      expect(Preorder.check(now: _now, scheduled: DateTime(2026, 10, 20, 13), restaurant: r, leadDays: 2), Preorder.errLead);
+      expect(Preorder.check(now: _now, scheduled: DateTime(2026, 10, 21, 0, 0), restaurant: r, leadDays: 2), isNull);
+      expect(Preorder.check(now: _now, scheduled: DateTime(2026, 10, 20, 13), restaurant: r), isNull);
+      expect(Preorder.days(_now, leadDays: 2).first, DateTime(2026, 10, 21));
+      expect(Preorder.days(_now, leadDays: 2).last, DateTime(2026, 11, 2));
+    });
+
+    test('clampToLead: энг эрта кунга сурилади; 14 кунлик чегарадан ошмайди', () {
+      final s = Preorder.suggest(_now); // 13:30
+      expect(Preorder.clampToLead(_now, s, 2), DateTime(2026, 10, 21, s.hour, s.minute));
+      expect(Preorder.clampToLead(_now, s, 0), s);
+      final far = Preorder.clampToLead(_now, s, 14);
+      expect(far.isAfter(_now.add(const Duration(days: 14))), isFalse);
+      expect(Preorder.check(now: _now, scheduled: far, restaurant: _r(), leadDays: 14), isNull);
+    });
+
+    test('патч: null — тегилмайди; ўчиқ — ўчирилади; ёқиқ — кунлар 0..14', () {
+      const del = 'DEL';
+      expect(RestaurantsRepository.menuItemPreorderPatch(null, 3, del), isEmpty);
+      expect(RestaurantsRepository.menuItemPreorderPatch(false, 3, del), {'preorderable': del, 'preorderLeadDays': del});
+      expect(RestaurantsRepository.menuItemPreorderPatch(true, 30, del), {'preorderable': true, 'preorderLeadDays': 14});
+    });
+
+    testWidgets('тўлов варағи: саватда 2 кунлик таом — «Ҳозир» йўқ, изоҳ, кунлар энг эрта кундан; юборишда шу кун', (t) async {
+      final placed = <DateTime?>[];
+      SharedPreferences.setMockInitialValues({});
+      t.view.physicalSize = const Size(390 * 3, 2400 * 3);
+      t.view.devicePixelRatio = 3;
+      addTearDown(t.view.reset);
+      final r = _r(accepts: false);
+      final cart = RestaurantCart()
+        ..add(osh, restaurant: r)
+        ..add(cake, restaurant: r);
+      await t.pumpWidget(l10nApp(
+        home: Scaffold(
+          body: RestaurantCheckoutSheet(restaurant: r, cart: cart, repository: _CheckoutRepo(placed, []), now: () => _now),
+        ),
+      ));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('when-block')), findsOneWidget, reason: 'ресторан белгисиз ҳам — таом талаб қилади');
+      expect(find.byKey(const ValueKey('preorder-mode')), findsNothing);
+      expect(find.byKey(const ValueKey('preorder-lead')), findsOneWidget);
+      expect(find.byKey(const ValueKey('preorder-day-2026-10-20')), findsNothing);
+      expect(find.byKey(const ValueKey('preorder-day-2026-10-21')), findsOneWidget);
+      expect(find.byKey(const ValueKey('preorder-error')), findsNothing);
+      await t.ensureVisible(find.byType(FilledButton).last);
+      await t.tap(find.byType(FilledButton).last);
+      await t.pumpAndSettle();
+      final s = Preorder.suggest(_now);
+      expect(placed.single, DateTime(2026, 10, 21, s.hour, s.minute));
+    });
+
+    testWidgets('таом формаси: калит → кунлар (+/−, 0..14); 320 px / 1.5 синмайди', (t) async {
+      var on = false;
+      var days = 0;
+      await t.binding.setSurfaceSize(const Size(320, 600));
+      addTearDown(() => t.binding.setSurfaceSize(null));
+      await t.pumpWidget(l10nApp(
+        textScale: 1.5,
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (ctx, set) => ListView(children: [
+              PreorderDishFields(
+                preorderable: on,
+                leadDays: days,
+                onPreorderable: (v) => set(() => on = v),
+                onLeadDays: (v) => set(() => days = v),
+              ),
+            ]),
+          ),
+        ),
+      ));
+      await t.pumpAndSettle();
+      expect(find.text(tr('restaurants_m_dish_preorder')), findsOneWidget);
+      expect(find.byKey(const ValueKey('dish-lead-days')), findsNothing);
+      await t.tap(find.byKey(const ValueKey('dish-preorderable')));
+      await t.pumpAndSettle();
+      expect(t.widget<IconButton>(find.byKey(const ValueKey('dish-lead-minus'))).onPressed, isNull);
+      for (var i = 0; i < 16; i++) {
+        final plus = t.widget<IconButton>(find.byKey(const ValueKey('dish-lead-plus')));
+        if (plus.onPressed == null) break;
+        await t.tap(find.byKey(const ValueKey('dish-lead-plus')));
+        await t.pump();
+      }
+      expect(days, 14);
+      expect(t.takeException(), isNull);
     });
   });
 

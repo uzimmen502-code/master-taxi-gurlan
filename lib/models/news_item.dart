@@ -30,7 +30,11 @@ class NewsItem {
     this.smListId = '',
     this.occasionId = '',
     this.personId = '',
+    this.target = '',
   });
+
+  /// Ўз туғилган куни эслатмаси мақсади (эга 2026-11-27, `holiday_reminder` + `target`); бошқаларда бўш.
+  final String target;
 
   /// «Байрам саватчаси» эслатмаси (source: holiday_reminder / holiday_birthday_reminder, сервер 5eb77906) —
   /// байрам ва қариндош id. Бошқаларда бўш.
@@ -158,6 +162,7 @@ class NewsItem {
       smListId: d['smListId'] is String ? (d['smListId'] as String).trim() : '',
       occasionId: d['occasionId'] is String ? (d['occasionId'] as String).trim() : '',
       personId: d['personId'] is String ? (d['personId'] as String).trim() : '',
+      target: d['target'] is String ? (d['target'] as String).trim() : '',
     );
   }
 

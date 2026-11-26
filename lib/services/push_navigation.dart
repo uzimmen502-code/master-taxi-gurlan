@@ -38,7 +38,10 @@ import '../features/profile/screens/news_hub_screen.dart';
 import '../features/profile/screens/order_news_detail_screen.dart';
 import '../features/supermarket/screens/supermarket_home_screen.dart' show openSupermarketWith;
 import '../features/supermarket/screens/sm_holiday_screen.dart' show openHolidayBasket;
-import '../features/supermarket/domain/sm_holiday.dart' show HolidayPushKind, SmHolidayCheckout, holidayPushTarget;
+import '../features/supermarket/domain/sm_holiday.dart'
+    show HolidayPushTarget, HolidayRoute, SmHolidayCheckout, holidayPushTarget, holidayRouteOf, kHolidayKindBirthday;
+import '../features/restaurants/domain/restaurants_access.dart' show kRestaurantsModuleId;
+import '../features/restaurants/screens/restaurants_list_screen.dart' show RestaurantsListScreen;
 import '../features/relatives/utils/relative_birthdays.dart' show relativeGiftCheckout;
 import '../repositories/relatives_repository.dart';
 import '../models/order_news_group.dart';
@@ -770,15 +773,28 @@ class PushNavigation {
   /// Push ва «Хабарлар» учун умумий (супермаркет дарвозаси шу ерда текширилади).
   static Future<void> openHolidayTarget(
     NavigatorState nav,
-    ({HolidayPushKind kind, String occasionId, String personId}) t,
+    HolidayPushTarget t,
   ) async {
+    final route = holidayRouteOf(t);
+    // Ўз туғилган куни: «Ресторанда олдиндан буюртма» — ресторан модули дарвозаси (эга 2026-11-27).
+    if (route == HolidayRoute.restaurantsPreorder) {
+      if (!_moduleOpen(nav, kRestaurantsModuleId)) return;
+      await nav.push(MaterialPageRoute<void>(builder: (_) => const RestaurantsListScreen(preorderOnly: true)));
+      return;
+    }
     if (!_moduleOpen(nav, 'supermarket')) return;
-    if (t.kind == HolidayPushKind.bonus) {
+    if (route == HolidayRoute.bonus) {
       await openSupermarketWith(nav);
       return;
     }
     final occasionId = t.occasionId.isEmpty ? null : t.occasionId;
-    if (t.kind == HolidayPushKind.occasion) {
+    if (route == HolidayRoute.birthdayBasket || route == HolidayRoute.birthdayGuests) {
+      // Ўз туғилган куни — совғасиз (ўзига); «меҳмонлар учун» — меҳмонлар сони эслатмаси билан.
+      await openHolidayBasket(nav,
+          occasionId: occasionId ?? kHolidayKindBirthday, birthday: true, guestsHint: route == HolidayRoute.birthdayGuests);
+      return;
+    }
+    if (route == HolidayRoute.occasionList) {
       await openHolidayBasket(nav, occasionId: occasionId);
       return;
     }

@@ -31,6 +31,131 @@ const kHolidayStages = ['off', 'internal', 'pilot', 'public'];
 /// Сервер `ID_RE` — байрам/сават id.
 final kHolidayIdRe = RegExp(r'^[a-z][a-z0-9_]{1,39}$');
 
+// ─── Ўз туғилган куни эслатмалари (эга 2026-11-27) ───────────────────────────
+
+/// Эслатма мақсадлари (push `target`): туғилган кун саватчаси · ресторанда олдиндан буюртма · меҳмонлар учун саватча.
+const kSelfTargetBasket = 'birthday_basket';
+const kSelfTargetPreorder = 'restaurants_preorder';
+const kSelfTargetGuests = 'birthday_basket_guests';
+const kSelfReminderTargets = [kSelfTargetBasket, kSelfTargetPreorder, kSelfTargetGuests];
+
+/// Эга 2026-11-27: D-7, D-6, D-5, D-4, D-3 (тавсия этилган рўйхат); админ 1..14 оралиғида ўзгартира олади.
+const int kSelfReminderDaysMin = 1;
+const int kSelfReminderDaysMax = 14;
+const int kSelfReminderMaxCount = 14;
+
+/// Матн узунлиги чегараси — PROPOSED (сервер валидатори якуний).
+const int kSelfReminderTextMax = 200;
+
+class HolidaySelfReminder {
+  const HolidaySelfReminder({required this.daysBefore, required this.texts, required this.target});
+
+  final int daysBefore;
+  final Map<String, String> texts;
+  final String target;
+
+  static HolidaySelfReminder? fromMap(Object? raw) {
+    if (raw is! Map) return null;
+    final d = raw['daysBefore'];
+    final t = raw['target'];
+    if (d is! num || t is! String) return null;
+    return HolidaySelfReminder(daysBefore: d.toInt(), texts: smNames(raw['texts']), target: t.trim());
+  }
+
+  Map<String, Object> toMap() => {
+        'daysBefore': daysBefore,
+        'texts': {for (final l in const ['uz_Cyrl', 'uz_Latn', 'ru']) l: (texts[l] ?? '').trim()},
+        'target': target,
+      };
+}
+
+/// Админ формаси хатолари (Кирилл, админ конвенцияси). Бўш — тўғри.
+List<String> holidaySelfReminderProblems(List<HolidaySelfReminder> list) {
+  final seen = <int>{};
+  return [
+    if (list.length > kSelfReminderMaxCount) 'Эслатмалар $kSelfReminderMaxCount тагача.',
+    for (final r in list) ...[
+      if (r.daysBefore < kSelfReminderDaysMin || r.daysBefore > kSelfReminderDaysMax)
+        'Кун: $kSelfReminderDaysMin–$kSelfReminderDaysMax оралиғида бўлсин (${r.daysBefore}).'
+      else if (!seen.add(r.daysBefore))
+        'Кун такрорланди: D-${r.daysBefore}.',
+      if (!kSelfReminderTargets.contains(r.target)) 'Мақсадни танланг (D-${r.daysBefore}).',
+      for (final l in const ['uz_Cyrl', 'uz_Latn', 'ru'])
+        if ((r.texts[l] ?? '').trim().isEmpty || (r.texts[l] ?? '').trim().length > kSelfReminderTextMax)
+          'Матн ($l, D-${r.daysBefore}) 1–$kSelfReminderTextMax белги бўлсин.',
+    ],
+  ];
+}
+
+// ─── Байрам мақсади (Қурбон ҳайит → Мол бозори, эга 2026-11-27) ──────────────
+
+const kHolidayTargetBasket = 'basket';
+const kHolidayTargetMarket = 'market';
+
+/// `occasion.target`: `{type:'market', market, categories[]}` — байрам саватча ўрнига бозорни очади. Йўқ/нотўғри —
+/// оддий саватча ([kHolidayTargetBasket]).
+class HolidayTarget {
+  const HolidayTarget({this.type = kHolidayTargetBasket, this.market = '', this.categories = const []});
+
+  static const basket = HolidayTarget();
+
+  final String type;
+  final String market;
+  final List<String> categories;
+
+  bool get isMarket => type == kHolidayTargetMarket && market.isNotEmpty;
+
+  /// Бозор экранида очилишда танланадиган бўлим (биринчиси; бозорда бўлмаса экран ўзи сукутга қайтади).
+  String get initialCategory => categories.isEmpty ? '' : categories.first;
+
+  static HolidayTarget fromMap(Object? raw) {
+    if (raw is! Map) return basket;
+    final type = raw['type'];
+    final market = raw['market'];
+    final cats = raw['categories'];
+    if (type != kHolidayTargetMarket || market is! String || !kHolidayIdRe.hasMatch(market.trim())) return basket;
+    return HolidayTarget(
+      type: kHolidayTargetMarket,
+      market: market.trim(),
+      categories: [
+        if (cats is List)
+          for (final c in cats)
+            if (c is String && kHolidayIdRe.hasMatch(c.trim())) c.trim(),
+      ],
+    );
+  }
+
+  Map<String, Object> toMap() => {'type': kHolidayTargetMarket, 'market': market, 'categories': categories};
+}
+
+/// Қурбон ҳайит байрами id ва даври (эга 2026-11-27: байрамгача 15 кун ичида бозорда баннер ва чип).
+const kQurbonOccasionId = 'qurbon_hayit';
+const int kQurbonPeriodDays = 15;
+
+/// Мол бозоридаги «Қурбонликка мос» белгиси — таксономия майдони (`attrs.qurbon_ready`, bool).
+const kQurbonReadyAttr = 'qurbon_ready';
+
+/// Шу бозор Қурбон ҳайит мақсади ва давр фаол (бозор id байрам `target`идан — hardcode эмас).
+bool qurbonMarketActive(Iterable<HolidayOccasion> occasions, String marketId, DateTime today) {
+  final q = occasions.where((o) => o.id == kQurbonOccasionId && o.target.isMarket && o.target.market == marketId);
+  return q.isNotEmpty && qurbonPeriodActive(q, today);
+}
+
+/// Эълон «Қурбонликка мос» белгиланганми (таксономияда шу майдон бўлса).
+bool qurbonReady(Map<String, Object?> attrs) => attrs[kQurbonReadyAttr] == true;
+
+/// Қурбон даври: байрам санаси бугундан 0..[kQurbonPeriodDays] кун ичида.
+bool qurbonPeriodActive(Iterable<HolidayOccasion> occasions, DateTime today) {
+  for (final o in occasions) {
+    if (o.id != kQurbonOccasionId) continue;
+    final d = nextOccasionDate(o, today);
+    if (d == null) return false;
+    final diff = DateTime.utc(d.year, d.month, d.day).difference(DateTime.utc(today.year, today.month, today.day)).inDays;
+    return diff >= 0 && diff <= kQurbonPeriodDays;
+  }
+  return false;
+}
+
 class HolidayOccasion {
   const HolidayOccasion({
     required this.id,
@@ -45,7 +170,15 @@ class HolidayOccasion {
     this.order = 0,
     this.image = '',
     this.nextDate = '',
+    this.target = HolidayTarget.basket,
+    this.selfReminders = const [],
   });
+
+  /// Байрам босилганда нима очилади (сукут — саватча; Қурбон ҳайит — Мол бозори).
+  final HolidayTarget target;
+
+  /// Фақат туғилган кун (`birthday`): фойдаланувчининг ЎЗ туғилган куни эслатмалари (админ).
+  final List<HolidaySelfReminder> selfReminders;
 
   final String id;
   final Map<String, String> names;
@@ -98,6 +231,11 @@ class HolidayOccasion {
       order: raw['order'] is num ? (raw['order'] as num).toInt() : 0,
       image: s(raw['image']),
       nextDate: s(raw['nextDate']),
+      target: HolidayTarget.fromMap(raw['target']),
+      selfReminders: [
+        if (raw['selfReminders'] is List)
+          ...(raw['selfReminders'] as List).map(HolidaySelfReminder.fromMap).whereType<HolidaySelfReminder>(),
+      ],
     );
   }
 
@@ -116,6 +254,10 @@ class HolidayOccasion {
         'stage': stage.isEmpty ? 'off' : stage,
         'order': order,
         'image': image,
+        // Эга 2026-11-27: байрамда `target` (null — саватча, тозалаш учун ҳам юборилади); туғилган кунда эслатмалар
+        // (бўш рўйхат — ҳаммаси ўчирилади).
+        if (!isBirthday) 'target': target.isMarket ? target.toMap() : null,
+        if (isBirthday) 'selfReminders': [for (final r in selfReminders) r.toMap()],
       };
 }
 
@@ -618,18 +760,44 @@ final _docId = RegExp(r'^[A-Za-z0-9_-]{1,128}$');
 
 enum HolidayPushKind { occasion, birthday, bonus }
 
-/// Байрам push'и → мақсад; бошқа push — `null`. ID фақат Firestore шаклида (бошқаси — бўш).
-({HolidayPushKind kind, String occasionId, String personId})? holidayPushTarget(Map<String, String> data) {
+/// [target] — ўз туғилган куни эслатмаси мақсади ([kSelfReminderTargets]) ёки бўш.
+typedef HolidayPushTarget = ({HolidayPushKind kind, String occasionId, String personId, String target});
+
+/// Байрам push'и → мақсад; бошқа push — `null`. ID фақат Firestore шаклида (бошқаси — бўш); `target` фақат
+/// маълум рўйхатдан (эга 2026-11-27: ўз туғилган куни D-7..D-3 эслатмалари `holiday_reminder` + `target`).
+HolidayPushTarget? holidayPushTarget(Map<String, String> data) {
   final type = (data['type'] ?? '').trim();
   String id(String k) {
     final v = (data[k] ?? '').trim();
     return _docId.hasMatch(v) ? v : '';
   }
 
-  if (type == kHolidayReminderPush) return (kind: HolidayPushKind.occasion, occasionId: id('occasionId'), personId: '');
-  if (type == kRelativeBirthdayPush) {
-    return (kind: HolidayPushKind.birthday, occasionId: id('occasionId'), personId: id('personId'));
+  if (type == kHolidayReminderPush) {
+    final t = (data['target'] ?? '').trim();
+    return (
+      kind: HolidayPushKind.occasion,
+      occasionId: id('occasionId'),
+      personId: '',
+      target: kSelfReminderTargets.contains(t) ? t : '',
+    );
   }
-  if (type == kHolidayBonusPush) return (kind: HolidayPushKind.bonus, occasionId: '', personId: '');
+  if (type == kRelativeBirthdayPush) {
+    return (kind: HolidayPushKind.birthday, occasionId: id('occasionId'), personId: id('personId'), target: '');
+  }
+  if (type == kHolidayBonusPush) return (kind: HolidayPushKind.bonus, occasionId: '', personId: '', target: '');
   return null;
+}
+
+/// Push/хабар мақсади қаерга олиб боради (тоза — тест учун).
+enum HolidayRoute { bonus, occasionList, birthdayBasket, birthdayGuests, restaurantsPreorder, relativeBirthday }
+
+HolidayRoute holidayRouteOf(HolidayPushTarget t) {
+  if (t.kind == HolidayPushKind.bonus) return HolidayRoute.bonus;
+  if (t.kind == HolidayPushKind.birthday) return HolidayRoute.relativeBirthday;
+  return switch (t.target) {
+    kSelfTargetBasket => HolidayRoute.birthdayBasket,
+    kSelfTargetGuests => HolidayRoute.birthdayGuests,
+    kSelfTargetPreorder => HolidayRoute.restaurantsPreorder,
+    _ => HolidayRoute.occasionList,
+  };
 }

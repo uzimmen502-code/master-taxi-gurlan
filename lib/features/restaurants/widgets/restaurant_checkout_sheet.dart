@@ -111,19 +111,25 @@ class _RestaurantCheckoutSheetState extends State<RestaurantCheckoutSheet> {
 
   DateTime get _now => (widget.now ?? DateTime.now)();
 
-  /// Ресторан ҳозир ёпиқ, лекин олдиндан буюртма олади — «ҳозир» танлови йўқ.
-  bool get _mustPreorder => _r.acceptsPreorder && !_r.isOpenAt(_now);
+  /// Саватдаги «олдиндан буюртма» таомларининг энг катта «камида N кун олдин» чегараси (эга 2026-11-27).
+  int get _leadDays => Preorder.leadDaysOf(widget.cart.lines.map((l) => l.item));
+
+  /// Блок кўринадими: ресторан олдиндан буюртма олади ёки саватда N кун олдин буюртма қилинадиган таом бор.
+  bool get _showWhen => _r.acceptsPreorder || _leadDays > 0;
+
+  /// «Ҳозир» танлови йўқ: ресторан ҳозир ёпиқ (олдиндан олади) ёки саватдаги таом N кун олдин буюртма қилинади.
+  bool get _mustPreorder => (_r.acceptsPreorder && !_r.isOpenAt(_now)) || _leadDays > 0;
 
   /// Танланган вақтнинг хатоси ([Preorder] қоидаси; сервер барибир текширади) — «ҳозир»да `null`.
   String? get _preorderError =>
-      _preorder ? Preorder.check(now: _now, scheduled: _scheduled, restaurant: _r) : null;
+      _preorder ? Preorder.check(now: _now, scheduled: _scheduled, restaurant: _r, leadDays: _leadDays) : null;
 
   @override
   void initState() {
     super.initState();
     _fulfillment = _r.delivery.hasDelivery ? 'delivery' : 'pickup';
     _foodPayment = _defaultFoodPayment();
-    _scheduled = Preorder.suggest(_now);
+    _scheduled = Preorder.clampToLead(_now, Preorder.suggest(_now), _leadDays);
     _preorder = _mustPreorder;
     _loadProfile();
   }
@@ -312,10 +318,11 @@ class _RestaurantCheckoutSheetState extends State<RestaurantCheckoutSheet> {
             const SizedBox(height: 10),
 
             // 0. Қачон: ҳозир / олдиндан (S4b) — фақат олдиндан буюртма оладиган ресторанда.
-            if (_r.acceptsPreorder) ...[
+            if (_showWhen) ...[
               _WhenBlock(
                 preorder: _preorder,
                 forced: _mustPreorder,
+                leadDays: _leadDays,
                 scheduled: _scheduled,
                 now: _now,
                 error: _preorderError,
@@ -537,7 +544,11 @@ class _WhenBlock extends StatelessWidget {
     required this.error,
     required this.onMode,
     required this.onChanged,
+    this.leadDays = 0,
   });
+
+  /// Саватдаги таом шунча кун олдин буюртма қилинади (0 — чеклов йўқ).
+  final int leadDays;
 
   final bool preorder;
 
@@ -580,14 +591,24 @@ class _WhenBlock extends StatelessWidget {
         const SizedBox(height: 6),
         if (forced)
           Container(
-            key: const ValueKey('preorder-forced'),
+            key: ValueKey(leadDays > 0 ? 'preorder-lead' : 'preorder-forced'),
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(color: c.warnSoft, borderRadius: BorderRadius.circular(10)),
             child: Row(
               children: [
-                Icon(Icons.nightlight_round, size: 18, color: c.warn),
+                Icon(leadDays > 0 ? Icons.event_available_rounded : Icons.nightlight_round, size: 18, color: c.warn),
                 const SizedBox(width: 8),
-                Expanded(child: Text(context.tr('restaurants_preorder_closed_now'), style: TextStyle(fontSize: 12, color: c.ink))),
+                Expanded(
+                  child: Text(
+                    leadDays > 0
+                        ? context
+                            .tr('restaurants_preorder_lead_note')
+                            .replaceAll('{lead}', '$leadDays')
+                            .replaceAll('{date}', _dayLabel(context, Preorder.earliestDay(now, leadDays)))
+                        : context.tr('restaurants_preorder_closed_now'),
+                    style: TextStyle(fontSize: 12, color: c.ink),
+                  ),
+                ),
               ],
             ),
           )
@@ -609,7 +630,7 @@ class _WhenBlock extends StatelessWidget {
               key: const ValueKey('preorder-days'),
               scrollDirection: Axis.horizontal,
               children: [
-                for (final d in Preorder.days(now)) ...[
+                for (final d in Preorder.days(now, leadDays: leadDays)) ...[
                   ChoiceChip(
                     key: ValueKey('preorder-day-${d.year}-${d.month}-${d.day}'),
                     label: Text(_dayLabel(context, d)),
@@ -632,7 +653,12 @@ class _WhenBlock extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text(
-                context.tr('restaurants_preorder_err_$error').replaceAll('{min}', '${Preorder.minLeadMin}').replaceAll('{days}', '${Preorder.maxDays}'),
+                context
+                    .tr('restaurants_preorder_err_$error')
+                    .replaceAll('{min}', '${Preorder.minLeadMin}')
+                    .replaceAll('{days}', '${Preorder.maxDays}')
+                    .replaceAll('{lead}', '$leadDays')
+                    .replaceAll('{date}', _dayLabel(context, Preorder.earliestDay(now, leadDays))),
                 key: const ValueKey('preorder-error'),
                 style: TextStyle(fontSize: 12, color: c.danger),
               ),

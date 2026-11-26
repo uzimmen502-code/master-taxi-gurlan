@@ -49,6 +49,8 @@ class _FakeRepo implements RestaurantsRepository {
     DateTime? stopUntil,
     DishFacts? facts,
     List<QtyTier>? qtyTiers,
+    bool? preorderable,
+    int preorderLeadDays = 0,
   }) async {
     saved.add(_Saved(id, name, price, facts, categoryId, qtyTiers));
     return id ?? 'new1';

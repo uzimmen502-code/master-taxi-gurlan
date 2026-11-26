@@ -8,6 +8,7 @@ import '../../ads/widgets/market_grid.dart' show DiscountPriceLine;
 import '../../product_badges/product_badge.dart';
 import '../../tv_market/models/tv_shop.dart';
 import '../../tv_market/widgets/tv_shop_photo_gallery.dart';
+import '../../supermarket/domain/sm_holiday.dart' show kQurbonReadyAttr, qurbonReady;
 import '../domain/market_taxonomy.dart';
 
 /// Бозор рўйхати карточкаси: расм · сарлавҳа · нарх бирлиги билан («85 000 сўм / кг») · нисбий жой ·
@@ -105,6 +106,19 @@ class MarketListingCard extends StatelessWidget {
                             key: ValueKey('market_card_price_${item.id}'),
                             style: const TextStyle(
                                 fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.primaryText)),
+                    ],
+                    // «Қурбонликка» (эга 2026-11-27): таксономияда `qurbon_ready` майдони бор ва белгиланган бўлса.
+                    if (m != null && m.fields.any((f) => f.key == kQurbonReadyAttr) && qurbonReady(item.attrs)) ...[
+                      const SizedBox(height: 4),
+                      Container(
+                        key: ValueKey('market_card_qurbon_${item.id}'),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(color: context.ava.brandSoft, borderRadius: BorderRadius.circular(6)),
+                        child: Text(context.tr('market_qurbon_badge'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: context.ava.brandText)),
+                      ),
                     ],
                     if (attrsLine.isNotEmpty) ...[
                       const SizedBox(height: 4),

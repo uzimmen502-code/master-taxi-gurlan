@@ -422,12 +422,20 @@ class MenuItem {
     this.stopUntil,
     this.facts = DishFacts.empty,
     this.qtyTiers = const [],
+    this.preorderable = false,
+    this.preorderLeadDays = 0,
   });
 
   final String id;
   final String name;
   final String description;
   final String photoUrl;
+
+  /// «Олдиндан буюртмага» (эга 2026-11-27): торт, бутун қўй каби таом — [preorderLeadDays] кун олдин буюртма қилинади.
+  final bool preorderable;
+
+  /// 0..14; фақат [preorderable] бўлса маъноли (бузилган қиймат — чегарага).
+  final int preorderLeadDays;
 
   /// Миқдорга чегирма поғоналари (D-REST-25), ТЎҒРИ префикс ([QtyTiers.sanitize]). Ресторан берган чегирма;
   /// ҳақиқий нарх серверда ҳисобланади.
@@ -467,6 +475,8 @@ class MenuItem {
         available: d['available'] != false,
         stopUntil: _ts(d['stopUntil']),
         facts: DishFacts.fromMap(d),
+        preorderable: d['preorderable'] == true,
+        preorderLeadDays: d['preorderable'] == true ? _int(d['preorderLeadDays']).clamp(0, 14) : 0,
       );
 
   factory MenuItem.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) =>

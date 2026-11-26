@@ -9,6 +9,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/idempotency_keys.dart';
+import '../../../repositories/user_repository.dart';
 import '../../../shared/widgets/wallet_topup_ui.dart';
 import '../data/supermarket_repository.dart';
 import '../domain/sm_access.dart';
@@ -32,7 +33,12 @@ class SmCheckoutScreen extends StatefulWidget {
     @visibleForTesting this.openTopUp,
     this.holiday,
     @visibleForTesting this.today,
+    @visibleForTesting this.incentive,
   });
+
+  /// Тест учун; бўлмаса — `users/{uid}.incentiveBalance` (AVA бонуси). Қанча қўлланиши — СЕРВЕР қарори
+  /// (эга 2026-11-27: бонус ҳамма супермаркет буюртмасида).
+  final Stream<int>? incentive;
 
   final SupermarketController controller;
 
@@ -112,13 +118,25 @@ class _SmCheckoutScreenState extends State<SmCheckoutScreen> {
     _balanceSub = _balance.listen((b) {
       if (mounted) setState(() => _lastBalance = b);
     });
+    _incentiveSub = (widget.incentive ?? smIncentiveBalanceStream()).listen((v) {
+      if (mounted) setState(() => _incentive = v < 0 ? 0 : v);
+    }, onError: (Object e) => debugPrint('[Supermarket] incentive balance: $e'));
   }
 
   StreamSubscription<int>? _balanceSub;
   int? _lastBalance;
+  StreamSubscription<int>? _incentiveSub;
+  int _incentive = 0;
 
-  /// Ҳамёнда етишмаётган сумма (баланс маълум бўлса; тахминий — якуний текширув серверда).
-  int get _shortfall => _lastBalance == null ? 0 : _c.totals.holdEstimate - _lastBalance!;
+  /// Сервер «маблағ етмайди» деса — етишмаган сумма (`details.required - details.balance`), бўлмаса 0.
+  int _serverShort = 0;
+
+  /// Бонус ҚОПЛАШИ МУМКИН бўлган энг кўп сумма (тахмин: бонус қолдиғи, товар суммасидан ошмайди). Ҳақиқийси
+  /// серверда (туркум/улуш чегаралари) — етмаса сервер рад этади ва тўлдириш тугмаси чиқади.
+  int get _bonusEstimate => smBonusEstimate(incentive: _incentive, goodsTotal: _c.totals.goodsTotal);
+
+  /// Ҳамёнда етишмаётган сумма (баланс маълум бўлса; бонус ҳисобга олинган, тахминий — якуний текширув серверда).
+  int get _shortfall => _lastBalance == null ? 0 : _c.totals.holdEstimate - _bonusEstimate - _lastBalance!;
 
   void _pickDefaultDay() {
     final days = _c.access.days;
@@ -154,6 +172,7 @@ class _SmCheckoutScreenState extends State<SmCheckoutScreen> {
   @override
   void dispose() {
     _balanceSub?.cancel();
+    _incentiveSub?.cancel();
     for (final t in [_mahalla, _street, _house, _landmark, _phone, _giftName, _giftPhone, _giftMsg]) {
       t.dispose();
     }
@@ -197,6 +216,7 @@ class _SmCheckoutScreenState extends State<SmCheckoutScreen> {
     setState(() {
       _submitting = true;
       _errorKey = null;
+      _serverShort = 0;
     });
     final h = widget.holiday;
     final payload = h != null
@@ -260,6 +280,7 @@ class _SmCheckoutScreenState extends State<SmCheckoutScreen> {
         setState(() {
           _errorKey = e.key;
           _errorMessages = e.messages;
+          _serverShort = e.key == 'sm_err_insufficient_funds' ? smServerShortfall(e.details) : 0;
         });
       }
       // Вақт ўтиб кетган / туман ёпилган — янги вақтлар.
@@ -416,7 +437,9 @@ class _SmCheckoutScreenState extends State<SmCheckoutScreen> {
             builder: (context) {
               final balance = _lastBalance;
               final hold = t.holdEstimate;
-              final short = _shortfall;
+              final bonus = _bonusEstimate;
+              // Сервер аниқ етишмовчилик айтган бўлса — ўша (бонус кутилгандан кам қўлланган).
+              final short = _shortfall > 0 ? _shortfall : _serverShort;
               return _Section(title: context.tr('sm_payment_wallet'), children: [
                 if (balance != null)
                   SmSumRow(label: context.tr('sm_wallet_balance'), amount: balance, valueKey: const ValueKey('sm_balance')),
@@ -431,7 +454,18 @@ class _SmCheckoutScreenState extends State<SmCheckoutScreen> {
                   label: context.tr('sm_fee_estimate').replaceAll('{p}', '${access.feePercent}'),
                   amount: t.feeEstimate,
                 ),
-                SmSumRow(label: context.tr('sm_hold_total'), amount: hold, bold: true, valueKey: const ValueKey('sm_hold')),
+                SmSumRow(label: context.tr('sm_hold_total'), amount: hold, bold: bonus <= 0, valueKey: const ValueKey('sm_hold')),
+                if (bonus > 0) ...[
+                  SmSumRow(
+                      label: context.tr('sm_incentive_estimate'),
+                      amount: bonus,
+                      valueKey: const ValueKey('sm_incentive_estimate')),
+                  SmSumRow(
+                      label: context.tr('sm_after_bonus'),
+                      amount: hold - bonus,
+                      bold: true,
+                      valueKey: const ValueKey('sm_after_bonus')),
+                ],
                 if (hasWeighed) ...[const SizedBox(height: 8), SmWeighedNote(percent: access.weighHoldPercent)],
                 const SizedBox(height: 4),
                 Text(context.tr('sm_fee_final_note'), style: TextStyle(fontSize: 13, color: c.ink2)),
@@ -529,6 +563,30 @@ class _Field extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Бонус қоплаши МУМКИН бўлган энг кўп сумма: қолдиқ, товар суммасидан ошмайди (етказиш ҳақи бонусдан эмас —
+/// AVA дўкони қоидаси билан бир хил, INFERRED). Якуний қиймат серверда.
+int smBonusEstimate({required int incentive, required int goodsTotal}) {
+  if (incentive <= 0 || goodsTotal <= 0) return 0;
+  return incentive < goodsTotal ? incentive : goodsTotal;
+}
+
+/// `INSUFFICIENT_*` хатоси `details` → етишмаган сумма (`required - balance`); номаълум — 0.
+int smServerShortfall(Map<String, dynamic> details) {
+  final r = details['required'];
+  final b = details['balance'];
+  if (r is! num || b is! num) return 0;
+  final d = r.toInt() - b.toInt();
+  return d > 0 ? d : 0;
+}
+
+/// AVA бонуси қолдиғи (`users/{uid}.incentiveBalance`, мавжуд [UserRepository.watchWalletBalances]).
+/// Телефон йўқ — бўш оқим (бонус ҳисобга олинмайди, хавфсиз томон).
+Stream<int> smIncentiveBalanceStream() async* {
+  final uid = await walletPhoneId();
+  if (uid.isEmpty) return;
+  yield* UserRepository().watchWalletBalances(uid).map((b) => b.incentive);
 }
 
 /// Слот кўриниши учун ишлатилади (тестларда ҳам).

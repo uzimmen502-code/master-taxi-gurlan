@@ -16,6 +16,7 @@ import '../domain/dish_facts.dart';
 import '../domain/menu_category_choice.dart';
 import '../domain/menu_category_names.dart';
 import '../domain/menu_category_suggestions.dart';
+import '../domain/preorder.dart';
 import '../domain/restaurant_models.dart';
 import '../services/restaurant_storage_service.dart';
 import '../widgets/restaurant_checkout_sheet.dart' show restaurantsErrorText;
@@ -24,6 +25,63 @@ import 'qty_tiers_editor.dart';
 import 'dish_video_tile.dart';
 import 'menu_category_dialog.dart';
 import 'menu_category_picker.dart';
+
+/// «Олдиндан буюртмага» калити ва «Камида неча кун олдин» (0..14) — ресторан ва уй ошпази таоми (эга 2026-11-27).
+class PreorderDishFields extends StatelessWidget {
+  const PreorderDishFields({
+    super.key,
+    required this.preorderable,
+    required this.leadDays,
+    required this.onPreorderable,
+    required this.onLeadDays,
+  });
+
+  final bool preorderable;
+  final int leadDays;
+  final ValueChanged<bool> onPreorderable;
+  final ValueChanged<int> onLeadDays;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ava;
+    final days = leadDays.clamp(0, Preorder.maxLeadDays);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SwitchListTile(
+          key: const ValueKey('dish-preorderable'),
+          contentPadding: EdgeInsets.zero,
+          title: Text(context.tr('restaurants_m_dish_preorder'), style: TextStyle(fontSize: 13, color: c.ink)),
+          subtitle: Text(context.tr('restaurants_m_dish_preorder_hint'), style: TextStyle(fontSize: 12, color: c.ink2)),
+          value: preorderable,
+          onChanged: onPreorderable,
+        ),
+        if (preorderable)
+          Row(
+            key: const ValueKey('dish-lead-days'),
+            children: [
+              Expanded(
+                child: Text(context.tr('restaurants_m_dish_lead_days'), style: TextStyle(fontSize: 13, color: c.ink)),
+              ),
+              IconButton(
+                key: const ValueKey('dish-lead-minus'),
+                tooltip: '−',
+                onPressed: days > 0 ? () => onLeadDays(days - 1) : null,
+                icon: const Icon(Icons.remove_circle_outline),
+              ),
+              Text('$days', key: const ValueKey('dish-lead-value'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+              IconButton(
+                key: const ValueKey('dish-lead-plus'),
+                tooltip: '+',
+                onPressed: days < Preorder.maxLeadDays ? () => onLeadDays(days + 1) : null,
+                icon: const Icon(Icons.add_circle_outline),
+              ),
+            ],
+          ),
+      ],
+    );
+  }
+}
 
 class MenuItemFormScreen extends StatefulWidget {
   const MenuItemFormScreen({
@@ -83,6 +141,10 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
     categories: widget.categories,
   );
   late bool _available = widget.existing?.available ?? true;
+
+  // Олдиндан буюртма таоми (эга 2026-11-27): «Олдиндан буюртмага» + «Камида неча кун олдин» (0..14).
+  late bool _preorderable = widget.existing?.preorderable ?? false;
+  late int _leadDays = widget.existing?.preorderLeadDays ?? 0;
 
   // Таом ВИДЕО учун аввал сақланиши мумкин (клип таом ID'сига боғланади) — шундан кейинги
   // сақлашлар ШУ ҳужжатни янгилайди, расм қайта юкланмайди, тартиб ўзгармайди.
@@ -221,6 +283,9 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
         stopUntil: _available ? widget.existing?.stopUntil : null,
         facts: _facts,
         qtyTiers: _tiers.tiers,
+        // Аввал ҳам ўчиқ бўлган оддий таомда майдонлар умуман юборилмайди (эски ҳужжатлар/rules билан мослик).
+        preorderable: _preorderable || (widget.existing?.preorderable ?? false) ? _preorderable : null,
+        preorderLeadDays: _leadDays,
       );
       _savedId = id;
       return id;
@@ -398,6 +463,12 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
               title: Text(context.tr('restaurants_m_item_available'), style: TextStyle(fontSize: 13, color: c.ink)),
               value: _available,
               onChanged: (v) => setState(() => _available = v),
+            ),
+            PreorderDishFields(
+              preorderable: _preorderable,
+              leadDays: _leadDays,
+              onPreorderable: (v) => setState(() => _preorderable = v),
+              onLeadDays: (v) => setState(() => _leadDays = v),
             ),
             const SizedBox(height: 12),
             FilledButton(

@@ -219,6 +219,8 @@ Map<String, dynamic> smOrderPayload({
       'slotId': slotId,
       'day': day,
       'origin': smOrigins.contains(origin) ? origin : smOriginCatalog,
+      // Эга 2026-11-27: бонус ҲАММА супермаркет буюртмасида — қанча қўлланишини сервер ҳал қилади.
+      'useIncentive': true,
     };
 
 /// Байрам/совға буюртмаси (сервер 5eb77906): `day` ўрнига `deliveryDate`, `origin: 'holiday'`, ихтиёрий `gift`,

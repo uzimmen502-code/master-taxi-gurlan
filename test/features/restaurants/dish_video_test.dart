@@ -501,6 +501,8 @@ class _Repo implements RestaurantsRepository {
     DateTime? stopUntil,
     covariant Object? facts,
     covariant Object? qtyTiers,
+    bool? preorderable,
+    int preorderLeadDays = 0,
   }) async {
     upserts.add(_Upsert(id, price, sort));
     return id ?? 'dish-${upserts.length}';

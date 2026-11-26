@@ -18,6 +18,9 @@ import '../../../shared/widgets/market_search_field.dart';
 import '../../business_orders/screens/business_cart_screen.dart';
 import '../../home/home_strip_mix.dart' show HomeShopFeed;
 import '../../my_shop/my_shop_entry.dart';
+import '../../supermarket/data/holiday_repository.dart' show FirebaseHolidayApi, HolidayCatalogCache;
+import '../../supermarket/domain/sm_holiday.dart'
+    show kQurbonReadyAttr, qurbonMarketActive, qurbonReady, smTashkentDate;
 import '../../tv_market/models/tv_shop.dart';
 import '../../tv_market/screens/tv_shop_item_detail_screen.dart';
 import '../../tv_market/widgets/tv_shop_photo_gallery.dart' show precacheCardCovers;
@@ -55,7 +58,12 @@ class MarketScreen extends StatefulWidget {
     this.initialCategory = '',
     this.partsHeader,
     this.cachedItems,
+    this.qurbonCheck,
   });
+
+  /// Қурбон ҳайит даври шу бозор учун фаолми (эга 2026-11-27). Тест учун; бўлмаса — байрам каталоги кешидан
+  /// ([qurbonMarketActive]; бозор id байрам `target`идан).
+  final Future<bool> Function(String marketId)? qurbonCheck;
 
   /// Дарҳол чизиш учун аллақачон юкланган маҳсулотлар (бўлмаса [HomeShopFeed.cachedItems] — уй тасмаси
   /// кеши). Сервер саҳифалари келгач алмаштирилади (эга 2026-11-19, тезлик).
@@ -100,6 +108,31 @@ class _MarketScreenState extends State<MarketScreen> {
 
   String _category = '';
   bool _importedOnly = false;
+
+  // Қурбон ҳайит (эга 2026-11-27): давр фаол бўлса — баннер ва «Қурбонликка мос» чипи (клиент филтри).
+  bool _qurbonPeriod = false;
+  bool _qurbonOnly = false;
+
+  bool _hasQurbonField(MarketDef m) => m.fields.any((f) => f.key == kQurbonReadyAttr);
+
+  Future<void> _checkQurbon() async {
+    try {
+      final ok = await (widget.qurbonCheck ?? _defaultQurbonCheck)(widget.marketId);
+      if (mounted && ok != _qurbonPeriod) setState(() => _qurbonPeriod = ok);
+    } catch (e) {
+      debugPrint('[MarketScreen] QURBON_CHECK_FAILED market=${widget.marketId}: $e');
+    }
+  }
+
+  static Future<bool> _defaultQurbonCheck(String marketId) async {
+    final cat = await HolidayCatalogCache.get(FirebaseHolidayApi());
+    return qurbonMarketActive(cat.occasions, marketId, smTashkentDate());
+  }
+
+  void _toggleQurbon() => setState(() {
+        _qurbonOnly = !_qurbonOnly;
+        _emptyStreak = 0;
+      });
   GeoScope? _scope;
   int? _minPrice;
   int? _maxPrice;
@@ -144,6 +177,7 @@ class _MarketScreenState extends State<MarketScreen> {
     } else {
       _loadTaxonomy();
     }
+    unawaited(_checkQurbon());
   }
 
   @override
@@ -298,8 +332,10 @@ class _MarketScreenState extends State<MarketScreen> {
             (scope.level == GeoLevel.region && i.regionId.isNotEmpty && i.regionId == scope.area.regionId))) {
       return false;
     }
-    return priceInRange(i.price, _minPrice, _maxPrice) && marketServerItemMatches(i, _query);
+    return priceInRange(i.price, _minPrice, _maxPrice) && marketServerItemMatches(i, _query) && _qurbonShows(i);
   }
+
+  bool _qurbonShows(TvShopItem i) => !_qurbonOnly || qurbonReady(i.attrs);
 
   /// Рўйхат охири: қидирувда аввал сервер саҳифалари, кейин одатий ҳалқа саҳифалари (токенсиз эски эълонлар).
   void _loadNext() {
@@ -345,7 +381,7 @@ class _MarketScreenState extends State<MarketScreen> {
 
   /// Нарх ва қидирув филтри (иккаласи ҳам клиентда).
   bool _shows(TvShopItem i) =>
-      priceInRange(i.price, _minPrice, _maxPrice) && marketItemMatchesQuery(i, _query);
+      priceInRange(i.price, _minPrice, _maxPrice) && marketItemMatchesQuery(i, _query) && _qurbonShows(i);
 
   List<TvShopItem> get _visible {
     final local = [
@@ -523,6 +559,18 @@ class _MarketScreenState extends State<MarketScreen> {
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(children: [
+              // Қурбон даврида биринчи — кўзга ташлансин.
+              if (_qurbonPeriod && _hasQurbonField(m)) ...[
+                FilterChip(
+                  key: const ValueKey('market_qurbon_chip'),
+                  label: Text(context.tr('market_qurbon_chip')),
+                  selected: _qurbonOnly,
+                  onSelected: (_) => _toggleQurbon(),
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                const SizedBox(width: 8),
+              ],
               ActionChip(
                 key: const ValueKey('market_price_chip'),
                 avatar: const Icon(Icons.payments_outlined, size: 16),
@@ -655,6 +703,21 @@ class _MarketScreenState extends State<MarketScreen> {
             onChanged: _onQuery,
             onClear: _clearQuery,
           ),
+          if (_qurbonPeriod)
+            Container(
+              key: const ValueKey('market_qurbon_banner'),
+              margin: const EdgeInsets.fromLTRB(12, kMarketTopRowGap, 12, 0),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(color: context.ava.brandSoft, borderRadius: BorderRadius.circular(10)),
+              child: Row(children: [
+                Icon(Icons.mosque, size: 18, color: context.ava.brandText),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(context.tr('market_qurbon_banner'),
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.ava.ink)),
+                ),
+              ]),
+            ),
           if (chips != null) ...[
             const SizedBox(height: kMarketTopRowGap),
             chips,

@@ -246,9 +246,10 @@ void main() {
       expect((p['gift'] as Map)['hidePrice'], isTrue);
       expect(p.containsKey('day'), isFalse);
       expect(p['items'], [{'productId': 'p1', 'qty': 2}]);
-      // Оддий буюртма ўзгармаган.
+      // Оддий буюртмада совға/сана йўқ; бонус эга 2026-11-27 дан ҳамма буюртмада (useIncentive: true).
       final old = smOrderPayload(clientRequestId: 'k', cart: SmCart.empty.add('p1', 1000), address: const {}, slotId: 's1', day: 'today');
-      expect(old.containsKey('gift') || old.containsKey('deliveryDate') || old.containsKey('useIncentive'), isFalse);
+      expect(old.containsKey('gift') || old.containsKey('deliveryDate'), isFalse);
+      expect(old['useIncentive'], isTrue);
     });
   });
 

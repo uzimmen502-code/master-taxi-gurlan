@@ -1,0 +1,114 @@
+{
+  "_note": "PROPOSED (эга 2026-11-26): саватлар таркиби ва миқдорлари — таклиф, админ панелда ўзгартирилади. Ҳайит санаси (ой тақвими) — админ киритади; рўйхат бўш = эслатма йўқ. Ҳаммаси stage=off.",
+  "occasions": [
+    { "id": "birthday", "kind": "birthday", "order": 1, "stage": "off", "remindDaysBefore": 5,
+      "names": { "uz_Cyrl": "Туғилган кун", "uz_Latn": "Tuğilgan kun", "ru": "День рождения" } },
+    { "id": "navruz", "kind": "holiday", "order": 2, "stage": "off", "bigHoliday": false, "remindDaysBefore": 5,
+      "dateRule": { "type": "fixed", "md": "03-21" },
+      "names": { "uz_Cyrl": "Наврўз", "uz_Latn": "Navröz", "ru": "Навруз" } },
+    { "id": "hayit_ramazon", "kind": "holiday", "order": 3, "stage": "off", "bigHoliday": false, "remindDaysBefore": 5,
+      "dateRule": { "type": "list", "dates": [] },
+      "names": { "uz_Cyrl": "Рамазон ҳайити", "uz_Latn": "Ramazon hayiti", "ru": "Рамазан хайит" } },
+    { "id": "new_year", "kind": "holiday", "order": 4, "stage": "off", "bigHoliday": true, "remindDaysBefore": 10,
+      "dateRule": { "type": "fixed", "md": "01-01" },
+      "names": { "uz_Cyrl": "Янги йил", "uz_Latn": "Yangi yil", "ru": "Новый год" } }
+  ],
+  "baskets": [
+    { "id": "birthday_simple", "occasionId": "birthday", "tier": "simple", "baseGuests": 10, "active": true,
+      "names": { "uz_Cyrl": "Оддий", "uz_Latn": "Oddiy", "ru": "Простая" },
+      "items": [
+        { "groupId": "soda", "qty": 4, "priority": 3 }, { "groupId": "fruit_juice", "qty": 3, "priority": 4 },
+        { "groupId": "apple", "qty": 2, "priority": 2 }, { "groupId": "banana", "qty": 2, "priority": 4 },
+        { "groupId": "bread", "qty": 5, "priority": 1 }, { "groupId": "black_tea", "qty": 1, "priority": 2 } ] },
+    { "id": "birthday_medium", "occasionId": "birthday", "tier": "medium", "baseGuests": 10, "active": true,
+      "names": { "uz_Cyrl": "Ўрта", "uz_Latn": "Örta", "ru": "Средняя" },
+      "items": [
+        { "groupId": "chicken", "qty": 2, "priority": 1 }, { "groupId": "rice", "qty": 2, "priority": 1 },
+        { "groupId": "tomato", "qty": 1.5, "priority": 3 }, { "groupId": "cucumber", "qty": 1.5, "priority": 3 },
+        { "groupId": "soda", "qty": 5, "priority": 4 }, { "groupId": "fruit_juice", "qty": 4, "priority": 5 },
+        { "groupId": "apple", "qty": 2, "priority": 3 }, { "groupId": "grape", "qty": 1.5, "priority": 6 },
+        { "groupId": "ice_cream", "qtyPerGuest": 1, "qty": 10, "priority": 6 }, { "groupId": "bread", "qty": 6, "priority": 1 } ] },
+    { "id": "birthday_large", "occasionId": "birthday", "tier": "large", "baseGuests": 10, "active": true,
+      "names": { "uz_Cyrl": "Катта", "uz_Latn": "Katta", "ru": "Большая" },
+      "items": [
+        { "groupId": "beef", "qty": 3, "priority": 1 }, { "groupId": "rice", "qty": 3, "priority": 1 },
+        { "groupId": "carrot", "qty": 3, "priority": 1 }, { "groupId": "onion", "qty": 1, "priority": 2 },
+        { "groupId": "cottonseed_oil", "qty": 1, "priority": 1 }, { "groupId": "tomato", "qty": 2, "priority": 3 },
+        { "groupId": "cucumber", "qty": 2, "priority": 3 }, { "groupId": "cheese", "qty": 0.5, "priority": 6 },
+        { "groupId": "sausage", "qty": 1, "priority": 6 }, { "groupId": "soda", "qty": 6, "priority": 4 },
+        { "groupId": "fruit_juice", "qty": 5, "priority": 5 }, { "groupId": "grape", "qty": 2, "priority": 5 },
+        { "groupId": "banana", "qty": 2, "priority": 5 }, { "groupId": "ice_cream", "qtyPerGuest": 1, "qty": 10, "priority": 7 },
+        { "groupId": "bread", "qty": 8, "priority": 1 } ] },
+
+    { "id": "navruz_simple", "occasionId": "navruz", "tier": "simple", "baseGuests": 10, "active": true,
+      "names": { "uz_Cyrl": "Оддий", "uz_Latn": "Oddiy", "ru": "Простая" },
+      "items": [
+        { "groupId": "flour", "qty": 3, "priority": 1 }, { "groupId": "greens", "qty": 4, "priority": 1 },
+        { "groupId": "sunflower_oil", "qty": 1, "priority": 2 }, { "groupId": "chicken_eggs", "qty": 2, "priority": 3 },
+        { "groupId": "green_tea", "qty": 1, "priority": 4 } ] },
+    { "id": "navruz_medium", "occasionId": "navruz", "tier": "medium", "baseGuests": 10, "active": true,
+      "names": { "uz_Cyrl": "Ўрта", "uz_Latn": "Örta", "ru": "Средняя" },
+      "items": [
+        { "groupId": "flour", "qty": 4, "priority": 1 }, { "groupId": "greens", "qty": 6, "priority": 1 },
+        { "groupId": "sunflower_oil", "qty": 2, "priority": 2 }, { "groupId": "chicken_eggs", "qty": 3, "priority": 3 },
+        { "groupId": "mutton", "qty": 2, "priority": 2 }, { "groupId": "onion", "qty": 2, "priority": 3 },
+        { "groupId": "green_tea", "qty": 2, "priority": 5 }, { "groupId": "apple", "qty": 2, "priority": 6 } ] },
+    { "id": "navruz_large", "occasionId": "navruz", "tier": "large", "baseGuests": 10, "active": true,
+      "names": { "uz_Cyrl": "Катта", "uz_Latn": "Katta", "ru": "Большая" },
+      "items": [
+        { "groupId": "flour", "qty": 5, "priority": 1 }, { "groupId": "greens", "qty": 8, "priority": 1 },
+        { "groupId": "sunflower_oil", "qty": 2, "priority": 2 }, { "groupId": "chicken_eggs", "qty": 4, "priority": 3 },
+        { "groupId": "mutton", "qty": 3, "priority": 2 }, { "groupId": "rice", "qty": 3, "priority": 2 },
+        { "groupId": "carrot", "qty": 3, "priority": 2 }, { "groupId": "onion", "qty": 2, "priority": 3 },
+        { "groupId": "green_tea", "qty": 2, "priority": 5 }, { "groupId": "apple", "qty": 3, "priority": 6 },
+        { "groupId": "sugar", "qty": 2, "priority": 6 } ] },
+
+    { "id": "hayit_ramazon_simple", "occasionId": "hayit_ramazon", "tier": "simple", "baseGuests": 10, "active": true,
+      "names": { "uz_Cyrl": "Оддий", "uz_Latn": "Oddiy", "ru": "Простая" },
+      "items": [
+        { "groupId": "flour", "qty": 3, "priority": 1 }, { "groupId": "sugar", "qty": 2, "priority": 2 },
+        { "groupId": "butter", "qty": 2, "priority": 2 }, { "groupId": "cottonseed_oil", "qty": 1, "priority": 2 },
+        { "groupId": "green_tea", "qty": 1, "priority": 3 } ] },
+    { "id": "hayit_ramazon_medium", "occasionId": "hayit_ramazon", "tier": "medium", "baseGuests": 10, "active": true,
+      "names": { "uz_Cyrl": "Ўрта", "uz_Latn": "Örta", "ru": "Средняя" },
+      "items": [
+        { "groupId": "flour", "qty": 4, "priority": 1 }, { "groupId": "sugar", "qty": 2, "priority": 2 },
+        { "groupId": "butter", "qty": 3, "priority": 2 }, { "groupId": "cottonseed_oil", "qty": 2, "priority": 2 },
+        { "groupId": "beef", "qty": 2, "priority": 1 }, { "groupId": "rice", "qty": 3, "priority": 1 },
+        { "groupId": "carrot", "qty": 3, "priority": 2 }, { "groupId": "green_tea", "qty": 2, "priority": 4 } ] },
+    { "id": "hayit_ramazon_large", "occasionId": "hayit_ramazon", "tier": "large", "baseGuests": 10, "active": true,
+      "names": { "uz_Cyrl": "Катта", "uz_Latn": "Katta", "ru": "Большая" },
+      "items": [
+        { "groupId": "flour", "qty": 5, "priority": 1 }, { "groupId": "sugar", "qty": 3, "priority": 2 },
+        { "groupId": "butter", "qty": 4, "priority": 2 }, { "groupId": "cottonseed_oil", "qty": 3, "priority": 2 },
+        { "groupId": "beef", "qty": 3, "priority": 1 }, { "groupId": "mutton", "qty": 2, "priority": 3 },
+        { "groupId": "rice", "qty": 4, "priority": 1 }, { "groupId": "carrot", "qty": 4, "priority": 2 },
+        { "groupId": "onion", "qty": 2, "priority": 2 }, { "groupId": "green_tea", "qty": 2, "priority": 4 },
+        { "groupId": "grape", "qty": 2, "priority": 6 }, { "groupId": "pomegranate", "qty": 2, "priority": 6 } ] },
+
+    { "id": "new_year_simple", "occasionId": "new_year", "tier": "simple", "baseGuests": 10, "active": true,
+      "names": { "uz_Cyrl": "Оддий", "uz_Latn": "Oddiy", "ru": "Простая" },
+      "items": [
+        { "groupId": "mandarin", "qty": 3, "priority": 1 }, { "groupId": "orange", "qty": 2, "priority": 3 },
+        { "groupId": "soda", "qty": 4, "priority": 2 }, { "groupId": "fruit_juice", "qty": 3, "priority": 3 },
+        { "groupId": "bread", "qty": 4, "priority": 1 } ] },
+    { "id": "new_year_medium", "occasionId": "new_year", "tier": "medium", "baseGuests": 10, "active": true,
+      "names": { "uz_Cyrl": "Ўрта", "uz_Latn": "Örta", "ru": "Средняя" },
+      "items": [
+        { "groupId": "chicken", "qty": 3, "priority": 1 }, { "groupId": "potato", "qty": 3, "priority": 2 },
+        { "groupId": "mandarin", "qty": 3, "priority": 1 }, { "groupId": "orange", "qty": 2, "priority": 4 },
+        { "groupId": "sausage", "qty": 1, "priority": 3 }, { "groupId": "cheese", "qty": 0.5, "priority": 4 },
+        { "groupId": "soda", "qty": 5, "priority": 3 }, { "groupId": "fruit_juice", "qty": 4, "priority": 4 },
+        { "groupId": "bread", "qty": 5, "priority": 1 } ] },
+    { "id": "new_year_large", "occasionId": "new_year", "tier": "large", "baseGuests": 10, "active": true,
+      "names": { "uz_Cyrl": "Катта", "uz_Latn": "Katta", "ru": "Большая" },
+      "items": [
+        { "groupId": "chicken", "qty": 4, "priority": 1 }, { "groupId": "beef", "qty": 2, "priority": 2 },
+        { "groupId": "potato", "qty": 4, "priority": 2 }, { "groupId": "carrot", "qty": 2, "priority": 3 },
+        { "groupId": "chicken_eggs", "qty": 2, "priority": 3 }, { "groupId": "cucumber", "qty": 2, "priority": 3 },
+        { "groupId": "mandarin", "qty": 4, "priority": 1 }, { "groupId": "orange", "qty": 3, "priority": 4 },
+        { "groupId": "grape", "qty": 2, "priority": 5 }, { "groupId": "sausage", "qty": 2, "priority": 4 },
+        { "groupId": "cheese", "qty": 1, "priority": 4 }, { "groupId": "soda", "qty": 6, "priority": 3 },
+        { "groupId": "fruit_juice", "qty": 5, "priority": 4 }, { "groupId": "bread", "qty": 6, "priority": 1 } ] }
+  ]
+}

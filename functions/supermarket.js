@@ -27,6 +27,11 @@
 
 const { buildSearchTokens } = require('./market_search_tokens');
 const { normalizeLang, langOfPhone } = require('./notif_i18n');
+// Мавжуд рағбат тизими (feat/incentives-srv e0985429 — жонли нусха; бу ердан фақат тоза/tx ёрдамчилар ишлатилади).
+const incentivesLib = require('./incentives');
+// Байрам саватчаси (эга 2026-11-26) — holiday.js бу модулни талаб қилади, шунинг учун кеч юкланади (айланма require йўқ).
+let holidayMod = null;
+const hol = () => holidayMod || (holidayMod = require('./holiday'));
 
 const MODULE = 'supermarket';
 const TAXONOMY_DOC = ['taxonomy', 'supermarket'];
@@ -76,7 +81,8 @@ const UNITS = Object.freeze(['kg', 'l', 'piece', 'pack', 'bunch']);
 const STAGES = Object.freeze(['off', 'internal', 'pilot', 'public']);
 const SM_STATUSES = Object.freeze(['active', 'out_of_stock', 'hidden']);
 const DAYS = Object.freeze(['today', 'tomorrow']);
-const ORDER_ORIGINS = Object.freeze(['catalog', 'quick', 'weekly', 'reorder']); // 3-босқич (эга 2026-11-21)
+// 3-босқич (эга 2026-11-21); 'holiday' — туғилган кун/байрам саватчаси (эга 2026-11-26).
+const ORDER_ORIGINS = Object.freeze(['catalog', 'quick', 'weekly', 'reorder', 'holiday']);
 const TARIFF_VERSION = 'sm-v1'; // формула: каталог нархи × миқдор + settings/app % + тортиш ушлаб туриши
 const TZ_OFFSET_MS = 5 * 3600000; // Asia/Tashkent
 const DAY_MS = 86400000;
@@ -798,6 +804,8 @@ function listShapeProblem(d) {
     if (q == null || q <= 0 || q > LIMITS.qtyMilliMax) return 'ITEM_INVALID';
   }
   if (!remindOk(x.remind)) return 'REMIND_INVALID';
+  // Байрам саватчаси (эга 2026-11-26): ихтиёрий holiday_occasions id.
+  if (x.occasionId != null && (typeof x.occasionId !== 'string' || !ID_RE.test(x.occasionId))) return 'OCCASION_INVALID';
   return '';
 }
 
@@ -980,6 +988,14 @@ function attachSupermarket(exportsObj, deps) {
       ...(g.allowed && !feeConfig ? { allowed: false, reason: 'TARIFF_NOT_CONFIGURED', messages: messagesOf('TARIFF_NOT_CONFIGURED') } : {}),
       weighHoldPercent: settings && Number.isInteger(settings.weighHoldPercent) ? settings.weighHoldPercent : 10,
       tariffVersion: TARIFF_VERSION,
+      // Байрам/совға (эга 2026-11-26): withDates=true бўлса — бугундан +14 кунгача санага оралиқлар.
+      ...(data && data.withDates === true && g.allowed ? {
+        maxAheadDays: hol().MAX_AHEAD_DAYS,
+        dateSlots: Array.from({ length: hol().MAX_AHEAD_DAYS + 1 }, (_, i) => {
+          const date = hol().addDays(tashkentParts(now()).dateKey, i);
+          return { date, slots: hol().slotsForDate(settings, now(), date) };
+        }).filter((x) => x.slots.length),
+      } : {}),
     };
   });
 
@@ -1144,12 +1160,27 @@ function attachSupermarket(exportsObj, deps) {
     if (parsed.code) throw fail('invalid-argument', parsed.code, parsed.productId ? { productId: parsed.productId } : {});
     const address = parseAddress(d.address);
     if (!address) throw fail('invalid-argument', 'INVALID_REQUEST', { field: 'address' });
-    const day = String(d.day || '');
+    // Сана: эски клиент — day ('today'|'tomorrow'); янги — deliveryDate 'YYYY-MM-DD' (бугун..+14 кун, эга 2026-11-26).
+    const deliveryDate = d.deliveryDate == null ? null : String(d.deliveryDate);
+    const day = deliveryDate == null ? String(d.day || '') : '';
     const slotId = String(d.slotId || '');
-    if (!DAYS.includes(day) || !SLOT_ID_RE.test(slotId)) throw fail('invalid-argument', 'INVALID_REQUEST', { field: 'slot' });
+    if ((deliveryDate == null ? !DAYS.includes(day) : !hol().validDateKey(deliveryDate)) || !SLOT_ID_RE.test(slotId)) {
+      throw fail('invalid-argument', 'INVALID_REQUEST', { field: 'slot' });
+    }
     // 3-босқич: буюртма манбаи (аналитика учун; эски клиент юбормайди → 'catalog').
     const origin = d.origin == null ? 'catalog' : d.origin;
     if (!ORDER_ORIGINS.includes(origin)) throw fail('invalid-argument', 'INVALID_REQUEST', { field: 'origin' });
+    const occasionId = d.occasionId == null ? null : d.occasionId;
+    const basketId = d.basketId == null ? null : d.basketId;
+    if ((occasionId != null && (typeof occasionId !== 'string' || !ID_RE.test(occasionId)))
+        || (basketId != null && (typeof basketId !== 'string' || !ID_RE.test(basketId)))) {
+      throw fail('invalid-argument', 'INVALID_REQUEST', { field: 'occasion' });
+    }
+    // Совға (эга 2026-11-26): олувчи исми/телефони/хабар; нарх олувчига кўрсатилмайди (hidePrice).
+    const giftParsed = hol().parseGift(d.gift, canonicalUid);
+    if (giftParsed.code) throw fail('invalid-argument', 'INVALID_REQUEST', { field: 'gift' });
+    const gift = giftParsed.gift;
+    const useIncentive = d.useIncentive === true;
 
     const { settings, feeConfig, user } = await loadGateContext(uid);
     if (!user) throw fail('not-found', 'USER_NOT_FOUND');
@@ -1159,8 +1190,11 @@ function attachSupermarket(exportsObj, deps) {
       log({ action: 'placeSupermarketOrder', result: 'refused', errorCode: gate.reason, userTail: uid.slice(-4) });
       throw fail('failed-precondition', gate.reason);
     }
-    const slot = (availableSlots(settings, now())[day] || []).find((s) => s.id === slotId);
+    const slotList = deliveryDate == null ? (availableSlots(settings, now())[day] || []) : hol().slotsForDate(settings, now(), deliveryDate);
+    const slot = slotList.find((s) => s.id === slotId);
     if (!slot) throw fail('failed-precondition', 'SLOT_UNAVAILABLE');
+    const aheadDays = hol().daysBetween(tashkentParts(now()).dateKey, slot.date);
+    const slotDay = DAYS[aheadDays] || 'scheduled';
     const weighHoldPercent = Number.isInteger(settings.weighHoldPercent) ? settings.weighHoldPercent : 10;
     if (!feeConfig) {
       console.error(JSON.stringify({ module: MODULE, action: 'placeSupermarketOrder', result: 'denied', errorCode: 'TARIFF_NOT_CONFIGURED' }));
@@ -1184,25 +1218,40 @@ function attachSupermarket(exportsObj, deps) {
         const userSnap = await t.get(userRef);
         const priced = priceSupermarketOrder({ items: parsed.items, products, feeBp, weighHoldPercent });
         if (!priced.ok) throw fail('failed-precondition', priced.code, priced.details);
+        // Рағбат (қариндошлар бонуси, эга 2026-11-26): фақат `supermarket` туркумли грантлар, minOrderAmount ≤ goods,
+        // фақат маҳсулот суммасидан (етказиш ҳақи — ҳамёндан). Мавжуд рағбат тизимининг computeIncentivePlan'и.
+        // Грант фақат канон users/998… ҳужжатига берилади (claimIncentive билан бир хил) — эски 9 хонали ҳисобда йўқ.
+        let incentiveGrants = [];
+        let plan = { total: 0, perGrant: [] };
+        if (useIncentive && userRef.id === uid) {
+          const gSnap = await t.get(db.collection('incentive_grants').where('uid', '==', uid).where('status', '==', 'active'));
+          incentiveGrants = hol().supermarketGrants(gSnap.docs, priced.goods);
+          plan = incentivesLib.computeIncentivePlan(incentiveGrants, [{ category: hol().BONUS_BUCKET, total: priced.goods }], now());
+        }
+        const incentiveApplied = plan.total;
+        const walletDebit = priced.hold - incentiveApplied;
         const balance = parseInt(String((userSnap.data() || {}).bonusBalance ?? 0), 10) || 0;
-        if (balance < priced.hold) throw fail('failed-precondition', 'INSUFFICIENT_BALANCE', { required: priced.hold, balance });
+        if (balance < walletDebit) throw fail('failed-precondition', 'INSUFFICIENT_BALANCE', { required: walletDebit, balance });
         const bonusCtx = await settlementLedger.prepareBonusInTx(t, db, userRef.id, { idempotencyKey: `sm_order_${orderRef.id}` });
 
         // ── ёзишлар ──
         priced.stockOps.forEach((op, i) => {
           t.update(refs[i], { stock: fromMilli(op.newStockMilli), ...(op.newStockMilli === 0 ? { smStatus: 'out_of_stock', smAutoOutOfStock: true } : {}) });
         });
-        t.set(userRef, { bonusBalance: balance - priced.hold, balanceUpdatedAt: ts() }, { merge: true });
-        settlementLedger.commitBonusInTx(t, bonusCtx, {
-          delta: -priced.hold, kind: 'order_wallet', refType: 'order', refId: orderRef.id,
-          meta: { module: 'platform', subtype: 'supermarket', orderTotal: priced.hold, walletDebit: priced.hold, cashDue: 0 },
-          postedBy: userRef.id, postedRole: 'client',
-        });
-        t.set(userRef.collection('wallet_ledger').doc(), {
-          type: 'purchase_debit', amount: -priced.hold, module: 'platform', refType: 'order', refId: orderRef.id,
-          meta: { orderTotal: priced.hold, cashDue: 0, subtype: 'supermarket', weighHold: priced.extras },
-          createdAt: ts(), createdBy: 'client',
-        });
+        if (walletDebit > 0) {
+          t.set(userRef, { bonusBalance: balance - walletDebit, balanceUpdatedAt: ts() }, { merge: true });
+          settlementLedger.commitBonusInTx(t, bonusCtx, {
+            delta: -walletDebit, kind: 'order_wallet', refType: 'order', refId: orderRef.id,
+            meta: { module: 'platform', subtype: 'supermarket', orderTotal: walletDebit, walletDebit, cashDue: 0, ...(incentiveApplied > 0 ? { incentiveApplied, grossTotal: priced.hold } : {}) },
+            postedBy: userRef.id, postedRole: 'client',
+          });
+          t.set(userRef.collection('wallet_ledger').doc(), {
+            type: 'purchase_debit', amount: -walletDebit, module: 'platform', refType: 'order', refId: orderRef.id,
+            meta: { orderTotal: walletDebit, cashDue: 0, subtype: 'supermarket', weighHold: priced.extras, ...(incentiveApplied > 0 ? { incentiveApplied } : {}) },
+            createdAt: ts(), createdBy: 'client',
+          });
+        }
+        if (incentiveApplied > 0) incentivesLib.applyIncentiveSpendInTx(t, db, admin, { uid, grants: incentiveGrants, plan, orderId: orderRef.id });
         const addrText = [address.mahalla, address.street, address.house, address.landmark].filter(Boolean).join(', ');
         const order = {
           type: 'platform',
@@ -1210,7 +1259,8 @@ function attachSupermarket(exportsObj, deps) {
           userName: String(user.data.name || user.data.fullName || '').trim().slice(0, 80),
           userPhone: uid,
           phone: uid,
-          contactPhone: address.phone,
+          // Совғада — олувчи телефони (курьер мавжуд қоида бўйича буюртмадан ўқийди; харидор ўзи киритган).
+          contactPhone: gift ? gift.recipientPhone : address.phone,
           address: addrText.slice(0, 300),
           addressParts: address,
           districtId: address.districtId,
@@ -1225,8 +1275,8 @@ function attachSupermarket(exportsObj, deps) {
           weighHold: priced.extras,
           smHold: priced.hold,
           tariffVersion: TARIFF_VERSION,
-          total: priced.hold,
-          balanceApplied: priced.hold,
+          total: walletDebit,
+          balanceApplied: walletDebit,
           walletUserDocId: userRef.id,
           cashDue: 0,
           cashPaid: 0,
@@ -1234,18 +1284,29 @@ function attachSupermarket(exportsObj, deps) {
           fulfillmentStatus: 'pending',
           paymentStatus: 'paid',
           paymentMethod: 'wallet',
-          paidAmount: priced.hold,
+          paidAmount: walletDebit,
           paidAt: ts(),
           fulfillmentMode: 'delivery',
-          slot: { id: slot.id, day, date: slot.date, startMin: slot.startMin, endMin: slot.endMin, names: slot.names },
+          slot: { id: slot.id, day: slotDay, date: slot.date, startMin: slot.startMin, endMin: slot.endMin, names: slot.names },
           smClientRequestId: clientRequestId,
           smOrigin: origin,
+          ...(occasionId ? { smOccasionId: occasionId } : {}),
+          ...(basketId ? { smBasketId: basketId } : {}),
           smAdjustSeq: 0,
           smWeighPending: priced.lines.some((l) => l.weighed),
           createdAt: ts(),
           statusUpdatedAt: ts(),
         };
         if (address.lat != null) { order.lat = address.lat; order.lng = address.lng; }
+        if (incentiveApplied > 0) {
+          // Мавжуд рағбат майдонлари (placeOrderPostPaid билан бир хил): бекор қилишда грант тикланади.
+          Object.assign(order, { grossTotal: priced.hold, incentiveApplied, incentiveUid: uid, incentiveGrants: plan.perGrant });
+        }
+        if (gift) {
+          order.gift = gift;
+          // PII тозалаш (smGiftPiiSweep): етказиш санасидан кейин кўрилади, етказилгандан 7 кун ўтгач — тозаланади.
+          order.giftPurgeAfter = admin.firestore.Timestamp.fromMillis(hol().startOfKeyMs(slot.date) + (hol().GIFT_PURGE_DAYS + 1) * DAY_MS);
+        }
         t.set(orderRef, order);
         // Курьер тўлови нусхаси (эга 2026-11-26) — ИЧКИ харажат (14-банд): мижоз ўқийдиган буюртма ҳужжатида эмас,
         // orders/{id}/private/courier_payout (фақат админ ўқийди, ёзиш фақат CF). Пул тизимда ЮРМАЙДИ.
@@ -1254,8 +1315,10 @@ function attachSupermarket(exportsObj, deps) {
         });
         const result = {
           ok: true, orderId: orderRef.id, itemsTotal: priced.goods, weighHold: priced.extras,
-          deliveryFee: priced.fee, deliveryFeePercent: feePercent, deliveryFeeVersion: feeConfig.version, total: priced.hold, walletDebit: priced.hold,
-          paymentStatus: 'paid', tariffVersion: TARIFF_VERSION,
+          deliveryFee: priced.fee, deliveryFeePercent: feePercent, deliveryFeeVersion: feeConfig.version, total: walletDebit, walletDebit,
+          paymentStatus: 'paid', tariffVersion: TARIFF_VERSION, slotDate: slot.date,
+          ...(incentiveApplied > 0 ? { grossTotal: priced.hold, incentiveApplied } : {}),
+          ...(gift ? { gift: true } : {}),
         };
         t.set(idemRef, { type: 'placeSupermarketOrder', result, createdAt: ts() });
         return result;
@@ -1264,12 +1327,32 @@ function attachSupermarket(exportsObj, deps) {
       rethrow(e, 'placeSupermarketOrder', { userTail: uid.slice(-4), items: parsed.items.length, duration: Date.now() - started });
     }
     if (dup) return { ...dup, duplicate: true };
+    let giftNotified = false;
+    if (gift) giftNotified = await notifyGiftRecipient(gift, uid, slot.date);
     log({
       action: 'placeSupermarketOrder', result: 'ok', orderId: out.orderId, userTail: uid.slice(-4),
-      items: parsed.items.length, total: out.total, duration: Date.now() - started,
+      items: parsed.items.length, total: out.total, incentive: out.incentiveApplied || 0, gift: !!gift, giftNotified, duration: Date.now() - started,
     });
     return out;
   });
+
+  /** Совға олувчи AVA фойдаланувчиси бўлса — нархсиз ички хабар (best-effort; харидорнинг ўзи бўлса — йўқ). */
+  async function notifyGiftRecipient(gift, buyerUid, date) {
+    if (!gift || gift.recipientPhone === buyerUid) return false;
+    try {
+      const u = await userDocRef(gift.recipientPhone);
+      if (!u) return false;
+      const m = hol().GIFT_TEXT[normalizeLang(u.data.appLang)] || hol().GIFT_TEXT.uz_Cyrl;
+      await notifyUserInApp({
+        userId: gift.recipientPhone, title: m.title, body: m.body.replace('{date}', date), category: 'order', screen: 'home',
+        source: 'sm_gift_received', dataType: 'sm_gift_received',
+      });
+      return true;
+    } catch (e) {
+      log({ action: 'notifyGiftRecipient', result: 'notify_error', errorCode: 'NOTIFY_FAILED' });
+      return false;
+    }
+  }
 
   // ── 5. Тортиш / қаторни олиш (admin) ──
   const ADJUSTABLE_STATUSES = new Set(['new', 'accepted', 'ready']);
@@ -1316,7 +1399,15 @@ function attachSupermarket(exportsObj, deps) {
       const charged = Math.max(0, Math.trunc(Number(od.balanceApplied || 0)));
       const bp = feeBpOf(od.deliveryFeePercent);
       const c = computeCharge(m.lines, bp);
-      const adj = chargeAfter(charged, lines, m.lines, bp, m.pricing || 'cap');
+      // Рағбат (эга 2026-11-26): ҳисоб брутто бўйича (ҳамён + рағбат), рағбат суммаси ўзгармайди; ҳамёндан фақат нетто.
+      // Брутто мақсад рағбатдан кам бўлса — ҳамён 0, рағбат ортиғи нақдга АЙЛАНМАЙДИ (ҳамёнга қайтмайди).
+      const incApplied = Number.isSafeInteger(od.incentiveApplied) && od.incentiveApplied > 0 ? od.incentiveApplied : 0;
+      const adjGross = chargeAfter(charged + incApplied, lines, m.lines, bp, m.pricing || 'cap');
+      const netNext = Math.max(0, adjGross.next - incApplied);
+      const adj = {
+        next: netNext, refund: Math.max(0, charged - netNext), debit: Math.max(0, netNext - charged),
+        capDiscount: adjGross.capDiscount, gross: adjGross.next,
+      };
       const seq = (Number.isInteger(od.smAdjustSeq) ? od.smAdjustSeq : 0) + 1;
       const walletDocId = String(od.walletUserDocId || '').trim();
       const moves = adj.refund > 0 || adj.debit > 0;
@@ -1361,8 +1452,9 @@ function attachSupermarket(exportsObj, deps) {
       }
       const weighPending = m.lines.some((l) => !l.removed && l.weighed && l.actualQty == null);
       const extrasLeft = c.extras;
-      const feeShown = Math.max(0, adj.next - c.goods - extrasLeft);
+      const feeShown = Math.max(0, adj.gross - c.goods - extrasLeft);
       t.update(orderRef, {
+        ...(incApplied > 0 ? { grossTotal: adj.gross } : {}),
         items: m.lines,
         itemsTotal: c.goods,
         weighHold: extrasLeft,
@@ -1659,6 +1751,10 @@ function attachSupermarket(exportsObj, deps) {
         const pids = Object.keys(deltas);
         const refs = pids.map((p) => db.collection(PRODUCTS).doc(p));
         const snaps = await Promise.all(refs.map((r) => t.get(r)));
+        // Рағбат гранти тикланади (эга 2026-11-26). Идемпотент: incentive_ledger/refund_{orderId}_{grantId} —
+        // мавжуд бекор қилиш йўли (adminSetOrderStatus/customerCancelOrder) аввал тиклаган бўлса — ўтказиб юборилади.
+        const incCtx = await incentivesLib.prepareIncentiveRefundInTx(t, db, orderId, od);
+        incentivesLib.commitIncentiveRefundInTx(t, db, admin, incCtx, { actor: 'system:onSupermarketOrderCancelStock', nowMs: now() });
         snaps.forEach((s, i) => {
           if (!s.exists) return;
           const cur = toMilli(Number((s.data() || {}).stock)) || 0;

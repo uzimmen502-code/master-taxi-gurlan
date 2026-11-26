@@ -121,6 +121,10 @@ attachSupermarketImport(exports, { functions, db, admin, smApi: supermarketApi }
 // «AVA Супермаркет» 3-босқич (эга 2026-11-21): фақат ҳисоботлар — харид режаси + кунлик статистика (тизим ҳеч нарса сотиб олмайди).
 const { attachSupermarketReports } = require('./supermarket_reports');
 attachSupermarketReports(exports, { functions, db, admin, requireCallerRoles });
+// «Туғилган кун ва байрам саватчаси» (эга 2026-11-26): holiday_occasions/holiday_baskets (админ), ақлли сават, эслатмалар
+// (қариндошлар туғилган кунлари + байрамлар), совға PII тозалаш, қариндошлар бонуси (мавжуд рағбат тизими). Фақат ЯНГИ функциялар.
+const { attachHoliday } = require('./holiday');
+attachHoliday(exports, { functions, db, admin, callerPhone, canonicalUid, requireCallerRoles, notifyUserInApp });
 // Админ ўчириши (2026-10-19; торайтирилди 2026-10-20): ҳақиқий ўчириш фақат superadmin — support_chat (шахсий маълумот талаби) ва
 // 365 кундан эски resolved risk_event; admin_news — қайтариб олинади, чат — архивга олинади. Ҳаммаси callable, audit билан (§41).
 const { attachAdminDeleteRecord } = require('./admin_delete_record');

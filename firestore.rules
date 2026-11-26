@@ -1049,19 +1049,32 @@ service cloud.firestore {
               && d.remind.enabled is bool
               && d.remind.weekday is int && d.remind.weekday >= 1 && d.remind.weekday <= 7
               && d.remind.minute is int && d.remind.minute >= 0 && d.remind.minute <= 1439
+              && (!('occasionId' in d) || (d.occasionId is string && d.occasionId.matches('^[a-z][a-z0-9_]{1,39}$')))
               && d.updatedAt == request.time;
         }
         allow read, delete: if isOwner(userId);
         allow create: if isOwner(userId) && listId.matches('^[A-Za-z0-9_-]{1,40}$')
             && request.resource.data.keys().hasAll(['name', 'items', 'remind', 'createdAt', 'updatedAt'])
-            && request.resource.data.keys().hasOnly(['name', 'items', 'remind', 'createdAt', 'updatedAt'])
+            && request.resource.data.keys().hasOnly(['name', 'items', 'remind', 'occasionId', 'createdAt', 'updatedAt'])
             && request.resource.data.createdAt == request.time
             && smListOk(request.resource.data);
         allow update: if isOwner(userId)
             && request.resource.data.diff(resource.data).affectedKeys()
-                 .hasOnly(['name', 'items', 'remind', 'updatedAt'])
+                 .hasOnly(['name', 'items', 'remind', 'occasionId', 'updatedAt'])
             && smListOk(request.resource.data);
       }
+    }
+
+    // Туғилган кун ва байрам саватчаси (эга 2026-11-26): ёзиш фақат CF (adminUpsertHolidayOccasion/Basket, admin_audit).
+    // `visible` — сервер ҳисоблайди (байрам public + сават active). internal тестерлар — getHolidayCatalog орқали.
+    // holiday_birthday_index / holiday_reminder_log / holiday_reminder_runs — қоида йўқ = ёпиқ (фақат CF).
+    match /holiday_occasions/{id} {
+      allow read: if isAdmin() || (isAuth() && resource.data.visible == true);
+      allow write: if false;
+    }
+    match /holiday_baskets/{id} {
+      allow read: if isAdmin() || (isAuth() && resource.data.visible == true);
+      allow write: if false;
     }
 
     // USERS / driverProfiles — маршрут рўйхатдан ўтиш (подколлекция)

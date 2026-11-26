@@ -18,6 +18,7 @@ import 'package:ava_gurlan/features/supermarket/screens/sm_basket_screen.dart';
 import 'package:ava_gurlan/features/supermarket/screens/sm_holiday_screen.dart' show holidayBasketCheckout;
 import 'package:ava_gurlan/features/supermarket/screens/sm_weekly_screen.dart';
 import 'package:ava_gurlan/features/supermarket/supermarket_controller.dart';
+import 'package:ava_gurlan/models/order_model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -142,8 +143,10 @@ void main() {
     void Function(BuildContext, SmHolidayCheckout)? onCheckout,
     SmBasketBirthdaysLoader? birthdays,
     String? openListId,
+    SmOrdersLoader? orders,
   }) =>
       SmBasketScreen(
+        ordersLoader: orders ?? () async => const [],
         controller: c,
         store: store,
         birthdays: birthdays ?? _noBirthdays,
@@ -523,6 +526,64 @@ void main() {
     });
   });
 
+  // ─── «Олдин олганларингиз» ─────────────────────────────────────────────────
+  group('Олдин олганларингиз', () {
+    SmOrderLineRef line(String id, String g, num qty, {String v = '', bool removed = false}) =>
+        (productId: id, groupId: g, varietyId: v, price: 1, qtyMilli: (qty * 1000).round(), removed: removed);
+    final now = DateTime(2026, 11, 28);
+    final c = _controller();
+
+    test('тез-тезлик + янгилик бўйича; охирги миқдор; бекор/олиб ташланган ҳисобланмайди; ≤12', () {
+      final orders = <SmPastOrder>[
+        (at: DateTime(2026, 11, 1), status: 'delivered', lines: [line('p1', 'potato', 2), line('cake1', 'cake', 1)]),
+        (at: DateTime(2026, 11, 20), status: 'delivered', lines: [line('p1', 'potato', 3), line('m1', 'milk', 2, removed: true)]),
+        (at: DateTime(2026, 11, 27), status: 'cancelled', lines: [line('cnd1', 'candies', 1)]),
+        (at: DateTime(2026, 11, 26), status: 'delivered', lines: [line('o_white', 'onion', 1)]),
+      ];
+      final r = smPastPurchases(orders, offers: c.offers, offersByGroup: c.offersByGroup, now: now);
+      expect(r.map((p) => p.offer.id), ['p1', 'o_white', 'cake1']);
+      expect(r.first.qtyMilli, 3000, reason: 'охирги буюртмадаги миқдор');
+      expect(r.first.count, 2);
+      final many = <SmPastOrder>[
+        for (var i = 0; i < 20; i++) (at: now, status: 'delivered', lines: [line('o_white', 'onion', 1), line('p1', 'potato', 1)]),
+      ];
+      expect(smPastPurchases(many, offers: c.offers, offersByGroup: c.offersByGroup, now: now, max: 1), hasLength(1));
+    });
+
+    test('қайта текширув: сотувда йўқ таклиф — шу нав/гуруҳнинг энг арзони; гуруҳда ҳам йўқ — яширилади; қадам/қолдиқ', () {
+      final orders = <SmPastOrder>[
+        (at: now, status: 'delivered', lines: [line('o_red_oos', 'onion', 1.2, v: 'red'), line('gone', 'empty', 1), line('o_red_exp', 'onion', 500, v: 'red')]),
+      ];
+      final r = smPastPurchases(orders, offers: c.offers, offersByGroup: c.offersByGroup, now: now);
+      expect(r.map((p) => p.offer.id).toSet(), {'o_red_exp', 'o_red_cheap'});
+      expect(r.firstWhere((p) => p.offer.id == 'o_red_cheap').qtyMilli, 1000, reason: '0,5 қадамга');
+      expect(r.firstWhere((p) => p.offer.id == 'o_red_exp').qtyMilli, 100000, reason: 'қолдиқ 100 кг');
+      expect(smPastAddQty(c.offers['o_red_exp']!, 99500, 1000), 100000);
+      expect(smPastAddQty(c.offers['o_red_exp']!, 500, 1000), 1500);
+    });
+
+    testWidgets('қатор кўринади; бир босишда охирги миқдор саватчага (такрор — қўшилади); тарих йўқ — қатор йўқ', (t) async {
+      await tall(t);
+      final store = _Store();
+      final c2 = _controller();
+      await t.pumpWidget(_app(screen(c2, store, orders: () async => [
+            OrderModel(id: 'A', type: 'platform', subtype: 'supermarket', total: 1, status: 'delivered', createdAt: DateTime(2026, 11, 20),
+                items: [OrderItem.fromMap({'productId': 'p1', 'groupId': 'potato', 'price': 6000, 'qty': 2, 'name': 'Картошка'})]),
+          ])));
+      await t.pumpAndSettle();
+      expect(_k('smb_past_title'), findsOneWidget);
+      await t.tap(_k('smb_past_p1'));
+      await t.pump();
+      expect(t.widget<Text>(_k('smb_bar_text')).data, '1 · ${_money(12000)}');
+      await t.tap(_k('smb_past_p1'));
+      await t.pump();
+      expect(t.widget<Text>(_k('smb_bar_text')).data, '1 · ${_money(24000)}');
+      await t.pumpWidget(const SizedBox());
+      await t.pumpWidget(_app(screen(_controller(), _Store())));
+      await t.pumpAndSettle();
+      expect(_k('smb_past_title'), findsNothing);
+    });
+  });
   // ─── Эслатмалар йўли ───────────────────────────────────────────────────────
   group('байрам эслатмалари → саватча', () {
     test('basket / меҳмонлар / совға / байрам рўйхати — ҳаммаси саватча; ресторан ва бозор ўзгармаган', () {

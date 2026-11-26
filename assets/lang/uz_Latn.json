@@ -6388,5 +6388,7 @@
   "smb_save": "Saqlaş",
   "smb_save_error": "Savatça saqlanmadi. Internetni tekşiring.",
   "smb_mixed_badge": "{n} xil",
-  "smb_price_note": "Narxlar — joriy; yakuniy summa rasmiylaştirişda."
+  "smb_price_note": "Narxlar — joriy; yakuniy summa rasmiylaştirişda.",
+  "smb_past_title": "Oldin olganlaringiz",
+  "smb_past_last": "Oxirgi: {qty}"
 }

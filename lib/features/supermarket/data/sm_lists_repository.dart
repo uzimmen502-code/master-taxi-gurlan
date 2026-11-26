@@ -126,3 +126,13 @@ Future<List<OrderModel>> loadSupermarketOrders({FirebaseFirestore? db, int limit
   list.sort((a, b) => (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)));
   return list;
 }
+
+List<OrderModel>? _ordersSessionCache;
+
+/// «Олдин олганларингиз» (эга 2026-11-28): [loadSupermarketOrders] — сессияда БИР марта (≤50 ҳужжат, 37-банд).
+/// Хато — кешланмайди (кейинги очишда қайта).
+Future<List<OrderModel>> loadSupermarketOrdersCached() async =>
+    _ordersSessionCache ??= await loadSupermarketOrders();
+
+@visibleForTesting
+void resetSupermarketOrdersCache() => _ordersSessionCache = null;

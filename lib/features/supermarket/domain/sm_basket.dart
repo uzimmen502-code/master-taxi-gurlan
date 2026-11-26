@@ -199,3 +199,64 @@ bool smBasketNeedsConfirm(List<SmCompareLine> lines) =>
 /// Саватчадан сават қаторлари (жорий таклифлар; бир хил таклиф — бирлашади).
 List<SmCartLine> smBasketCartLines(List<SmCompareLine> lines, {Set<int>? selected}) =>
     smCompareToCartLines(lines, selected: selected);
+
+// ─── «Олдин олганларингиз» (эга 2026-11-28) ──────────────────────────────────
+
+/// Бир буюртма (тарихдан): сана, ҳолат, қаторлар ([smOrderLineRefs]).
+typedef SmPastOrder = ({DateTime? at, String status, List<SmOrderLineRef> lines});
+
+/// Плитка: ЖОРИЙ таклиф (қайта текширилган), охирги миқдор (қадам/қолдиққа тўғриланган), неча марта, охирги сана.
+typedef SmPastPick = ({SmOffer offer, int qtyMilli, int count, DateTime? lastAt, int score});
+
+const int kSmPastMax = 12;
+
+/// Ўз буюртмаларидан: таклиф бўйича йиғиш, балл = тез-тезлик × 10 + янгилик (60 кун ичида 0..10). Бекор қилинган
+/// буюртма ва олиб ташланган қатор ҳисобланмайди. Таклиф энди сотувда бўлмаса — шу гуруҳ/навдан энг арзони
+/// ([smCompareItems] қоидаси); гуруҳда ҳам йўқ — плитка кўрсатилмайди. Бир хил жорий таклиф — бирлашади.
+List<SmPastPick> smPastPurchases(
+  Iterable<SmPastOrder> orders, {
+  required Map<String, SmOffer> offers,
+  required Map<String, List<SmOffer>> offersByGroup,
+  required DateTime now,
+  int max = kSmPastMax,
+}) {
+  final agg = <String, ({SmListItem item, int count, DateTime? lastAt})>{};
+  for (final o in orders) {
+    if (o.status.contains('cancel') || o.status == 'rejected') continue;
+    for (final l in o.lines) {
+      if (l.removed || l.productId.isEmpty || l.groupId.isEmpty || l.qtyMilli <= 0) continue;
+      final prev = agg[l.productId];
+      final newer = prev == null || (o.at != null && (prev.lastAt == null || o.at!.isAfter(prev.lastAt!)));
+      agg[l.productId] = (
+        item: newer ? SmListItem(groupId: l.groupId, varietyId: l.varietyId, offerId: l.productId, qtyMilli: l.qtyMilli) : prev.item,
+        count: (prev?.count ?? 0) + 1,
+        lastAt: newer ? o.at : prev.lastAt,
+      );
+    }
+  }
+  final byOffer = <String, SmPastPick>{};
+  for (final a in agg.values) {
+    final line = smCompareItems([a.item], offers: offers, offersByGroup: offersByGroup).single;
+    if (!line.addable) continue;
+    final days = a.lastAt == null ? 999 : now.difference(a.lastAt!).inDays;
+    final recency = days >= 60 ? 0 : ((60 - days) / 6).floor();
+    final pick = (offer: line.offer!, qtyMilli: line.qtyMilli, count: a.count, lastAt: a.lastAt, score: a.count * 10 + recency);
+    final cur = byOffer[pick.offer.id];
+    if (cur == null || pick.score > cur.score) byOffer[pick.offer.id] = pick;
+  }
+  final out = byOffer.values.toList()
+    ..sort((x, y) {
+      final s = y.score.compareTo(x.score);
+      if (s != 0) return s;
+      return (y.lastAt ?? DateTime(0)).compareTo(x.lastAt ?? DateTime(0));
+    });
+  return out.take(max).toList(growable: false);
+}
+
+/// Бир босишда қўшиш: мавжуд миқдор + охирги миқдор, қолдиқдан ошмайди (қадамга).
+int smPastAddQty(SmOffer offer, int existing, int lastQty) {
+  var q = existing + lastQty;
+  final max = offer.maxQtyMilli;
+  if (max != null && q > max) q = (max ~/ offer.stepMilli) * offer.stepMilli;
+  return q;
+}

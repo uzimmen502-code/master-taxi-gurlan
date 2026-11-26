@@ -52,6 +52,7 @@ class SmBasketScreen extends StatefulWidget {
     this.checkout,
     this.openListId,
     this.openCheckout,
+    this.ordersLoader,
     this.saveDelay = const Duration(milliseconds: 700),
   });
 
@@ -72,6 +73,9 @@ class SmBasketScreen extends StatefulWidget {
   final void Function(BuildContext context, SmHolidayCheckout checkout)? openCheckout;
   final Duration saveDelay;
 
+  /// Тест учун; бўлмаса — [loadSupermarketOrdersCached] («Олдин олганларингиз»).
+  final SmOrdersLoader? ordersLoader;
+
   @override
   State<SmBasketScreen> createState() => _SmBasketScreenState();
 }
@@ -83,6 +87,7 @@ class _SmBasketScreenState extends State<SmBasketScreen> {
   final _scroll = ScrollController();
   String _cat = '';
   bool _birthday = false;
+  List<SmPastOrder> _pastOrders = const [];
 
   @override
   void initState() {
@@ -107,6 +112,7 @@ class _SmBasketScreenState extends State<SmBasketScreen> {
     setState(() => _b = b);
     await b.load();
     _loadBirthdays();
+    _loadPast();
     final target = widget.openListId ?? '';
     if (!mounted || target.isEmpty || target == b.basket.id) return;
     final other = b.others.where((l) => l.id == target).firstOrNull;
@@ -114,6 +120,19 @@ class _SmBasketScreenState extends State<SmBasketScreen> {
       await Navigator.of(context).push<void>(MaterialPageRoute(
         builder: (_) => SmSavedListScreen(controller: _c, store: _store, memo: b.memo, list: other),
       ));
+    }
+  }
+
+  Future<void> _loadPast() async {
+    try {
+      final list = await (widget.ordersLoader ?? loadSupermarketOrdersCached)();
+      if (!mounted) return;
+      setState(() => _pastOrders = [
+            for (final o in list.take(50))
+              (at: o.createdAt, status: o.status, lines: smOrderLineRefs(o.items.map((i) => i.raw))),
+          ]);
+    } catch (e) {
+      debugPrint('[Supermarket] SM_PAST_ORDERS_FAILED: $e');
     }
   }
 
@@ -277,6 +296,7 @@ class _SmBasketScreenState extends State<SmBasketScreen> {
             ),
           ),
         ),
+        _pastRow(context, b, lang, scale),
         SizedBox(
           height: 40 + 16 * scale,
           child: ListView(
@@ -351,6 +371,73 @@ class _SmBasketScreenState extends State<SmBasketScreen> {
                     onTap: () => _openGroup(groups[i]),
                   ),
                 ),
+        ),
+      ],
+    );
+  }
+
+  /// «Олдин олганларингиз»: ≤12 плитка (расм, ном, охирги миқдор, жорий нарх); бир босишда — охирги миқдор саватчага.
+  Widget _pastRow(BuildContext context, SmBasketController b, String lang, double scale) {
+    final picks = smPastPurchases(_pastOrders,
+        offers: _c.offers, offersByGroup: _c.offersByGroup, now: widget.today ?? DateTime.now());
+    if (picks.isEmpty) return const SizedBox.shrink();
+    final c = context.ava;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: Text(context.tr('smb_past_title'),
+              key: const ValueKey('smb_past_title'), style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: c.ink)),
+        ),
+        SizedBox(
+          height: 80 + 54 * scale,
+          child: ListView.separated(
+            key: const ValueKey('smb_past'),
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: picks.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (context, i) {
+              final p = picks[i];
+              final o = p.offer;
+              final g = _c.taxonomy.group(o.groupId);
+              final name = o.varietyName(lang).isNotEmpty ? o.varietyName(lang) : (g?.name(lang) ?? o.name);
+              return SizedBox(
+                width: 132,
+                child: Material(
+                  key: ValueKey('smb_past_${o.id}'),
+                  color: c.surface,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: BorderSide(color: c.line)),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    onTap: () => b.setOffer(o, smPastAddQty(o, b.qtyOf(o.id), p.qtyMilli)),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SmThumb(url: o.imageUrl, size: 56),
+                          const SizedBox(height: 4),
+                          Text(name,
+                              maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.ink)),
+                          Text(
+                              context
+                                  .tr('smb_past_last')
+                                  .replaceAll('{qty}', '${smFormatQty(p.qtyMilli)} ${smUnitLabel(context, o.unit)}'.trim()),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontSize: 13, color: c.ink2)),
+                          Text(smPricePerUnit(context, o.price, o.unit),
+                              maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: c.ink)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
         ),
       ],
     );

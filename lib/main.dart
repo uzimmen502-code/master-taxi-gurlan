@@ -157,7 +157,7 @@ void main() async {
   // Splash реклама (эга 2026-11-28): ФАҚАТ маҳаллий кеш (prefs + файл) — тармоқ кутилмайди.
   // Кейинги очилиш учун креатив splash тугагач олдиндан юкланади (`SplashAdPrefetcher`).
   final splashLaunch = await SplashAdCache.instance
-      .loadForLaunch(now: DateTime.now(), districtId: GeoContext.active.districtId)
+      .loadForLaunch(now: DateTime.now(), districtId: GeoContext.active.districtId, regionId: GeoContext.active.regionId)
       .timeout(const Duration(milliseconds: 400), onTimeout: () => null);
 
   // —— Stage B: splash/UI bilan parallel (Firestore network) ——
@@ -310,7 +310,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       isAnonymousAuth: widget.isAnonymousAuth,
     ));
     // Сессияда БИР марта: кечаги кўрсатишлар йиғмаси серверга + кейинги очилиш креативи кешга.
-    unawaited(SplashAdPrefetcher().run(districtId: GeoContext.active.districtId));
+    unawaited(SplashAdPrefetcher().run(districtId: GeoContext.active.districtId, regionId: GeoContext.active.regionId));
   }
 
   @override

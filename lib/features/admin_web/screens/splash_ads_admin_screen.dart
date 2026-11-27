@@ -3,7 +3,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../bread/services/bread_image_storage.dart';
-import '../../splash_ad/splash_ad_cache.dart';
 import '../services/admin_splash_ads_service.dart';
 import '../utils/web_image_compress.dart';
 
@@ -19,8 +18,38 @@ class SplashAdsAdminScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final svc = service ?? AdminSplashAdsService();
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Splash реклама'),
+          bottom: const TabBar(tabs: [
+            Tab(text: 'Рекламалар'),
+            Tab(key: SplashAdsAdminScreen.moderationTabKey, text: 'Модерация'),
+            Tab(key: SplashAdsAdminScreen.tariffTabKey, text: 'Тариф ва созлама'),
+          ]),
+        ),
+        body: TabBarView(children: [
+          _AdsTab(svc: svc),
+          _ModerationTab(svc: svc),
+          _TariffTab(svc: svc),
+        ]),
+      ),
+    );
+  }
+
+  static const moderationTabKey = Key('splash-admin-moderation');
+  static const tariffTabKey = Key('splash-admin-tariff');
+}
+
+class _AdsTab extends StatelessWidget {
+  const _AdsTab({required this.svc});
+
+  final AdminSplashAdsService svc;
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Splash реклама')),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openEditor(context, svc, null, null),
         icon: const Icon(Icons.add),
@@ -36,10 +65,10 @@ class SplashAdsAdminScreen extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
             children: [
               const Text(
-                'Илова очилганда 2 сония кўринади (ўтказиб юбориш йўқ). Бир қурилмада кунига энг кўпи '
-                '${SplashAdCache.maxPerDay} марта рекламачи креативи, қолган пайт — «Бу ерда сизнинг рекламангиз '
-                'бўлиши мумкин». Креатив кейинги очилишда кўринади (олдиндан юкланади, ~3 соатда янгиланади). '
-                'Бир нечта мос реклама бўлса — устуворлиги юқориси.',
+                'Илова ҲАР очилганда 2 сония кўринади (ўтказиб юбориш йўқ). Бир нечта мос реклама бўлса — '
+                'навбат билан, ОҒИРЛИК бўйича (пуллик: кунига тўланган сумма; админ рекламаси: шу ерда белгиланади, '
+                'сўм/кун эквиваленти). Мос реклама йўқ пайт — «Бу ерда сизнинг рекламангиз бўлиши мумкин». '
+                'Креативлар олдиндан юкланади (~3 соатда янгиланади).',
                 style: TextStyle(color: Colors.black54),
               ),
               const SizedBox(height: 12),
@@ -49,6 +78,274 @@ class SplashAdsAdminScreen extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+}
+
+String _areaLabel(Map<String, dynamic> o) => switch ('${o['areaLevel'] ?? ''}') {
+      'district' => 'туманлар: ${o['districts'] is List ? (o['districts'] as List).join(', ') : ''}',
+      'region' => 'вилоят: ${o['regionId'] ?? ''}',
+      _ => 'бутун республика',
+    };
+
+/// Модерация навбати: тасдиқлаш (реклама ёқилади) ёки рад этиш (сабаб + ТЎЛИҚ қайтариш).
+class _ModerationTab extends StatelessWidget {
+  const _ModerationTab({required this.svc});
+
+  final AdminSplashAdsService svc;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: svc.watchOrders('pending'),
+      builder: (context, snap) {
+        if (snap.hasError) return const Center(child: Text('Юклаб бўлмади. Қайта уриниб кўринг.'));
+        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        final docs = [...snap.data!.docs]..sort((a, b) {
+            final x = a.data()['createdAt'], y = b.data()['createdAt'];
+            return x is Timestamp && y is Timestamp ? x.compareTo(y) : 0;
+          });
+        if (docs.isEmpty) return const Center(child: Text('Модерация кутаётган реклама йўқ.'));
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [for (final d in docs) _OrderCard(id: d.id, o: d.data(), svc: svc)],
+        );
+      },
+    );
+  }
+}
+
+class _OrderCard extends StatelessWidget {
+  const _OrderCard({required this.id, required this.o, required this.svc});
+
+  final String id;
+  final Map<String, dynamic> o;
+  final AdminSplashAdsService svc;
+
+  Future<void> _act(BuildContext context, String decision) async {
+    String reason = '';
+    if (decision == 'reject') {
+      final c = TextEditingController();
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (d) => AlertDialog(
+          title: const Text('Рад этиш'),
+          content: TextField(
+            controller: c,
+            maxLength: 300,
+            decoration: const InputDecoration(labelText: 'Сабаб (рекламачига юборилади)', border: OutlineInputBorder()),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('Бекор')),
+            FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('Рад этиш ва пулни қайтариш')),
+          ],
+        ),
+      );
+      reason = c.text.trim();
+      c.dispose();
+      if (ok != true) return;
+    }
+    try {
+      await svc.moderate(id, decision, reason: reason);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(decision == 'approve' ? 'Тасдиқланди — реклама ёқилди' : 'Рад этилди — пул қайтарилди')));
+      }
+    } catch (err) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(backgroundColor: Colors.red, content: Text(splashAdAdminError(err))));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cr = o['creative'] is Map ? Map<String, dynamic>.from(o['creative'] as Map) : <String, dynamic>{};
+    final img = '${cr['imageUrl'] ?? ''}';
+    final text = cr['text'] is Map ? '${(cr['text'] as Map)['uz_Cyrl'] ?? ''}' : '';
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (img.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Image.network(img, width: 120, height: 160, fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, size: 48)),
+            ),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('${o['startDay'] ?? ''} дан ${o['days'] ?? 0} кун · ${_areaLabel(o)}',
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
+              Text('Тўланди: ${o['amount'] ?? 0} сўм (кунига ${o['pricePerDay'] ?? 0}) · тариф v${o['tariffVersion'] ?? '?'}'),
+              Text('Рекламачи: ***${'${o['uid'] ?? ''}'.length >= 4 ? '${o['uid']}'.substring('${o['uid']}'.length - 4) : ''}'),
+              if (text.isNotEmpty) Text('Матн: $text'),
+              if ('${cr['linkUrl'] ?? ''}'.isNotEmpty) Text('Ҳавола: ${cr['linkUrl']}'),
+              const SizedBox(height: 8),
+              Wrap(spacing: 8, children: [
+                FilledButton(onPressed: () => _act(context, 'approve'), child: const Text('Тасдиқлаш')),
+                OutlinedButton(onPressed: () => _act(context, 'reject'), child: const Text('Рад этиш')),
+              ]),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+/// Тариф (ўзгармас версиялар) ва босқич (OFF / INTERNAL / PILOT / PUBLIC).
+class _TariffTab extends StatefulWidget {
+  const _TariffTab({required this.svc});
+
+  final AdminSplashAdsService svc;
+
+  @override
+  State<_TariffTab> createState() => _TariffTabState();
+}
+
+class _TariffTabState extends State<_TariffTab> {
+  final _district = TextEditingController();
+  final _region = TextEditingController();
+  final _republic = TextEditingController();
+  final _note = TextEditingController();
+  final _phones = TextEditingController();
+  final _pilot = TextEditingController();
+  String _stage = 'off';
+  Map<String, dynamic>? _s;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    for (final c in [_district, _region, _republic, _note, _phones, _pilot]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final s = await widget.svc.settings();
+      if (!mounted) return;
+      final cfg = s['config'] is Map ? s['config'] as Map : const {};
+      final per = s['tariff'] is Map && (s['tariff'] as Map)['perDay'] is Map ? (s['tariff'] as Map)['perDay'] as Map : const {};
+      setState(() {
+        _s = s;
+        _stage = '${cfg['stage'] ?? 'off'}';
+        _phones.text = cfg['internalPhones'] is List ? (cfg['internalPhones'] as List).join(', ') : '';
+        _pilot.text = cfg['pilotDistrictIds'] is List ? (cfg['pilotDistrictIds'] as List).join(', ') : '';
+        _district.text = '${per['district'] ?? ''}';
+        _region.text = '${per['region'] ?? ''}';
+        _republic.text = '${per['republic'] ?? ''}';
+      });
+    } catch (err) {
+      if (mounted) setState(() => _s = {'error': splashAdAdminError(err)});
+    }
+  }
+
+  List<String> _split(String s) => [for (final x in s.split(RegExp(r'[,\s]+'))) if (x.trim().isNotEmpty) x.trim()];
+
+  Future<void> _run(Future<void> Function() f, String ok) async {
+    setState(() => _busy = true);
+    try {
+      await f();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok)));
+      await _load();
+    } catch (err) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(backgroundColor: Colors.red, content: Text(splashAdAdminError(err))));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Widget _num(TextEditingController c, String label) => Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: TextField(
+          controller: c,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(labelText: label, suffixText: 'сўм/кун', border: const OutlineInputBorder()),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final s = _s;
+    if (s == null) return const Center(child: CircularProgressIndicator());
+    if (s['error'] != null) return Center(child: Text('${s['error']}'));
+    final versions = s['tariffVersions'] is List ? s['tariffVersions'] as List : const [];
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const Text('Тариф (кунлик нарх, бутун сўм)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+        const Text(
+          'Нарх = кунлик нарх × кун (туман даражасида × танланган туманлар сони). Ҳар сақлаш — янги ўзгармас версия; '
+          'аввал тўланган буюртмалар ўз нархида қолади.',
+          style: TextStyle(color: Colors.black54),
+        ),
+        const SizedBox(height: 10),
+        _num(_district, 'Бир туман'),
+        _num(_region, 'Бутун вилоят'),
+        _num(_republic, 'Бутун республика'),
+        TextField(controller: _note, decoration: const InputDecoration(labelText: 'Изоҳ (ихтиёрий)', border: OutlineInputBorder())),
+        const SizedBox(height: 10),
+        FilledButton(
+          onPressed: _busy
+              ? null
+              : () => _run(
+                    () => widget.svc.publishTariff(
+                      district: int.tryParse(_district.text.trim()) ?? 0,
+                      region: int.tryParse(_region.text.trim()) ?? 0,
+                      republic: int.tryParse(_republic.text.trim()) ?? 0,
+                      note: _note.text.trim(),
+                    ),
+                    'Янги тариф версияси сақланди',
+                  ),
+          child: const Text('Янги тариф версиясини сақлаш'),
+        ),
+        const SizedBox(height: 6),
+        for (final v in versions.take(5))
+          if (v is Map) Text('v${v['version']}: ${v['perDay']} ${v['note'] ?? ''}', style: const TextStyle(fontSize: 12)),
+        const Divider(height: 32),
+        const Text('Сотиш босқичи', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+        Wrap(spacing: 8, children: [
+          for (final st in const ['off', 'internal', 'pilot', 'public'])
+            ChoiceChip(
+              label: Text(const {'off': 'Ўчиқ', 'internal': 'Ички', 'pilot': 'Пилот', 'public': 'Ҳамма'}[st]!),
+              selected: _stage == st,
+              onSelected: (_) => setState(() => _stage = st),
+            ),
+        ]),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _phones,
+          decoration: const InputDecoration(labelText: 'Ички синовчилар (998…, вергул билан)', border: OutlineInputBorder()),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _pilot,
+          decoration: const InputDecoration(labelText: 'Пилот туманлар ID (вергул билан)', border: OutlineInputBorder()),
+        ),
+        const SizedBox(height: 10),
+        FilledButton(
+          onPressed: _busy
+              ? null
+              : () => _run(
+                    () => widget.svc.saveConfig(stage: _stage, internalPhones: _split(_phones.text), pilotDistrictIds: _split(_pilot.text)),
+                    'Созлама сақланди',
+                  ),
+          child: const Text('Босқични сақлаш'),
+        ),
+      ],
     );
   }
 }
@@ -73,6 +370,8 @@ class _AdTile extends StatelessWidget {
     final e = at(data['endAt']);
     final active = data['active'] == true;
     final districts = data['districts'] is List ? (data['districts'] as List).join(', ') : '';
+    final regions = data['regionIds'] is List ? (data['regionIds'] as List).join(', ') : '';
+    final paid = data['source'] == 'paid';
     final img = '${data['imageUrl'] ?? ''}';
     final now = DateTime.now();
     final running = active && s != null && e != null && !now.isBefore(s) && now.isBefore(e);
@@ -91,7 +390,7 @@ class _AdTile extends StatelessWidget {
           builder: (context, st) => Text(
             '${running ? 'Ҳозир кўринмоқда' : active ? 'Ёқилган (муддатдан ташқари)' : 'Ўчирилган'} · '
             '${s == null ? '—' : _fmtDate(s)} → ${e == null ? '—' : _fmtDate(e)} · '
-            'туманлар: ${districts.isEmpty ? 'барчаси' : districts} · устуворлик ${data['priority'] ?? 0} · '
+            '${paid ? 'ПУЛЛИК · ' : ''}ҳудуд: ${districts.isEmpty && regions.isEmpty ? 'барчаси' : [districts, regions].where((x) => x.isNotEmpty).join(' / ')} · оғирлик ${data['weight'] ?? 1} · '
             '7 кун: ${st.data ?? '…'} марта',
           ),
         ),
@@ -99,7 +398,7 @@ class _AdTile extends StatelessWidget {
           IconButton(
             tooltip: 'Таҳрирлаш',
             icon: const Icon(Icons.edit),
-            onPressed: () => _openEditor(context, svc, id, data),
+            onPressed: paid ? null : () => _openEditor(context, svc, id, data),
           ),
           IconButton(
             tooltip: 'Ўчириш',
@@ -160,7 +459,9 @@ class _SplashAdEditorState extends State<_SplashAdEditor> {
   late final _link = TextEditingController(text: '${_d['linkUrl'] ?? ''}');
   late final _districts =
       TextEditingController(text: _d['districts'] is List ? (_d['districts'] as List).join(', ') : '');
-  late final _priority = TextEditingController(text: '${_d['priority'] ?? 0}');
+  late final _regions =
+      TextEditingController(text: _d['regionIds'] is List ? (_d['regionIds'] as List).join(', ') : '');
+  late final _weight = TextEditingController(text: '${_d['weight'] ?? 1}');
   late String _imageUrl = '${_d['imageUrl'] ?? ''}';
   late DateTime _start = _d['startAt'] is Timestamp ? (_d['startAt'] as Timestamp).toDate() : _today();
   late DateTime _end = _d['endAt'] is Timestamp
@@ -176,7 +477,7 @@ class _SplashAdEditorState extends State<_SplashAdEditor> {
 
   @override
   void dispose() {
-    for (final c in [_title, _cyr, _lat, _ru, _link, _districts, _priority]) {
+    for (final c in [_title, _cyr, _lat, _ru, _link, _districts, _regions, _weight]) {
       c.dispose();
     }
     super.dispose();
@@ -237,7 +538,12 @@ class _SplashAdEditorState extends State<_SplashAdEditor> {
         for (final x in _districts.text.split(RegExp(r'[,\s]+')))
           if (x.trim().isNotEmpty) x.trim(),
       ],
-      'priority': int.tryParse(_priority.text.trim()) ?? -1,
+      'regionIds': [
+        for (final x in _regions.text.split(RegExp(r'[,\s]+')))
+          if (x.trim().isNotEmpty) x.trim(),
+      ],
+      'priority': _d['priority'] is int ? _d['priority'] as int : 0,
+      'weight': int.tryParse(_weight.text.trim()) ?? 0,
       'active': _active,
     };
     setState(() => _busy = true);
@@ -297,8 +603,9 @@ class _SplashAdEditorState extends State<_SplashAdEditor> {
             _field(_lat, 'Матн (лотин) — бўш бўлса кириллдан автоматик', max: 140),
             _field(_ru, 'Матн (рус) — бўш бўлса кирилл', max: 140),
             _field(_link, 'Ҳавола (ихтиёрий, https://…)'),
-            _field(_districts, 'Туманлар ID (вергул билан; бўш — барча туманлар)', hint: 'gurlan, urganch'),
-            _field(_priority, 'Устуворлик (0–100)'),
+            _field(_districts, 'Туманлар ID (вергул билан)', hint: 'gurlan, urganch'),
+            _field(_regions, 'Вилоятлар ID (вергул билан; иккаласи бўш — бутун республика)', hint: 'xorazm'),
+            _field(_weight, 'Оғирлик (айланишдаги улуш, сўм/кун эквиваленти)', hint: '50000'),
             Row(children: [
               Expanded(
                 child: OutlinedButton(

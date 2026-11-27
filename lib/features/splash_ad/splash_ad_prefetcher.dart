@@ -9,40 +9,54 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'splash_ad.dart';
 import 'splash_ad_cache.dart';
 
-/// Splash реклама — орқа фонда (splash тугагач) КЕЙИНГИ очилиш учун креативни тайёрлайди ва кечаги
-/// кўрсатишларни серверга юборади.
+/// Splash реклама — орқа фонда (splash тугагач) КЕЙИНГИ очилишлар учун фойдаланувчи ҳудудидаги фаол
+/// креативларни тайёрлайди ва кечаги кўрсатишларни серверга юборади.
 ///
-/// Арзонлик (37-банд): Firestore'дан ўқиш кўпи билан ҳар [refreshEvery]да бир марта (`visible == true`,
-/// ≤ 20 ҳужжат); расм фақат реклама/версия ўзгарганда юкланади; статистика — кунига ≤ 1 чақирув.
+/// Арзонлик (37-банд): Firestore'дан ўқиш кўпи билан ҳар [refreshEvery]да бир марта ва фақат шу ҳудуд
+/// калитлари (`areaKeys`: 'all' / 'd:туман' / 'r:вилоят'); расм фақат янги/ўзгарганда юкланади, жами ҳажм
+/// чегараланган ([maxCacheBytes]); статистика — кунига ≤ 1 чақирув.
 class SplashAdPrefetcher {
   SplashAdPrefetcher({
     SplashAdCache? cache,
-    Future<List<SplashAd>> Function()? fetchAds,
+    Future<List<SplashAd>> Function(String districtId, String regionId)? fetchAds,
     Future<Uint8List?> Function(String url)? download,
     Future<void> Function(Map<String, Map<String, int>> days)? sendStats,
     DateTime Function()? now,
+    int? maxCacheBytes,
   })  : _cache = cache ?? SplashAdCache.instance,
         _fetchAds = fetchAds ?? _firestoreAds,
         _download = download ?? _httpDownload,
         _sendStats = sendStats ?? _callableStats,
-        _now = now ?? DateTime.now;
+        _now = now ?? DateTime.now,
+        maxCacheBytes = maxCacheBytes ?? (kIsWeb ? 2 * 1024 * 1024 : 8 * 1024 * 1024);
 
   final SplashAdCache _cache;
-  final Future<List<SplashAd>> Function() _fetchAds;
+  final Future<List<SplashAd>> Function(String districtId, String regionId) _fetchAds;
   final Future<Uint8List?> Function(String url) _download;
   final Future<void> Function(Map<String, Map<String, int>> days) _sendStats;
   final DateTime Function() _now;
+
+  /// Кешдаги расмлар жами ҳажми (web — localStorage кичик).
+  final int maxCacheBytes;
 
   static const Duration refreshEvery = Duration(hours: 3);
   static const String _fetchedAtKey = 'splash_ad_fetched_at_v1';
   static const int maxImageBytes = 1500 * 1024;
 
-  static Future<List<SplashAd>> _firestoreAds() async {
-    final snap = await FirebaseFirestore.instance
-        .collection('splash_ads')
-        .where('visible', isEqualTo: true)
-        .limit(20)
-        .get();
+  static Future<List<SplashAd>> _firestoreAds(String districtId, String regionId) async {
+    final col = FirebaseFirestore.instance.collection('splash_ads');
+    QuerySnapshot<Map<String, dynamic>> snap;
+    try {
+      snap = await col
+          .where('visible', isEqualTo: true)
+          .where('areaKeys', arrayContainsAny: SplashAd.areaQueryKeys(districtId, regionId))
+          .limit(40)
+          .get();
+    } on FirebaseException catch (e) {
+      // Индекс ҳали қурилмаган бўлса — эски (ҳудудсиз) сўров; мослик клиентда текширилади.
+      if (e.code != 'failed-precondition') rethrow;
+      snap = await col.where('visible', isEqualTo: true).limit(40).get();
+    }
     return [for (final d in snap.docs) SplashAd.fromDoc(d)].whereType<SplashAd>().toList();
   }
 
@@ -57,12 +71,12 @@ class SplashAdPrefetcher {
   }
 
   /// Splash тугагач чақирилади (ҳеч қачон очилишни кутдирмайди). Хато — жим (кейинги сафар қайта).
-  Future<void> run({required String districtId, bool force = false}) async {
+  Future<void> run({required String districtId, String regionId = '', bool force = false}) async {
     await _flushStats();
-    await refresh(districtId: districtId, force: force);
+    await refresh(districtId: districtId, regionId: regionId, force: force);
   }
 
-  Future<void> refresh({required String districtId, bool force = false}) async {
+  Future<void> refresh({required String districtId, String regionId = '', bool force = false}) async {
     try {
       final now = _now();
       final prefs = await SharedPreferences.getInstance();
@@ -70,31 +84,44 @@ class SplashAdPrefetcher {
       if (!force && now.millisecondsSinceEpoch - last < refreshEvery.inMilliseconds && last <= now.millisecondsSinceEpoch) {
         return;
       }
-      final chosen = SplashAd.pick(await _fetchAds(), now, districtId);
-      if (chosen == null) {
-        await _cache.clear();
-      } else {
-        final cur = await _cache.cachedAd();
-        final sameImage = cur != null &&
-            cur.id == chosen.id &&
-            cur.imageUrl == chosen.imageUrl &&
-            (!chosen.hasImage || await _cache.hasImage());
-        if (sameImage || !chosen.hasImage) {
-          await _cache.save(chosen, keepImage: sameImage);
-        } else {
-          final bytes = await _download(chosen.imageUrl);
-          // Расм юкланмаса — матни бор бўлса матн билан, бўлмаса кеш тозаланади (сукут матни).
-          if (bytes != null) {
-            await _cache.save(chosen, imageBytes: bytes);
-          } else if ((chosen.text['uz_Cyrl'] ?? '').isNotEmpty) {
-            await _cache.save(chosen);
-          } else {
-            await _cache.clear();
-            return; // вақт белгиси ёзилмайди — кейинги очилишда қайта уринади
-          }
+      final chosen = SplashAd.selectForCache(
+        await _fetchAds(districtId, regionId),
+        now,
+        districtId,
+        regionId,
+        max: SplashAdCache.maxAds,
+      );
+      final old = {for (final c in await _cache.cached()) c.ad.id: c};
+      final items = <SplashAdCached>[];
+      final fresh = <String, Uint8List>{};
+      var bytesUsed = 0;
+      var failed = false;
+      for (final ad in chosen) {
+        if (!ad.hasImage) {
+          items.add(SplashAdCached(ad));
+          continue;
+        }
+        final prev = old[ad.id];
+        Uint8List? bytes;
+        if (prev != null && prev.imageCached && prev.ad.imageUrl == ad.imageUrl) {
+          bytes = await _cache.readImage(ad.id);
+        }
+        final reused = bytes != null;
+        if (!reused && bytesUsed < maxCacheBytes) {
+          bytes = await _download(ad.imageUrl);
+          if (bytes == null) failed = true;
+        }
+        if (bytes != null && bytesUsed + bytes.length <= maxCacheBytes) {
+          bytesUsed += bytes.length;
+          if (!reused) fresh[ad.id] = bytes;
+          items.add(SplashAdCached(ad, imageCached: true));
+        } else if (ad.hasText) {
+          items.add(SplashAdCached(ad)); // расм сиғмади/юкланмади — матн билан
         }
       }
-      await prefs.setInt(_fetchedAtKey, now.millisecondsSinceEpoch);
+      await _cache.saveAll(items, images: fresh);
+      // Расм юкланмаган бўлса — вақт белгиси ёзилмайди (кейинги очилишда қайта уринади).
+      if (!failed) await prefs.setInt(_fetchedAtKey, now.millisecondsSinceEpoch);
     } catch (e) {
       debugPrint('SplashAdPrefetcher.refresh: $e');
     }

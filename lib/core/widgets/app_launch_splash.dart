@@ -47,7 +47,7 @@ class AppLaunchSplash extends StatefulWidget {
   /// Креатив босилди ва унда ҳавола бор (splash аллақачон ёпилган).
   final ValueChanged<SplashAd>? onOpenAd;
 
-  /// Рекламачи креативи экранга чиқди (кунлик чегара ҳисоби учун) — бир марта.
+  /// Рекламачи креативи экранга чиқди (кўрсатишлар йиғмаси учун) — бир марта.
   final ValueChanged<SplashAd>? onShown;
 
   /// Эга 2026-11-28: аниқ 2 сония.

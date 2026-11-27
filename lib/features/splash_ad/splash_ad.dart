@@ -4,9 +4,10 @@ import '../../core/utils/uz_script.dart';
 
 /// «Splash реклама» (эга 2026-11-28): илова очилишида 2 сония кўринадиган реклама ўрни.
 ///
-/// Манба — `splash_ads/{id}` (ёзиш ФАҚАТ сервер: `adminUpsertSplashAd`/`adminDeleteSplashAd`, `admin_audit`;
-/// мижоз rules бўйича фақат `visible == true` ни ўқийди). Креатив кейинги очилиш учун олдиндан кешланади —
-/// очилишда тармоқ КУТИЛМАЙДИ ([SplashAdCache]).
+/// Манба — `splash_ads/{id}` (ёзиш ФАҚАТ сервер: админ `adminUpsertSplashAd`, пуллик — модерациядан кейин
+/// `adminModerateSplashAdOrder`; мижоз rules бўйича фақат `visible == true` ни ўқийди). Креативлар олдиндан
+/// кешланади — очилишда тармоқ КУТИЛМАЙДИ ([SplashAdCache]); ҲАР очилишда навбатдагиси оғирлик бўйича
+/// ([SplashAdRotation]).
 class SplashAd {
   const SplashAd({
     required this.id,
@@ -17,7 +18,9 @@ class SplashAd {
     this.startAt,
     this.endAt,
     this.districts = const [],
+    this.regionIds = const [],
     this.priority = 0,
+    this.weight = 1,
   });
 
   final String id;
@@ -34,11 +37,26 @@ class SplashAd {
   final DateTime? startAt;
   final DateTime? endAt;
 
-  /// Бўш — барча туманлар.
+  /// Иккаласи бўш — бутун республика; акс ҳолда туман рўйхатда ЁКИ вилоят рўйхатда бўлсин.
   final List<String> districts;
+  final List<String> regionIds;
+
+  /// Эски майдон (айланишда ишлатилмайди).
   final int priority;
 
+  /// Айланишдаги улуш: пуллик — кунига тўланган сумма, админ — админ белгилаган (эски ҳужжат — 1).
+  final int weight;
+
   bool get hasImage => imageUrl.isNotEmpty;
+  bool get hasText => (text['uz_Cyrl'] ?? '').isNotEmpty;
+  bool get hasContent => hasImage || hasText;
+
+  static int _weightOf(Object? v) {
+    final w = v is num ? v.toInt() : 1;
+    return w < 1 ? 1 : w;
+  }
+
+  static List<String> _list(Object? v) => [if (v is List) for (final x in v) '$x'];
 
   static SplashAd? fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data();
@@ -52,8 +70,10 @@ class SplashAd {
       linkUrl: (d['linkUrl'] ?? '').toString().trim(),
       startAt: at(d['startAt']),
       endAt: at(d['endAt']),
-      districts: [if (d['districts'] is List) for (final x in d['districts'] as List) '$x'],
+      districts: _list(d['districts']),
+      regionIds: _list(d['regionIds']),
       priority: (d['priority'] as num?)?.toInt() ?? 0,
+      weight: _weightOf(d['weight']),
     );
   }
 
@@ -67,7 +87,9 @@ class SplashAd {
         'startAt': startAt?.millisecondsSinceEpoch,
         'endAt': endAt?.millisecondsSinceEpoch,
         'districts': districts,
+        'regionIds': regionIds,
         'priority': priority,
+        'weight': weight,
       };
 
   static SplashAd? fromCacheMap(Object? raw) {
@@ -83,8 +105,10 @@ class SplashAd {
       linkUrl: (raw['linkUrl'] ?? '').toString(),
       startAt: at(raw['startAt']),
       endAt: at(raw['endAt']),
-      districts: [if (raw['districts'] is List) for (final x in raw['districts'] as List) '$x'],
+      districts: _list(raw['districts']),
+      regionIds: _list(raw['regionIds']),
       priority: raw['priority'] is int ? raw['priority'] as int : 0,
+      weight: _weightOf(raw['weight']),
     );
   }
 
@@ -102,11 +126,47 @@ class SplashAd {
     return !now.isBefore(s) && now.isBefore(e);
   }
 
-  /// Туман: рўйхат бўш — ҳамма; aks holda қурилма тумани маълум ва рўйхатда бўлсин.
-  bool matchesDistrict(String districtId) =>
-      districts.isEmpty || (districtId.isNotEmpty && districts.contains(districtId));
+  /// Ҳудуд: иккала рўйхат бўш — ҳамма; акс ҳолда қурилма тумани ёки вилояти рўйхатда.
+  bool matchesArea(String districtId, [String regionId = '']) =>
+      (districts.isEmpty && regionIds.isEmpty) ||
+      (districtId.isNotEmpty && districts.contains(districtId)) ||
+      (regionId.isNotEmpty && regionIds.contains(regionId));
 
-  bool isEligible(DateTime now, String districtId) => isInWindow(now) && matchesDistrict(districtId);
+  /// Эски ном (туман бўйича).
+  bool matchesDistrict(String districtId) => matchesArea(districtId);
+
+  bool isEligible(DateTime now, String districtId, [String regionId = '']) =>
+      isInWindow(now) && matchesArea(districtId, regionId);
+
+  /// Сервер сўрови учун ҳудуд калитлари (`areaKeys` array-contains-any): 'all', 'd:{туман}', 'r:{вилоят}'.
+  static List<String> areaQueryKeys(String districtId, String regionId) => [
+        'all',
+        if (districtId.isNotEmpty) 'd:$districtId',
+        if (regionId.isNotEmpty) 'r:$regionId',
+      ];
+
+  /// Кешга олинадиганлар: ҳудудга мос, тугамаган ва [horizon] ичида бошланадиган, мазмуни бор;
+  /// оғирлиги каттаси олдин, кўпи билан [max] та.
+  static List<SplashAd> selectForCache(
+    Iterable<SplashAd> ads,
+    DateTime now,
+    String districtId,
+    String regionId, {
+    Duration horizon = const Duration(days: 2),
+    int max = 8,
+  }) {
+    final out = [
+      for (final a in ads)
+        if (a.hasContent &&
+            a.matchesArea(districtId, regionId) &&
+            a.startAt != null &&
+            a.endAt != null &&
+            now.isBefore(a.endAt!) &&
+            a.startAt!.isBefore(now.add(horizon)))
+          a,
+    ]..sort((a, b) => b.weight != a.weight ? b.weight.compareTo(a.weight) : a.id.compareTo(b.id));
+    return out.take(max).toList();
+  }
 
   /// Илова тилидаги матн; `uz_Latn` бўлмаса — кириллдан автоматик (янги лотин), `ru` бўлмаса — кирилл.
   String textFor(String lang) {
@@ -122,20 +182,31 @@ class SplashAd {
         return cyr;
     }
   }
+}
 
-  /// Бир нечта мос реклама бўлса — энг юқори устуворлик, тенг бўлса энг кеч бошлангани.
-  static SplashAd? pick(Iterable<SplashAd> ads, DateTime now, String districtId) {
+/// Smooth weighted round-robin (эга 2026-11-28: кўп тўлаган кўпроқ кўринади; кетма-кет очилишлар
+/// имкон қадар турли реклама). Ҳолат — `{adId: currentWeight}`, қурилмада сақланади.
+///
+/// Ҳар қадам: ҳар номзод `cw += weight`; энг каттаси танланади; `cw[танланган] -= жами`. N = Σweight қадамда
+/// ҳар реклама аниқ `weight` марта чиқади (бутун сонлар).
+class SplashAdRotation {
+  const SplashAdRotation._();
+
+  /// Қайтаради: (танланган, янги ҳолат). Номзод йўқ — (null, {}). Ҳолатда фақат жорий номзодлар қолади.
+  static (SplashAd?, Map<String, int>) next(List<SplashAd> candidates, Map<String, int> state) {
+    if (candidates.isEmpty) return (null, const {});
+    final list = [...candidates]..sort((a, b) => a.id.compareTo(b.id));
+    final cw = <String, int>{};
+    var total = 0;
     SplashAd? best;
-    for (final a in ads) {
-      if (!a.isEligible(now, districtId)) continue;
-      if (a.imageUrl.isEmpty && (a.text['uz_Cyrl'] ?? '').isEmpty) continue;
-      if (best == null ||
-          a.priority > best.priority ||
-          (a.priority == best.priority && a.startAt!.isAfter(best.startAt!))) {
-        best = a;
-      }
+    for (final a in list) {
+      final v = (state[a.id] ?? 0) + a.weight;
+      cw[a.id] = v;
+      total += a.weight;
+      if (best == null || v > cw[best.id]!) best = a;
     }
-    return best;
+    cw[best!.id] = cw[best.id]! - total;
+    return (best, cw);
   }
 }
 
@@ -165,9 +236,9 @@ class SplashAdTexts {
     'ru': 'Здравствуйте! Хочу разместить рекламу на заставке приложения.',
   };
   static const Map<String, String> _needLogin = {
-    'uz_Cyrl': 'Реклама бериш учун рўйхатдан ўтинг, кейин «Админ билан чат»га ёзинг.',
-    'uz_Latn': "Reklama beriş uçun röyxatdan öting, keyin «Admin bilan çat»ga yozing.",
-    'ru': 'Чтобы разместить рекламу, зарегистрируйтесь и напишите в «Чат с админом».',
+    'uz_Cyrl': 'Реклама бериш учун рўйхатдан ўтинг.',
+    'uz_Latn': "Reklama beriş uçun röyxatdan öting.",
+    'ru': 'Чтобы разместить рекламу, зарегистрируйтесь.',
   };
 
   static String _of(Map<String, String> m, String lang) => m[lang] ?? m['uz_Cyrl']!;

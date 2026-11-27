@@ -16,6 +16,7 @@ const fns = require('../index');
 const admin = require('firebase-admin');
 const {
   validateProgram, evaluateEligibility, parseBirthDate, ageAt, hasCarProfile, tashkentDayKey,
+  frozenPatch, withFrozen,
 } = require('../incentives');
 
 const DAY = 86400000;
@@ -279,6 +280,44 @@ async function main() {
     const o = await call('getMyIncentiveOffers', {}, C3);
     assert.ok(!o.offers.some((x) => x.programId === 'car'));
     await expectCode(call('adminSetIncentiveStage', { programId: 'car', stage: 'on' }, ADMIN), 'VALIDATION_stage');
+  });
+
+  await check('F0 sof: muhr — faqat hali muhrlanmagan va to\'g\'ri qiymat; muhr ustun', () => {
+    assert.deepStrictEqual(frozenPatch({ gender: 'female', birthDate: '1.2.2000' }, {}), { gender: 'female', birthDate: '1.2.2000' });
+    assert.deepStrictEqual(frozenPatch({ gender: 'female', birthDate: '1.2.2000' }, { gender: 'male', birthDate: '2000-01-01' }), {});
+    assert.deepStrictEqual(frozenPatch({ gender: '', birthDate: 'xx' }, {}), {});
+    assert.deepStrictEqual(frozenPatch({ gender: 'male', birthDate: '3.4.1990' }, { gender: 'male' }), { birthDate: '3.4.1990' });
+    const w = withFrozen({ gender: 'female', birthDate: '1.1.2001', carModel: 'X' }, { gender: 'male' });
+    assert.deepStrictEqual([w.gender, w.birthDate, w.carModel], ['male', '1.1.2001', 'X']);
+  });
+
+  await check('F1 jins muhri: erkak keyin «ayol» qilib o\'zgartirsa — ayollar bonusi YO\'Q; admin tasdig\'idan keyin (resync) — bor', async () => {
+    await call('adminUpsertIncentiveProgram', { ...women({ stage: 'public', budgetTotal: 5000000 }), programId: 'women' }, ADMIN);
+    const SW = '998914000050';
+    await mk(SW, { gender: 'male', birthDate: birthYearsAgo(25) });
+    await call('getMyIncentiveOffers', {}, SW); // ro'yxatdan keyingi birinchi chaqiruv — muhr
+    const prof = (await db.collection('incentive_profiles').doc(SW).get()).data();
+    assert.deepStrictEqual([prof.gender, prof.birthDate], ['male', birthYearsAgo(25)]);
+    await db.collection('users').doc(SW).update({ gender: 'female' }); // qayta o'rnatish / to'g'ridan-to'g'ri yozish
+    const o = await call('getMyIncentiveOffers', {}, SW);
+    assert.ok(!o.offers.some((x) => x.programId === 'women'), 'muhr erkak — ayollar taklifi chiqmaydi');
+    await expectCode(call('claimIncentive', { programId: 'women' }, SW), 'GENDER_MISMATCH');
+    assert.strictEqual(((await db.collection('incentive_profiles').doc(SW).get()).data()).gender, 'male', 'muhr o\'zgarmadi');
+    await assert.rejects(call('adminResyncIncentiveProfile', { uid: SW }, SW), (e) => e.code === 'permission-denied');
+    const r = await call('adminResyncIncentiveProfile', { uid: SW }, ADMIN);
+    assert.deepStrictEqual([r.ok, r.gender], [true, 'female']);
+    assert.strictEqual((await call('claimIncentive', { programId: 'women' }, SW)).amount, 100000);
+    const audit = await db.collection('admin_audit').where('action', '==', 'incentiveProfileResync').get();
+    assert.strictEqual(audit.size, 1);
+  });
+
+  await check('F2 sanasiz ro\'yxat: muhrsiz sana keyin kiritilsa — muhrlanadi va hisobga olinadi', async () => {
+    const NB = '998914000051';
+    await mk(NB, { gender: 'female' });
+    await expectCode(call('claimIncentive', { programId: 'women' }, NB), 'AGE_UNKNOWN');
+    assert.strictEqual(((await db.collection('incentive_profiles').doc(NB).get()).data()).gender, 'female', 'rad etilsa ham jins muhrlanadi');
+    await db.collection('users').doc(NB).update({ birthDate: birthYearsAgo(30) });
+    assert.strictEqual((await call('claimIncentive', { programId: 'women' }, NB)).amount, 100000);
   });
 
   const passed = results.filter(Boolean).length;

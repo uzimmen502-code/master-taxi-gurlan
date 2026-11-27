@@ -1431,7 +1431,7 @@ class _HomeViewState extends State<_HomeView> {
               imagePath: kHomeVacanciesCardImage,
               onTap: () => _openGated('jobs', const VacanciesScreen()),
             ),
-          // «Суғурта» — ҳук ([homeInsuranceCard] → merge'дан кейин `carInsuranceHomeCard`); ҳозир `null`, [ids]да йўқ.
+          // «Суғурта» — [homeInsuranceCard] → `carInsuranceHomeCard`; сервер босқичи ёпиқ бўлса [ids]да йўқ.
           'car_insurance' => insurance!,
           'relatives_bday' => HomeLiteCardData(
               id: 'relatives_bday',

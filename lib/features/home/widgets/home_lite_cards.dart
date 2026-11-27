@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../core/theme/ava_tokens.dart';
+import '../../car_insurance/widgets/car_insurance_home_section.dart' show carInsuranceHomeCard, carInsuranceHomeVisible;
 import 'home_dating_section.dart' show datingSectionVisibleFor;
 
 /// Бош саҳифа «енгил дизайн» (эга 2026-11-20): катта горизонтал карточкалар.
@@ -231,14 +232,13 @@ List<String> homeAdsServicesCardIds({
       if (holidayVisible && relativesPromptVisible) 'relatives_bday',
     ];
 
-/// «Суғурта» карточкаси ҳуки (эга 2026-11-28). Суғурта клиенти бошқа шохда (`feat/car-insurance`,
-/// `lib/features/car_insurance/widgets/car_insurance_home_section.dart`). Merge'дан кейин фақат шу икки ҳук
-/// танаси алмашади: [homeInsuranceCard] → `carInsuranceHomeCard(context, phone: phone, onReturn: onReturn)`,
-/// [homeInsuranceVisible] → `carInsuranceHomeVisible(phone, refresh: refresh)`. Ҳозир — карточка йўқ.
-HomeLiteCardData? homeInsuranceCard(BuildContext context, {required String phone, VoidCallback? onReturn}) => null;
+/// «Суғурта» карточкаси ҳуки (эга 2026-11-28) → `car_insurance_home_section.dart` ([carInsuranceHomeCard]).
+HomeLiteCardData? homeInsuranceCard(BuildContext context, {required String phone, VoidCallback? onReturn}) =>
+    carInsuranceHomeCard(context, phone: phone, onReturn: onReturn);
 
-/// Суғурта карточкаси дарвозаси (сессия кешли бўлади); ҳозир доим `false`.
-Future<bool> homeInsuranceVisible(String phone, {bool refresh = false}) async => false;
+/// Суғурта карточкаси дарвозаси: сервер босқичи (`insuranceGetMyState.available`, сессия кешли; хато → `false`).
+Future<bool> homeInsuranceVisible(String phone, {bool refresh = false}) =>
+    carInsuranceHomeVisible(phone, refresh: refresh);
 
 /// «Туғилган кунингизни киритинг» карточкаси кўринадими (эга 2026-11-27) — ЯГОНА манба.
 ///

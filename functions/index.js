@@ -59,6 +59,8 @@ const { runAutoShift, hhmm: tashkentHhmm } = require('./intercity_auto_shift');
 const intercityExpiry = require('./intercity_expiry');
 attachTaxiBilling(exports, {
   functions, db, admin, callerPhone, canonicalUid, settlementLedger, notifyUserInApp,
+  // adminGet/SetTaxiCommission (ega 2026-11-28) — admin/superadmin.
+  requireCallerRoles,
 });
 // Mahalliy taksi — SERVER narxi (ega qarori 2026-10-07): trip yaratish,
 // narx qulfi va admin tarif versiyasi. Yakunlash — pastdagi completeLocalTrip.

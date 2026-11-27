@@ -199,6 +199,8 @@ const kSmErrorKeys = <String, String>{
   'DUPLICATE_ITEM': 'sm_err_qty',
   'STAGE_OFF': 'sm_err_not_allowed',
   'NOT_TESTER': 'sm_err_not_allowed',
+  // Эга 2026-11-28: модул созламаси (сервер ҳам 3 тилли matn беради — у устун).
+  'MODULE_CLOSED': 'sm_err_district',
   'PERMISSION_DENIED': 'sm_err_not_allowed',
 };
 

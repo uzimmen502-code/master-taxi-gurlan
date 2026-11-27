@@ -1,5 +1,5 @@
 // «AVA Супермаркет» админ бўлими (1-босқич, эга 2026-11-20). Матнлар — Кирилл (админ конвенцияси).
-// Таблар: Таклифлар · Excel импорт (2-босқич) · Таксономия · Буюртмалар (тортиш, олиш, етишмовчилик) · Созламалар ·
+// Таблар: Таклифлар · Excel импорт (2-босқич) · Тоифалар ва гуруҳлар (таксономия) · Буюртмалар (тортиш, олиш, етишмовчилик) · Созламалар ·
 // Харид режаси · Аналитика (3-босқич — фақат ҳисобот).
 
 import 'dart:convert';
@@ -47,7 +47,7 @@ class SupermarketAdminScreen extends StatelessWidget {
             tabs: [
               Tab(text: 'Таклифлар'),
               Tab(text: 'Excel импорт'),
-              Tab(text: 'Таксономия'),
+              Tab(text: 'Тоифалар ва гуруҳлар'),
               Tab(text: 'Буюртмалар'),
               Tab(text: 'Созламалар'),
               Tab(text: 'Харид режаси'),
@@ -497,6 +497,123 @@ String? smTaxonomyJsonProblem(String raw) {
   return null;
 }
 
+// ─── «Тоифалар ва гуруҳлар» таҳрирловчиси (эга 2026-11-28) — соф ёрдамчилар ─────────────────────────────
+
+List<Map<String, dynamic>> _txCopy(List<Map<String, dynamic>> cats) =>
+    (jsonDecode(jsonEncode(cats)) as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+
+List<Map<String, dynamic>> _txGroups(Map<String, dynamic> c) =>
+    [for (final g in (c['groups'] is List ? c['groups'] as List : const [])) Map<String, dynamic>.from(g as Map)];
+
+/// Тартиб рақамлари қайта (1, 2, 3…) — тоифалар ва гуруҳлар кўринган тартибда.
+@visibleForTesting
+List<Map<String, dynamic>> smTxRenumber(List<Map<String, dynamic>> cats) {
+  final out = _txCopy(cats);
+  for (var i = 0; i < out.length; i++) {
+    out[i]['order'] = i + 1;
+    final gs = _txGroups(out[i]);
+    for (var j = 0; j < gs.length; j++) {
+      gs[j]['order'] = j + 1;
+    }
+    out[i]['groups'] = gs;
+  }
+  return out;
+}
+
+/// Гуруҳни тоифа ичида юқори/пастга суриш ([delta] −1 / +1); чегарадан ташқари — ўзгармайди.
+@visibleForTesting
+List<Map<String, dynamic>> smTxMoveGroup(List<Map<String, dynamic>> cats, int ci, int gi, int delta) {
+  final out = _txCopy(cats);
+  final gs = _txGroups(out[ci]);
+  final to = gi + delta;
+  if (to < 0 || to >= gs.length) return out;
+  final g = gs.removeAt(gi);
+  gs.insert(to, g);
+  out[ci]['groups'] = gs;
+  return smTxRenumber(out);
+}
+
+/// Гуруҳ қўшиш ([gi] null) ёки алмаштириш. Номаълум майдонлар (масалан, келажакдаги) сақланади.
+@visibleForTesting
+List<Map<String, dynamic>> smTxUpsertGroup(List<Map<String, dynamic>> cats, int ci, Map<String, dynamic> group, {int? gi}) {
+  final out = _txCopy(cats);
+  final gs = _txGroups(out[ci]);
+  if (gi == null) {
+    gs.add(group);
+  } else {
+    gs[gi] = {...gs[gi], ...group};
+  }
+  out[ci]['groups'] = gs;
+  return smTxRenumber(out);
+}
+
+/// Ўчириш: фаол таклифи бор гуруҳ — рад (сервер ҳам GROUP_IN_USE); бошқа гуруҳларнинг `pairs`идан ҳам олинади;
+/// тоифадаги охирги гуруҳ — рад (сервер GROUPS_EMPTY).
+@visibleForTesting
+({List<Map<String, dynamic>> cats, String? error}) smTxRemoveGroup(
+  List<Map<String, dynamic>> cats,
+  int ci,
+  int gi,
+  Set<String> inUse,
+) {
+  final gs = _txGroups(cats[ci]);
+  final id = '${gs[gi]['id']}';
+  if (inUse.contains(id)) return (cats: cats, error: 'Бу гуруҳда фаол таклифлар бор — аввал уларни ўчиринг ёки бошқа гуруҳга ўтказинг.');
+  if (gs.length <= 1) return (cats: cats, error: 'Тоифада камида битта гуруҳ бўлиши керак.');
+  final out = _txCopy(cats);
+  final next = _txGroups(out[ci])..removeAt(gi);
+  out[ci]['groups'] = next;
+  for (final c in out) {
+    c['groups'] = [
+      for (final g in _txGroups(c))
+        if (g['pairs'] is List) {...g, 'pairs': [for (final p in g['pairs'] as List) if (p != id) p]} else g,
+    ];
+  }
+  return (cats: smTxRenumber(out), error: null);
+}
+
+/// Формадан гуруҳ (сервер шакли); хатолар — Кирилл матн (бўш — тўғри).
+@visibleForTesting
+({Map<String, dynamic> group, List<String> problems}) smTxGroupFromForm({
+  required String id,
+  required Map<String, String> names,
+  required String unit,
+  required String step,
+  required bool weighed,
+  required String synonyms,
+  required String pairs,
+  Set<String> takenIds = const {},
+  Set<String> knownIds = const {},
+}) {
+  List<String> split(String s) => [for (final x in s.split(RegExp(r'[,;\n]'))) if (x.trim().isNotEmpty) x.trim()];
+  final stepVal = num.tryParse(step.trim().replaceAll(',', '.'));
+  final syn = split(synonyms);
+  final pr = split(pairs);
+  final problems = [
+    if (!RegExp(r'^[a-z][a-z0-9_]{1,39}$').hasMatch(id)) 'ID: кичик лотин ҳарф, рақам, «_» (2–40 белги)',
+    if (takenIds.contains(id)) 'ID банд: $id',
+    for (final l in const ['uz_Cyrl', 'uz_Latn', 'ru'])
+      if ((names[l] ?? '').trim().isEmpty) 'Ном ($l) шарт',
+    if (!_unitText.containsKey(unit)) 'Бирлик нотўғри',
+    if (stepVal == null || stepVal <= 0) 'Қадам мусбат сон бўлсин (масалан 0.5 ёки 1)',
+    for (final p in pr)
+      if (!knownIds.contains(p) || p == id) 'Бирга олинади: номаълум гуруҳ $p',
+    if (pr.length > 10) 'Бирга олинади: кўпи билан 10 та',
+  ];
+  return (
+    group: {
+      'id': id,
+      'names': {for (final l in const ['uz_Cyrl', 'uz_Latn', 'ru']) l: (names[l] ?? '').trim()},
+      'unit': unit,
+      'step': stepVal ?? 0,
+      'weighed': weighed,
+      'synonyms': syn,
+      if (pr.isNotEmpty) 'pairs': pr,
+    },
+    problems: problems,
+  );
+}
+
 class SmTaxonomyAdminTab extends StatefulWidget {
   const SmTaxonomyAdminTab({super.key, required this.service});
   final AdminSupermarketService service;
@@ -508,6 +625,13 @@ class SmTaxonomyAdminTab extends StatefulWidget {
 class _SmTaxonomyAdminTabState extends State<SmTaxonomyAdminTab> {
   final _json = TextEditingController();
   SmTaxonomy _tx = SmTaxonomy.empty;
+
+  /// Таҳрирланаётган нусха (сервер шакли) — «Сақлаш»гача ҳеч нарса ёзилмайди.
+  List<Map<String, dynamic>> _cats = [];
+
+  /// Фаол таклифи бор гуруҳлар (ўчириш рад). Сервер ҳам текширади (GROUP_IN_USE).
+  Set<String> _inUse = {};
+  bool _dirty = false;
 
   /// Юкланган ҳужжат версияси — сервер `expectedVersion` (бошқа админ ўзгартирган бўлса — рад).
   int _version = 0;
@@ -524,27 +648,31 @@ class _SmTaxonomyAdminTabState extends State<SmTaxonomyAdminTab> {
     try {
       final raw = await widget.service.loadTaxonomyRaw();
       if (!mounted) return;
+      final tx = SmTaxonomy.fromMap(raw);
       setState(() {
-        _tx = SmTaxonomy.fromMap(raw);
+        _tx = tx;
         _version = (raw?['version'] as num?)?.toInt() ?? 0;
+        _cats = [for (final c in (raw?['categories'] is List ? raw!['categories'] as List : const [])) Map<String, dynamic>.from(c as Map)];
+        _dirty = false;
         // Сервер фақат `categories` калитини қабул қилади.
         _json.text = const JsonEncoder.withIndent('  ').convert({'categories': raw?['categories'] ?? const []});
       });
+      final offers = await widget.service.loadOffers(tx);
+      if (mounted) setState(() => _inUse = {for (final o in offers) if (o.status == SmStatus.active) o.groupId});
     } catch (e) {
       if (mounted) setState(() => _msg = 'Юклаб бўлмади: $e');
     }
   }
 
-  Future<void> _save() async {
-    final problem = smTaxonomyJsonProblem(_json.text);
+  Future<void> _saveCategories(List<dynamic> cats) async {
+    final problem = smTaxonomyJsonProblem(jsonEncode({'categories': cats}));
     if (problem != null) return setState(() => _msg = problem);
     setState(() {
       _busy = true;
       _msg = null;
     });
     try {
-      final decoded = jsonDecode(_json.text) as Map<String, dynamic>;
-      await widget.service.saveTaxonomy(decoded['categories'] as List, _version);
+      await widget.service.saveTaxonomy(cats, _version);
       if (mounted) setState(() => _msg = 'Сақланди');
       await _load();
     } catch (e) {
@@ -552,6 +680,39 @@ class _SmTaxonomyAdminTabState extends State<SmTaxonomyAdminTab> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _saveJson() async {
+    final problem = smTaxonomyJsonProblem(_json.text);
+    if (problem != null) return setState(() => _msg = problem);
+    await _saveCategories((jsonDecode(_json.text) as Map<String, dynamic>)['categories'] as List);
+  }
+
+  void _apply(List<Map<String, dynamic>> next) => setState(() {
+        _cats = next;
+        _dirty = true;
+        _msg = null;
+      });
+
+  Set<String> get _allIds => {for (final c in _cats) for (final g in _txGroups(c)) '${g['id']}'};
+
+  Future<void> _editGroup(int ci, {int? gi}) async {
+    final base = gi == null ? null : _txGroups(_cats[ci])[gi];
+    final res = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => _SmGroupDialog(
+        base: base,
+        takenIds: gi == null ? _allIds : (_allIds..remove('${base!['id']}')),
+        knownIds: _allIds,
+      ),
+    );
+    if (res != null) _apply(smTxUpsertGroup(_cats, ci, res, gi: gi));
+  }
+
+  void _remove(int ci, int gi) {
+    final r = smTxRemoveGroup(_cats, ci, gi, _inUse);
+    if (r.error != null) return setState(() => _msg = r.error);
+    _apply(r.cats);
   }
 
   @override
@@ -562,43 +723,193 @@ class _SmTaxonomyAdminTabState extends State<SmTaxonomyAdminTab> {
       children: [
         Text('Версия ${_tx.version} · ${_tx.categories.length} категория · $groups гуруҳ',
             key: const ValueKey('sm_admin_tx_summary')),
+        const SizedBox(height: 4),
+        const Text('Гуруҳ номлари (3 тилда), бирлик, қадам, тортиладими, синонимлар ва «бирга олинади». '
+            'Фаол таклифи бор гуруҳни ўчириб бўлмайди.', style: TextStyle(fontSize: 12, color: Colors.black54)),
         const SizedBox(height: 8),
-        for (final c in _tx.categories)
+        for (var ci = 0; ci < _cats.length; ci++)
           ExpansionTile(
-            title: Text('${c.name('uz_Cyrl')} (${c.groups.length})'),
+            key: ValueKey('sm_admin_tx_cat_${_cats[ci]['id']}'),
+            title: Text('${(_cats[ci]['names'] as Map?)?['uz_Cyrl'] ?? _cats[ci]['id']} (${_txGroups(_cats[ci]).length})'),
             children: [
-              for (final g in c.groups)
-                ListTile(
-                  dense: true,
-                  title: Text(g.name('uz_Cyrl')),
-                  subtitle: Text('${g.id} · ${_unitText[g.unit]} · қадам ${smFormatQty(g.stepMilli)}'
-                      '${g.weighed ? ' · тортилади' : ''}${g.synonyms.isEmpty ? '' : ' · ${g.synonyms.join(', ')}'}'),
+              for (var gi = 0; gi < _txGroups(_cats[ci]).length; gi++) _groupTile(ci, gi),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  key: ValueKey('sm_admin_tx_add_${_cats[ci]['id']}'),
+                  onPressed: _busy ? null : () => _editGroup(ci),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Гуруҳ қўшиш'),
                 ),
+              ),
             ],
           ),
-        const Divider(height: 24),
-        const Text('Таҳрир (JSON). Сақлаш — сервер `adminSetSupermarketTaxonomy` (версия + audit).'),
-        const SizedBox(height: 8),
-        TextField(
-          key: const ValueKey('sm_admin_tx_json'),
-          controller: _json,
-          maxLines: 18,
-          style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-          decoration: const InputDecoration(border: OutlineInputBorder()),
-        ),
         if (_msg != null)
           Padding(padding: const EdgeInsets.only(top: 8), child: Text(_msg!, key: const ValueKey('sm_admin_tx_msg'))),
         const SizedBox(height: 8),
         FilledButton(
-          key: const ValueKey('sm_admin_tx_save'),
-          onPressed: _busy ? null : _save,
-          child: const Text('Таксономияни сақлаш'),
+          key: const ValueKey('sm_admin_tx_form_save'),
+          onPressed: _busy || !_dirty ? null : () => _saveCategories(smTxRenumber(_cats)),
+          child: const Text('Ўзгаришларни сақлаш'),
+        ),
+        const Divider(height: 24),
+        ExpansionTile(
+          key: const ValueKey('sm_admin_tx_advanced'),
+          title: const Text('Кенгайтирилган (JSON)'),
+          children: [
+            const Text('Тўлиқ JSON. Сақлаш — сервер `adminSetSupermarketTaxonomy` (версия + audit).'),
+            const SizedBox(height: 8),
+            TextField(
+              key: const ValueKey('sm_admin_tx_json'),
+              controller: _json,
+              maxLines: 18,
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              decoration: const InputDecoration(border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 8),
+            FilledButton(
+              key: const ValueKey('sm_admin_tx_save'),
+              onPressed: _busy ? null : _saveJson,
+              child: const Text('JSON сақлаш'),
+            ),
+          ],
         ),
       ],
     );
   }
+
+  Widget _groupTile(int ci, int gi) {
+    final g = _txGroups(_cats[ci])[gi];
+    final id = '${g['id']}';
+    final used = _inUse.contains(id);
+    final names = g['names'] is Map ? g['names'] as Map : const {};
+    final syn = g['synonyms'] is List ? (g['synonyms'] as List).join(', ') : '';
+    return ListTile(
+      key: ValueKey('sm_admin_tx_group_$id'),
+      dense: true,
+      title: Text('${names['uz_Cyrl'] ?? id}'),
+      subtitle: Text('$id · ${_unitText[g['unit']] ?? g['unit']} · қадам ${g['step']}'
+          '${g['weighed'] == true ? ' · тортилади' : ''}${syn.isEmpty ? '' : ' · $syn'}${used ? ' · фаол таклиф бор' : ''}'),
+      trailing: Wrap(children: [
+        IconButton(key: ValueKey('sm_admin_tx_up_$id'), icon: const Icon(Icons.arrow_upward), onPressed: gi == 0 ? null : () => _apply(smTxMoveGroup(_cats, ci, gi, -1))),
+        IconButton(
+            key: ValueKey('sm_admin_tx_down_$id'),
+            icon: const Icon(Icons.arrow_downward),
+            onPressed: gi == _txGroups(_cats[ci]).length - 1 ? null : () => _apply(smTxMoveGroup(_cats, ci, gi, 1))),
+        IconButton(key: ValueKey('sm_admin_tx_edit_$id'), icon: const Icon(Icons.edit_outlined), onPressed: () => _editGroup(ci, gi: gi)),
+        IconButton(
+          key: ValueKey('sm_admin_tx_del_$id'),
+          tooltip: used ? 'Фаол таклифи бор — ўчириб бўлмайди' : 'Ўчириш',
+          icon: const Icon(Icons.delete_outline),
+          onPressed: used ? null : () => _remove(ci, gi),
+        ),
+      ]),
+    );
+  }
 }
 
+class _SmGroupDialog extends StatefulWidget {
+  const _SmGroupDialog({this.base, required this.takenIds, required this.knownIds});
+  final Map<String, dynamic>? base;
+  final Set<String> takenIds;
+  final Set<String> knownIds;
+
+  @override
+  State<_SmGroupDialog> createState() => _SmGroupDialogState();
+}
+
+class _SmGroupDialogState extends State<_SmGroupDialog> {
+  late final Map<String, dynamic> _b = widget.base ?? const {};
+  late final _id = TextEditingController(text: '${_b['id'] ?? ''}');
+  late final Map<String, TextEditingController> _names = {
+    for (final l in const ['uz_Cyrl', 'uz_Latn', 'ru']) l: TextEditingController(text: '${(_b['names'] as Map?)?[l] ?? ''}'),
+  };
+  late String _unit = _unitText.containsKey(_b['unit']) ? '${_b['unit']}' : 'kg';
+  late final _step = TextEditingController(text: '${_b['step'] ?? 1}');
+  late bool _weighed = _b['weighed'] == true;
+  late final _syn = TextEditingController(text: _b['synonyms'] is List ? (_b['synonyms'] as List).join(', ') : '');
+  late final _pairs = TextEditingController(text: _b['pairs'] is List ? (_b['pairs'] as List).join(', ') : '');
+  List<String> _problems = const [];
+
+  @override
+  void dispose() {
+    for (final c in [_id, _step, _syn, _pairs, ..._names.values]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  void _ok() {
+    final r = smTxGroupFromForm(
+      id: _id.text.trim(),
+      names: {for (final e in _names.entries) e.key: e.value.text},
+      unit: _unit,
+      step: _step.text,
+      weighed: _weighed,
+      synonyms: _syn.text,
+      pairs: _pairs.text,
+      takenIds: widget.takenIds,
+      knownIds: widget.knownIds,
+    );
+    if (r.problems.isNotEmpty) return setState(() => _problems = r.problems);
+    Navigator.of(context).pop(r.group);
+  }
+
+  Widget _tf(String key, String label, TextEditingController c, {bool enabled = true}) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: TextField(
+          key: ValueKey('sm_admin_txg_$key'),
+          controller: c,
+          enabled: enabled,
+          decoration: InputDecoration(labelText: label, border: const OutlineInputBorder(), isDense: true),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.base == null ? 'Янги гуруҳ' : 'Гуруҳни таҳрирлаш'),
+      content: SizedBox(
+        width: 460,
+        child: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            _tf('id', 'ID (лотин, ўзгармайди)', _id, enabled: widget.base == null),
+            _tf('name_uz_Cyrl', 'Номи (кирилл)', _names['uz_Cyrl']!),
+            _tf('name_uz_Latn', 'Номи (лотин)', _names['uz_Latn']!),
+            _tf('name_ru', 'Номи (рус)', _names['ru']!),
+            Row(children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  key: const ValueKey('sm_admin_txg_unit'),
+                  initialValue: _unit,
+                  decoration: const InputDecoration(labelText: 'Бирлик', border: OutlineInputBorder(), isDense: true),
+                  items: [for (final e in _unitText.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
+                  onChanged: (v) => setState(() => _unit = v ?? _unit),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(child: _tf('step', 'Қадам', _step)),
+            ]),
+            SwitchListTile(
+              key: const ValueKey('sm_admin_txg_weighed'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Тортилади (оғирлик бўйича)'),
+              value: _weighed,
+              onChanged: (v) => setState(() => _weighed = v),
+            ),
+            _tf('synonyms', 'Синонимлар (вергул билан)', _syn),
+            _tf('pairs', 'Бирга олинади — гуруҳ ID (вергул билан)', _pairs),
+            for (final p in _problems) Text(p, style: const TextStyle(color: Colors.red, fontSize: 12)),
+          ]),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Бекор')),
+        FilledButton(key: const ValueKey('sm_admin_txg_ok'), onPressed: _ok, child: const Text('Тайёр')),
+      ],
+    );
+  }
+}
 // ─── Буюртмалар ────────────────────────────────────────────────────────────
 
 /// Буюртма қатори (supermarket.js `priceSupermarketOrder` / `applyWeights` / олиб ташлаш шакли).

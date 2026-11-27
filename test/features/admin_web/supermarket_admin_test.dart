@@ -369,6 +369,10 @@ void main() {
       await t.pumpWidget(MaterialApp(home: Scaffold(body: SmTaxonomyAdminTab(service: s))));
       await t.pumpAndSettle();
       expect(find.text('Версия 3 · 1 категория · 1 гуруҳ'), findsOneWidget);
+      // Эга 2026-11-28: JSON — «Кенгайтирилган» ичида.
+      expect(_k('sm_admin_tx_json'), findsNothing);
+      await t.tap(_k('sm_admin_tx_advanced'));
+      await t.pumpAndSettle();
       await t.tap(_k('sm_admin_tx_save'));
       await t.pumpAndSettle();
       expect(s.savedTx!.v, 3);
@@ -379,6 +383,68 @@ void main() {
       await t.pumpAndSettle();
       expect(find.text('JSON нотўғри'), findsOneWidget);
       expect(s.savedTx, isNull);
+    });
+
+    testWidgets('«Тоифалар ва гуруҳлар» (эга 2026-11-28): гуруҳ қўшиш (3 тил, бирлик, қадам, тортилади, синоним, бирга) → тартиб → сақлаш expectedVersion билан; фаол таклифли гуруҳ ўчмайди', (t) async {
+      await _big(t);
+      final s = _FakeAdmin();
+      await t.pumpWidget(MaterialApp(home: Scaffold(body: SmTaxonomyAdminTab(service: s))));
+      await t.pumpAndSettle();
+      await t.tap(_k('sm_admin_tx_cat_vegetables'));
+      await t.pumpAndSettle();
+      expect(t.widget<IconButton>(_k('sm_admin_tx_del_onion')).onPressed, isNull, reason: 'o1 таклифи фаол');
+      expect(t.widget<FilledButton>(_k('sm_admin_tx_form_save')).onPressed, isNull, reason: 'ўзгариш йўқ');
+      await t.tap(_k('sm_admin_tx_add_vegetables'));
+      await t.pumpAndSettle();
+      await t.enterText(_k('sm_admin_txg_id'), 'onion');
+      await t.tap(_k('sm_admin_txg_ok'));
+      await t.pumpAndSettle();
+      expect(find.textContaining('ID банд'), findsOneWidget);
+      await t.enterText(_k('sm_admin_txg_id'), 'carrot');
+      await t.enterText(_k('sm_admin_txg_name_uz_Cyrl'), 'Сабзи');
+      await t.enterText(_k('sm_admin_txg_name_uz_Latn'), 'Sabzi');
+      await t.enterText(_k('sm_admin_txg_name_ru'), 'Морковь');
+      await t.enterText(_k('sm_admin_txg_step'), '0,5');
+      await t.tap(_k('sm_admin_txg_weighed'));
+      await t.enterText(_k('sm_admin_txg_synonyms'), 'морковка, sabzi');
+      await t.enterText(_k('sm_admin_txg_pairs'), 'onion');
+      await t.tap(_k('sm_admin_txg_ok'));
+      await t.pumpAndSettle();
+      expect(_k('sm_admin_tx_group_carrot'), findsOneWidget);
+      await t.tap(_k('sm_admin_tx_up_carrot'));
+      await t.pumpAndSettle();
+      await t.tap(_k('sm_admin_tx_form_save'));
+      await t.pumpAndSettle();
+      final saved = s.savedTx!;
+      expect(saved.v, 3);
+      final gs = ((saved.cats.single as Map)['groups'] as List).cast<Map>();
+      expect(gs.map((g) => g['id']), ['carrot', 'onion']);
+      expect(gs.map((g) => g['order']), [1, 2]);
+      expect(gs.first, {
+        'id': 'carrot', 'order': 1, 'names': {'uz_Cyrl': 'Сабзи', 'uz_Latn': 'Sabzi', 'ru': 'Морковь'},
+        'unit': 'kg', 'step': 0.5, 'weighed': true, 'synonyms': ['морковка', 'sabzi'], 'pairs': ['onion'],
+      });
+    });
+
+    test('«Тоифалар ва гуруҳлар» соф ёрдамчилари: суриш, ўчириш (фаол/охирги рад, pairs тозаланади), формадаги хатолар', () {
+      List<Map<String, dynamic>> cats() => [
+            {'id': 'veg', 'order': 1, 'icon': 'v', 'names': _n3('С'), 'groups': [
+              {'id': 'a', 'order': 1, 'names': _n3('A'), 'unit': 'kg', 'step': 1, 'weighed': false, 'synonyms': [], 'pairs': ['b']},
+              {'id': 'b', 'order': 2, 'names': _n3('B'), 'unit': 'kg', 'step': 1, 'weighed': false, 'synonyms': []},
+            ]},
+          ];
+      final moved = smTxMoveGroup(cats(), 0, 1, -1);
+      expect(((moved[0]['groups'] as List).first as Map)['id'], 'b');
+      expect(smTxMoveGroup(cats(), 0, 0, -1)[0]['groups'], cats()[0]['groups'], reason: 'чегарада ўзгармайди');
+      expect(smTxRemoveGroup(cats(), 0, 1, {'b'}).error, contains('фаол таклиф'));
+      final r = smTxRemoveGroup(cats(), 0, 1, {});
+      expect([r.error, (r.cats[0]['groups'] as List).length, ((r.cats[0]['groups'] as List).first as Map)['pairs']], [null, 1, <Object?>[]]);
+      expect(smTxRemoveGroup(r.cats, 0, 0, {}).error, contains('камида битта'));
+      final bad = smTxGroupFromForm(id: 'X!', names: const {'uz_Cyrl': 'a'}, unit: 'ton', step: '0', weighed: false, synonyms: '', pairs: 'zz', knownIds: {'a'});
+      expect(bad.problems.length, greaterThanOrEqualTo(5));
+      final ok = smTxGroupFromForm(id: 'milk', names: const {'uz_Cyrl': 'Сут', 'uz_Latn': 'Sut', 'ru': 'Молоко'}, unit: 'l', step: '1', weighed: false, synonyms: 'sut;молоко', pairs: '', knownIds: {'a'});
+      expect([ok.problems, ok.group['synonyms'], ok.group.containsKey('pairs')], [<String>[], ['sut', 'молоко'], false]);
+      expect(smTaxonomyJsonProblem(jsonEncode({'categories': smTxUpsertGroup(cats(), 0, {...ok.group})})), isNull);
     });
 
     testWidgets('буюртмалар: тортиш (фақат тортилмаган) ва қаторни олиш; ҳолат ёпиқ — тугма йўқ', (t) async {

@@ -19,20 +19,30 @@ Future<bool> showDeviceBindingConflictSheet({
   required DeviceFingerprintSnapshot snapshot,
   OnboardingController? controller,
 }) async {
-  final outcome = await showModalBottomSheet<_ConflictAction>(
+  final outcome = await showModalBottomSheet<ConflictAction>(
     context: context,
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
-    builder: (ctx) => _ConflictSheetBody(result: result),
+    builder: (ctx) => DeviceBindingConflictSheetBody(result: result),
   );
 
-  if (!context.mounted || outcome == null || outcome == _ConflictAction.dismiss) {
+  if (!context.mounted || outcome == null || outcome == ConflictAction.dismiss) {
     return false;
   }
 
-  if (outcome == _ConflictAction.requestTransfer) {
+  if (outcome == ConflictAction.requestAdminReview) {
+    return _requestAdminReview(
+      context: context,
+      phone: phone,
+      name: name,
+      snapshot: snapshot,
+      controller: controller,
+    );
+  }
+
+  if (outcome == ConflictAction.requestTransfer) {
     try {
       final repo = DeviceBindingRepository();
       final transfer = await repo.requestDeviceTransfer(
@@ -71,7 +81,7 @@ Future<bool> showDeviceBindingConflictSheet({
       if (!context.mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(context.tr(onboardingErrorKey(e))),
+          content: Text(context.tr(deviceSecurityErrorKey(e))),
           backgroundColor: Colors.red.shade700,
         ),
       );
@@ -91,10 +101,81 @@ Future<bool> showDeviceBindingConflictSheet({
   return false;
 }
 
-enum _ConflictAction { requestTransfer, dismiss }
+/// «Эски телефоним йўқ» → admin ko'rigi so'rovi → kutish ekrani (2026-11-28).
+Future<bool> _requestAdminReview({
+  required BuildContext context,
+  required String phone,
+  required String name,
+  required DeviceFingerprintSnapshot snapshot,
+  OnboardingController? controller,
+}) async {
+  try {
+    final req = await DeviceBindingRepository().requestDeviceAdminReview(
+      phone: phone,
+      snapshot: snapshot,
+    );
+    if (!context.mounted) return false;
+    if (req.status == 'already_bound') return true;
+    if (req.requestId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(context.tr('ob_dev_request_failed')),
+        backgroundColor: Colors.red.shade700,
+      ));
+      return false;
+    }
+    final ok = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DeviceTransferPendingScreen(
+          phone: phone,
+          name: name,
+          snapshot: snapshot,
+          requestId: req.requestId,
+          expiresAtMs: req.expiresAtMs,
+          controller: controller,
+          adminReview: true,
+        ),
+      ),
+    );
+    return ok == true;
+  } on FirebaseFunctionsException catch (e) {
+    if (!context.mounted) return false;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(context.tr(deviceSecurityErrorKey(e))),
+      backgroundColor: Colors.red.shade700,
+    ));
+    return false;
+  } catch (e) {
+    if (!context.mounted) return false;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(userErrorMessage(context, e)),
+      backgroundColor: Colors.red.shade700,
+    ));
+    return false;
+  }
+}
 
-class _ConflictSheetBody extends StatelessWidget {
-  const _ConflictSheetBody({required this.result});
+/// Server ichki kodi (details.code) → 3 tildagi kalit; bo'lmasa umumiy xarita.
+String deviceSecurityErrorKey(FirebaseFunctionsException e) {
+  final d = e.details;
+  final code = d is Map ? (d['code'] ?? '').toString() : '';
+  switch (code) {
+    case 'DEVICE_DENIED_24H':
+      return 'ob_dev_denied_body';
+    case 'ADMIN_REVIEW_LIMIT':
+      return 'ob_dev_review_limit';
+    case 'DEVICE_BINDING_RATE_LIMITED':
+      return 'err_too_many';
+    case 'PHONE_NOT_BOUND':
+      return 'ob_dev_phone_not_bound';
+  }
+  return onboardingErrorKey(e);
+}
+
+enum ConflictAction { requestTransfer, requestAdminReview, dismiss }
+
+class DeviceBindingConflictSheetBody extends StatelessWidget {
+  const DeviceBindingConflictSheetBody({super.key, required this.result});
 
   final DeviceBindingCheckResult result;
 
@@ -103,13 +184,20 @@ class _ConflictSheetBody extends StatelessWidget {
     final isPhoneOther = result.status == DeviceBindingStatus.phoneBoundOtherDevice;
     final isDeviceOther = result.status == DeviceBindingStatus.deviceBoundOtherPhone;
     final isBlocked = result.status == DeviceBindingStatus.blocked;
+    final accountUnbound = isPhoneOther && result.reason == 'account_unbound';
     final label = result.oldDeviceLabel.trim();
 
     // Matnlar kalit bo'yicha (3 til); serverdan kelgan `result.message`
     // faqat lotincha bo'lgani uchun ko'rsatilmaydi.
     String title;
     String body;
-    if (isPhoneOther) {
+    if (isBlocked && result.deniedByOwner) {
+      title = context.tr('ob_dev_denied_title');
+      body = context.tr('ob_dev_denied_body');
+    } else if (accountUnbound) {
+      title = context.tr('ob_dev_unbound_title');
+      body = context.tr('ob_dev_unbound_body');
+    } else if (isPhoneOther) {
       title = context.tr('ob_dev_phone_other_title');
       body = label.isEmpty
           ? context.tr('ob_dev_phone_other_body_nolabel')
@@ -156,8 +244,9 @@ class _ConflictSheetBody extends StatelessWidget {
             const SizedBox(height: 20),
             if (isPhoneOther && result.selfServeAvailable) ...[
               FilledButton.icon(
+                key: const Key('devConflictConfirmOld'),
                 onPressed: () =>
-                    Navigator.pop(context, _ConflictAction.requestTransfer),
+                    Navigator.pop(context, ConflictAction.requestTransfer),
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   padding: const EdgeInsets.symmetric(vertical: 14),
@@ -167,8 +256,21 @@ class _ConflictSheetBody extends StatelessWidget {
               ),
               const SizedBox(height: 10),
             ],
+            if (isPhoneOther && result.adminReviewAvailable) ...[
+              OutlinedButton.icon(
+                key: const Key('devConflictNoOldPhone'),
+                onPressed: () =>
+                    Navigator.pop(context, ConflictAction.requestAdminReview),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                icon: const Icon(Icons.support_agent),
+                label: Text(context.tr('ob_dev_no_old_phone')),
+              ),
+              const SizedBox(height: 10),
+            ],
             OutlinedButton(
-              onPressed: () => Navigator.pop(context, _ConflictAction.dismiss),
+              onPressed: () => Navigator.pop(context, ConflictAction.dismiss),
               child: Text(
                 isDeviceOther || isBlocked
                     ? context.tr('ob_dev_understood')
@@ -177,7 +279,9 @@ class _ConflictSheetBody extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              context.tr('ob_dev_lost_hint'),
+              context.tr(result.adminReviewAvailable
+                  ? 'ob_dev_no_old_phone_hint'
+                  : 'ob_dev_lost_hint'),
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
             ),

@@ -276,6 +276,8 @@ class PushNavigation {
           builder: (_) => DeviceTransferApproveScreen(
             requestId: requestId,
             newDeviceLabel: (data['newDeviceLabel'] ?? '').trim(),
+            platform: (data['platform'] ?? '').trim(),
+            approxCity: (data['approxCity'] ?? '').trim(),
           ),
         ),
       );

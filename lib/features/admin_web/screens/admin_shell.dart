@@ -82,6 +82,7 @@ import 'incentive_programs_admin_screen.dart';
 import 'service_config_admin_screen.dart';
 import 'splash_taglines_screen.dart';
 import 'users_devices_screen.dart';
+import 'device_approvals_screen.dart';
 
 /// Admin Web Panel — асосий навигaция (sidebar + контент).
 ///
@@ -520,6 +521,15 @@ class _AdminShellState extends State<AdminShell> {
       description: 'Телефон, туғилган кун, қурилмалар',
       access: _SectionAccess.users,
     ),
+    // Эга 2026-11-28: авто-тасдиқ ўчирилди — «Эски телефоним йўқ» сўровлари шу ерда.
+    // Сервер `adminDecideDeviceApproval` — admin/superadmin (админ рақами — фақат superadmin).
+    _AdminSection(
+      group: 'Фойдаланувчилар ва созламалар',
+      label: 'Қурилма тасдиқлари',
+      icon: Icons.phonelink_lock,
+      description: 'Эски телефони йўқларнинг янги қурилмасини тасдиқлаш ёки рад этиш',
+      access: _SectionAccess.users,
+    ),
     _AdminSection(
       group: 'Фойдаланувчилар ва созламалар',
       label: 'Туғилган кун',
@@ -827,6 +837,9 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'Фойдаланувчилар') {
       return const UsersDevicesScreen();
+    }
+    if (section.label == 'Қурилма тасдиқлари') {
+      return const DeviceApprovalsScreen();
     }
     if (section.label == 'Risk review') {
       return const RiskReviewScreen();
@@ -1462,6 +1475,15 @@ class _Sidebar extends StatelessWidget {
         return db
             .collection('pending_codes')
             .where('status', isEqualTo: 'pending')
+            .snapshots()
+            .map((s) => s.docs.length);
+      // Rules: `device_transfer_requests` — admin ўқийди (isAdmin()).
+      case 'Қурилма тасдиқлари':
+        return db
+            .collection('device_transfer_requests')
+            .where('channel', isEqualTo: 'admin_review')
+            .where('status', isEqualTo: 'pending')
+            .limit(100)
             .snapshots()
             .map((s) => s.docs.length);
       case 'Маршрут такси':

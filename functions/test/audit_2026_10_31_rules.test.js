@@ -8,7 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 const { initializeTestEnvironment, assertSucceeds, assertFails } = require('@firebase/rules-unit-testing');
-const { Timestamp } = require('firebase/firestore');
+const { Timestamp, serverTimestamp } = require('firebase/firestore');
 
 const RULES_PATH = process.env.RULES_FILE || path.join(__dirname, '..', '..', 'firestore.rules');
 const [HOST, PORT] = (process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080').split(':');
@@ -23,7 +23,8 @@ function clip(owner, extra = {}) {
   return {
     ownerPhone: owner, title: 't', category: 'product', status: 'pending',
     videoUrl: url(`tv_clips/${owner}/1_ab.mp4`), posterUrl: url(`tv_clips/${owner}/poster_1_ab.jpg`),
-    likeCount: 0, viewCount: 0, commentCount: 0, ...extra,
+    // Jonli rules (2026-11-02): tv_clips createdAt == request.time.
+    likeCount: 0, viewCount: 0, commentCount: 0, createdAt: serverTimestamp(), ...extra,
   };
 }
 

@@ -62,6 +62,31 @@ async function main() {
     await assertFails(a.doc(`insurance_oil_credits/01A123BC_2026-11-28`).set({ result: 'credited' }));
     await assertSucceeds(adm.collection('insurance_requests').where('status', '==', 'paid').get());
   });
+  // Хавфсизлик (2026-11-28): users/{uid} даги сервер майдонлари — эгаси ҳам, админ ҳам клиентдан ёзолмайди.
+  await check('R4 users: carInsurance / incentiveBalance / bonusBalance / telegram* — эгаси ва админ ёзолмайди (update + create)', async () => {
+    const C = '998901000003';
+    await assertFails(a.doc(`users/${A}`).update({ carInsurance: { expiresOn: '2030-01-01', policyType: 'osago', source: 'ava' } }));
+    await assertFails(a.doc(`users/${A}`).set({ carInsurance: { expiresOn: '2030-01-01' } }, { merge: true }));
+    await assertFails(a.doc(`users/${A}`).update({ incentiveBalance: 100000 }));
+    await assertFails(a.doc(`users/${A}`).update({ incentiveUpdatedAt: new Date() }));
+    await assertFails(a.doc(`users/${A}`).update({ bonusBalance: 999999 }));
+    await assertFails(a.doc(`users/${A}`).update({ telegramId: '123' }));
+    await assertFails(a.doc(`users/${A}`).update({ telegramUsername: 'x', telegramLinkedAt: new Date() }));
+    await assertFails(adm.doc(`users/${A}`).update({ carInsurance: { expiresOn: '2030-01-01' } }));
+    await assertFails(adm.doc(`users/${A}`).update({ incentiveBalance: 5 }));
+    const c = as(C);
+    await assertFails(c.doc(`users/${C}`).set({ phone: C, carInsurance: { expiresOn: '2030-01-01' } }));
+    await assertFails(c.doc(`users/${C}`).set({ phone: C, incentiveBalance: 100000 }));
+    await assertFails(c.doc(`users/${C}`).set({ phone: C, telegramId: '1' }));
+    await assertSucceeds(c.doc(`users/${C}`).set({ phone: C, role: 'user' }));
+  });
+  await check('R5 users: мижоз ўзи ёзадиган майдонлар ишлайди (insuranceRemindersOptIn, holidayRemindersOptIn, машина, исм); бегона — йўқ', async () => {
+    await assertSucceeds(a.doc(`users/${A}`).set({ insuranceRemindersOptIn: false }, { merge: true }));
+    await assertSucceeds(a.doc(`users/${A}`).update({ holidayRemindersOptIn: false }));
+    await assertSucceeds(a.doc(`users/${A}`).update({ carModel: 'Cobalt', carColor: 'oq', carPlate: '01A123BC', carUpdatedAt: new Date() }));
+    await assertSucceeds(a.doc(`users/${A}`).update({ name: 'Ali', districtId: 'gurlan' }));
+    await assertFails(b.doc(`users/${A}`).update({ insuranceRemindersOptIn: true }));
+  });
   await testEnv.cleanup();
   const passed = results.filter(Boolean).length;
   console.log(`\n${passed} passed, ${results.length - passed} failed`);

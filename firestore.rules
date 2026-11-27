@@ -46,7 +46,10 @@ service cloud.firestore {
             // (`myTreeComponent()`) — эгаси ўзи ёзса бошқа оиланинг дарахтини ўқирди.
             'treeComponentId',
             // Рағбат қолдиғи (incentives.js, эга 2026-11-02) — фақат сервер.
-            'incentiveBalance', 'incentiveUpdatedAt'
+            'incentiveBalance', 'incentiveUpdatedAt',
+            // Суғурта муддати (car_insurance.js: insuranceSetMyExpiry / агент полиси, source 'ava') ва
+            // Telegram ҳамён боғланиши (telegram_wallet_bot.js, бот тасдиқлайди) — фақат сервер (2026-11-28).
+            'carInsurance', 'telegramId', 'telegramUsername', 'telegramLinkedAt'
           ]);
     }
 
@@ -907,7 +910,8 @@ service cloud.firestore {
                'realtyPro', 'realtyTeamOwner', 'accountId',
                'payoutKycVerified', 'security', 'treeComponentId',
                'deletion', 'deleted', 'deletedAt', 'revivedAt',
-               'incentiveBalance', 'incentiveUpdatedAt'
+               'incentiveBalance', 'incentiveUpdatedAt',
+               'carInsurance', 'telegramId', 'telegramUsername', 'telegramLinkedAt'
              ])
           && (!('role' in request.resource.data) || request.resource.data.role == 'user');
 

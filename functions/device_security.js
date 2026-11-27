@@ -220,6 +220,19 @@ function rateStep(doc, nowMs, windowMs, limit) {
   return { allowed: true, next: { windowStartMs: start, count: count + 1 }, retryAfterMs: 0 };
 }
 
+/**
+ * Admin qaror qila oladimi: so'rov oxirgi 72 soatda yaratilgan va hali hal qilinmagan
+ * (`pending` / `expired` / `cancelled`). Muddati o'tgan peer so'rov ham — eski APK foydalanuvchisi
+ * operatorga murojaat qilganda (ega 2026-11-28). `approved`/`rejected`/`approving` — yo'q.
+ */
+function adminDecidable(req, nowMs) {
+  const r = req || {};
+  if (!['pending', 'expired', 'cancelled'].includes(String(r.status || ''))) return false;
+  const c = r.createdAt;
+  const createdMs = c && typeof c.toMillis === 'function' ? c.toMillis() : 0;
+  return createdMs > 0 && createdMs >= nowMs - DEVICE_SEC.ADMIN_REVIEW_TTL_MS;
+}
+
 function denialDocId(phone, hash) {
   return `${phone}__${String(hash || '').toLowerCase()}`;
 }
@@ -650,7 +663,12 @@ function attachDeviceSecurity(exports, deps) {
       return { status: 'pending', requestId: ref.id, channel: CHANNEL_ADMIN, expiresAtMs, oldDeviceLabel };
     });
 
-  /** Admin: ko'rik so'rovlari ro'yxati (`admin`/`superadmin`). */
+  /**
+   * Admin: ko'rik so'rovlari ro'yxati (`admin`/`superadmin`).
+   * `phone` berilsa — shu raqamning oxirgi 72 soatdagi BARCHA so'rovlari (har ikki kanal):
+   * eski APK'da «Эски телефоним йўқ» tugmasi yo'q — foydalanuvchi operatorga qo'ng'iroq qilganda
+   * admin uning «eski qurilmadan tasdiqlash» so'rovini topib, shu yerdan tasdiqlaydi.
+   */
   exports.adminListDeviceApprovals = authFunctions
     .runWith({ timeoutSeconds: 60, memory: '256MB' })
     .https.onCall(async (data, context) => {
@@ -658,18 +676,26 @@ function attachDeviceSecurity(exports, deps) {
       const status = ['pending', 'approved', 'rejected'].includes(String((data && data.status) || ''))
         ? String(data.status)
         : 'pending';
-      const snap = await db.collection(COL.REQUESTS)
-        .where('channel', '==', CHANNEL_ADMIN)
-        .where('status', '==', status)
-        .limit(100)
-        .get();
-      const callerRole = String(await sec.roleOf(callerUid)).toLowerCase();
+      const searchPhone = canonicalUid((data && data.phone) || '');
       const now = Date.now();
+      let docs;
+      if (searchPhone.length >= 12) {
+        const s = await db.collection(COL.REQUESTS).where('phone', '==', searchPhone).limit(30).get();
+        docs = s.docs.filter((d) => toMs((d.data() || {}).createdAt) >= now - DEVICE_SEC.ADMIN_REVIEW_TTL_MS);
+      } else {
+        const s = await db.collection(COL.REQUESTS)
+          .where('channel', '==', CHANNEL_ADMIN)
+          .where('status', '==', status)
+          .limit(100)
+          .get();
+        docs = s.docs;
+      }
+      const callerRole = String(await sec.roleOf(callerUid)).toLowerCase();
       const items = [];
-      for (const d of snap.docs) {
+      for (const d of docs) {
         const x = d.data() || {};
         const expiresAtMs = toMs(x.expiresAt);
-        if (status === 'pending' && expiresAtMs && expiresAtMs <= now) continue;
+        if (!searchPhone && status === 'pending' && expiresAtMs && expiresAtMs <= now) continue;
         const userSnap = await db.collection('users').doc(String(x.phone || '')).get();
         const u = userSnap.exists ? (userSnap.data() || {}) : {};
         const privileged = x.privileged === true || isPrivilegedRole(u.role);
@@ -690,6 +716,8 @@ function attachDeviceSecurity(exports, deps) {
           createdAtMs: toMs(x.createdAt),
           expiresAtMs,
           status: String(x.status || ''),
+          channel: String(x.channel || CHANNEL_PEER),
+          decidable: adminDecidable(x, now),
         });
       }
       items.sort((a, b) => b.createdAtMs - a.createdAtMs);
@@ -708,22 +736,24 @@ function attachDeviceSecurity(exports, deps) {
       if (!requestId) throw new functions.https.HttpsError('invalid-argument', 'requestId');
       const ref = db.collection(COL.REQUESTS).doc(requestId);
       const pre = await ref.get();
-      if (!pre.exists || (pre.data() || {}).channel !== CHANNEL_ADMIN) {
+      if (!pre.exists) {
         throw new functions.https.HttpsError('not-found', 'So\'rov topilmadi');
       }
       const req0 = pre.data() || {};
       const phone = canonicalUid(req0.phone || '');
+      const channel = String(req0.channel || CHANNEL_PEER);
       await sec.assertCanApproveFor({ callerUid, targetPhone: phone, storedPrivileged: req0.privileged === true });
+      if (approve) {
+        const denial = await sec.getDenial(phone, String(req0.toHash || ''));
+        if (denial.blocked) {
+          throw secError(functions, 'failed-precondition', 'DEVICE_DENIED_24H', { untilMs: denial.untilMs });
+        }
+      }
 
       const claim = await db.runTransaction(async (tx) => {
         const s = await tx.get(ref);
         const r = s.data() || {};
-        const exp = toMs(r.expiresAt);
-        if (r.status === 'pending' && exp && exp <= Date.now()) {
-          tx.set(ref, { status: 'expired', updatedAt: ts() }, { merge: true });
-          return { ok: false, status: 'expired' };
-        }
-        if (r.status !== 'pending') return { ok: false, status: String(r.status || '') };
+        if (!adminDecidable(r, Date.now())) return { ok: false, status: String(r.status || '') };
         tx.set(ref, {
           status: approve ? 'approving' : 'rejected',
           decidedBy: 'admin',
@@ -743,7 +773,7 @@ function attachDeviceSecurity(exports, deps) {
       if (!approve) {
         await sec.logEvent({
           phone, action: 'admin_rejected', result: 'rejected', hash: req0.toHash, requestId,
-          channel: CHANNEL_ADMIN, actor: `admin:${callerUid}`, note: [note, identityCheck].filter(Boolean).join(' | '),
+          channel, actor: `admin:${callerUid}`, note: [note, identityCheck].filter(Boolean).join(' | '),
         });
         await db.collection('admin_audit').add({ kind: 'device_approval_rejected', ...auditBase });
         return { status: 'rejected', requestId };
@@ -757,7 +787,7 @@ function attachDeviceSecurity(exports, deps) {
           verifiedMethod: 'admin_review',
           fingerprint: cleanFingerprint(req0.toFingerprint),
           event: {
-            action: 'admin_approved', requestId, channel: CHANNEL_ADMIN, actor: `admin:${callerUid}`,
+            action: 'admin_approved', requestId, channel, actor: `admin:${callerUid}`,
             label: req0.newDeviceLabel, platform: req0.platform,
             note: [note, identityCheck].filter(Boolean).join(' | '),
           },
@@ -798,6 +828,7 @@ module.exports = {
   ipKeyOf,
   approxCityOf,
   rateStep,
+  adminDecidable,
   denialDocId,
   tashkentTime,
   texts,

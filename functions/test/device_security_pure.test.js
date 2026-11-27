@@ -119,6 +119,19 @@ check('P11 secError: ichki kod + 3 til details', () => {
   assert.ok(e.details.messages.ru);
 });
 
+check('P12 adminDecidable: 72 soat ichida pending/expired/cancelled — ha; hal qilingan yoki eski — yo\'q', () => {
+  const now = 10 * 24 * 3600 * 1000;
+  const ts = (ms) => ({ toMillis: () => ms });
+  assert.strictEqual(ds.adminDecidable({ status: 'pending', createdAt: ts(now - 1000) }, now), true);
+  assert.strictEqual(ds.adminDecidable({ status: 'expired', createdAt: ts(now - 71 * 3600 * 1000) }, now), true);
+  assert.strictEqual(ds.adminDecidable({ status: 'cancelled', createdAt: ts(now - 1000) }, now), true);
+  assert.strictEqual(ds.adminDecidable({ status: 'expired', createdAt: ts(now - 73 * 3600 * 1000) }, now), false);
+  for (const st of ['approved', 'rejected', 'approving']) {
+    assert.strictEqual(ds.adminDecidable({ status: st, createdAt: ts(now - 1000) }, now), false, st);
+  }
+  assert.strictEqual(ds.adminDecidable({ status: 'pending' }, now), false, 'createdAt yo\'q');
+});
+
 const passed = results.filter(Boolean).length;
 console.log(`\n${passed}/${results.length} passed`);
 process.exit(passed === results.length ? 0 : 1);

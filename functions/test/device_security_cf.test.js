@@ -362,7 +362,37 @@ async function main() {
     assert.ok(list.items.some((x) => x.requestId === r.requestId && x.channel === 'admin_review'));
     const no = await fns.respondDeviceTransfer.run({ requestId: r.requestId, approve: false, deviceFingerprintHash: H('d1') }, ctxOf(P));
     assert.strictEqual(no.status, 'rejected');
+    // Egasi rad etgan qurilmani admin ham tasdiqlay olmaydi (24 s), rad etish — hal qilingan.
     await assert.rejects(fns.adminDecideDeviceApproval.run({ requestId: r.requestId, approve: true }, ctxOf(ADMIN)),
+      expectCode('failed-precondition', 'DEVICE_DENIED_24H'));
+    await assert.rejects(fns.adminDecideDeviceApproval.run({ requestId: r.requestId, approve: false }, ctxOf(ADMIN)),
+      expectCode('failed-precondition', 'REQUEST_NOT_PENDING'));
+  });
+
+  await check('K16 eski APK (tugma yo\'q): muddati o\'tgan peer so\'rovni admin raqam bo\'yicha topib tasdiqlaydi; 72 soatdan eski — yo\'q', async () => {
+    const P = '998944000005';
+    await seedBound(P, H('e5'));
+    const r = await fns.requestDeviceTransfer.run({ phone: P, deviceFingerprintHash: H('e6'), fingerprint: FP({ firebaseInstallationId: 'fid_oldapk_0005' }) }, anon());
+    await db.doc(`device_transfer_requests/${r.requestId}`).set({
+      status: 'expired', expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() - 1000),
+    }, { merge: true });
+    const pendingOnly = await fns.adminListDeviceApprovals.run({}, ctxOf(ADMIN));
+    assert.ok(!pendingOnly.items.some((x) => x.requestId === r.requestId), 'umumiy navbatda peer so\'rov yo\'q');
+    const found = await fns.adminListDeviceApprovals.run({ phone: P }, ctxOf(ADMIN));
+    const it = found.items.find((x) => x.requestId === r.requestId);
+    assert.ok(it);
+    assert.strictEqual(it.channel, 'old_device_push');
+    assert.strictEqual(it.decidable, true);
+    const ok = await fns.adminDecideDeviceApproval.run({ requestId: r.requestId, approve: true, identityCheck: 'qo\'ng\'iroq' }, ctxOf(ADMIN));
+    assert.strictEqual(ok.status, 'approved');
+    const relogin = await check_({ phone: P, deviceFingerprintHash: H('e6'), fingerprint: FP() });
+    assert.strictEqual(relogin.status, 'trusted_device');
+
+    const old = await fns.requestDeviceTransfer.run({ phone: P, deviceFingerprintHash: H('e7'), fingerprint: FP({ firebaseInstallationId: 'fid_oldapk_0007' }) }, anon());
+    await db.doc(`device_transfer_requests/${old.requestId}`).set({
+      status: 'expired', createdAt: admin.firestore.Timestamp.fromMillis(Date.now() - 73 * 3600 * 1000),
+    }, { merge: true });
+    await assert.rejects(fns.adminDecideDeviceApproval.run({ requestId: old.requestId, approve: true }, ctxOf(ADMIN)),
       expectCode('failed-precondition', 'REQUEST_NOT_PENDING'));
   });
 

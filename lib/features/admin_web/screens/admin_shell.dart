@@ -76,6 +76,7 @@ import 'risk_review_screen.dart';
 import 'anomaly_settings_screen.dart';
 import 'demand_core_admin_screen.dart';
 import 'ava_service_centers_admin_screen.dart';
+import 'car_insurance_admin_screen.dart';
 import 'incentive_programs_admin_screen.dart';
 import 'service_config_admin_screen.dart';
 import 'splash_taglines_screen.dart';
@@ -351,6 +352,15 @@ class _AdminShellState extends State<AdminShell> {
       label: 'AVA Сервис марказлари',
       icon: Icons.build_circle,
       description: 'Ҳар туман: манзил · харитада жой · телефон',
+      access: _SectionAccess.opsAndFinance,
+    ),
+    // Автомобил суғуртаси (эга 2026-11-28): агент аризалари, сервис ҳисоботи, нарх жадвали, созламалар.
+    // Сервер рухсати: агент — admin/superadmin ёки agentPhones; ҳисобот — reporterPhones; созлама — admin.
+    _AdminSection(
+      group: 'Такси ва транспорт',
+      label: 'Автомобил суғуртаси',
+      icon: Icons.shield_outlined,
+      description: 'Аризалар · полис юклаш · сервис ҳисоботи · нархлар · рағбат',
       access: _SectionAccess.opsAndFinance,
     ),
 
@@ -822,6 +832,9 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'AVA Сервис марказлари') {
       return const AvaServiceCentersAdminScreen();
+    }
+    if (section.label == 'Автомобил суғуртаси') {
+      return const CarInsuranceAdminScreen();
     }
     if (section.label == 'Рағбат дастурлари') {
       return const IncentiveProgramsAdminScreen();

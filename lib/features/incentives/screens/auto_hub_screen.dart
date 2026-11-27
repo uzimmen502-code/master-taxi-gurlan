@@ -9,6 +9,8 @@ import '../../../repositories/platform_products_repository.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../shared/car/car_edit_dialog.dart';
 import '../../ads/widgets/market_grid.dart';
+import '../../car_insurance/widgets/car_insurance_home_section.dart';
+import '../../car_insurance/widgets/car_insurance_offer_prompt.dart';
 import '../../ads/widgets/platform_market_card.dart';
 import '../../markets/domain/market_taxonomy.dart' show kAutoPartsCategory;
 import '../../markets/open_market.dart';
@@ -111,6 +113,8 @@ class _AutoHubScreenState extends State<AutoHubScreen> {
         _car = UserRepository().getCarInfo(_phone);
         _offers = _loadOffers();
       });
+      // Машина рағбати (суғурта кампанияси, эга 2026-11-28): бонус ёки мой дастури — кампания бўлса.
+      await maybeOfferCarInsuranceIncentive(context, _phone);
     }
   }
 
@@ -141,6 +145,8 @@ class _AutoHubScreenState extends State<AutoHubScreen> {
           return CustomScrollView(
             slivers: [
               SliverToBoxAdapter(child: _carCard(context)),
+              // Суғурта муддати + «Автомобил суғуртаси» (эга 2026-11-28; сервер босқичи ёпиқ бўлса — йўқ).
+              SliverToBoxAdapter(child: CarInsuranceAutoHubTile(phone: _phone)),
               SliverToBoxAdapter(child: _bonusCard(context)),
               SliverToBoxAdapter(child: _serviceCard(context)),
               SliverToBoxAdapter(child: _partsMarketEntry(context)),

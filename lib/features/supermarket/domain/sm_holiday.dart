@@ -248,7 +248,13 @@ class HolidayOccasion {
     this.nextDate = '',
     this.target,
     this.selfReminders,
+    this.theme = const {},
   });
+
+  /// Мавзу изоҳи (эга 2026-11-28; сервер 	heme): «гуллар, шоколад, совғалар» — саватча сарлавҳасида. Бўш — йўқ.
+  final Map<String, String> theme;
+
+  String themeText(String lang) => theme.isEmpty ? '' : localizedName(theme, lang);
 
   /// Байрам босилганда нима очилади (`null` — байрам саватчаси; Қурбон ҳайит — Мол бозори).
   final HolidayTarget? target;
@@ -309,6 +315,7 @@ class HolidayOccasion {
       image: s(raw['image']),
       nextDate: s(raw['nextDate']),
       target: HolidayTarget.fromMap(raw['target']),
+      theme: raw['theme'] is Map ? smNames(raw['theme']) : const {},
       selfReminders: raw['selfReminders'] is List
           ? [...(raw['selfReminders'] as List).map(HolidaySelfReminder.fromMap).whereType<HolidaySelfReminder>()]
           : null,
@@ -334,6 +341,8 @@ class HolidayOccasion {
         // (йўқ — сервер сукути D-7..D-3; бўш рўйхат — ўчиқ).
         if (!isBirthday) 'target': target?.toMap(),
         if (isBirthday && selfReminders != null) 'selfReminders': [for (final r in selfReminders!) r.toMap()],
+        // Мавзу сақланиб қолсин (сервер йўқ майдонни тозалайди).
+        if (theme.length == 3) 'theme': theme,
       };
 }
 
@@ -805,8 +814,9 @@ List<DateTime> smSelectableDates(Map<String, List<SmSlot>> dateSlots, DateTime t
 // ─── Бош саҳифа карточкалари ─────────────────────────────────────────────────
 
 /// «Байрам саватчаси» карточкаси: супермаркет очиқ ва рухсат бор + сервер камида битта байрам қайтарган.
-bool holidayCardVisible({required bool smOpenable, required bool smAllowed, required Iterable<HolidayOccasion> occasions}) =>
-    smOpenable && smAllowed && occasions.any((o) => o.isOn);
+/// «Менинг ҳафталик харид саватчам / Туғилган кун саватчаси» карточкаси (эга 2026-11-28): ҳафталик саватча — байрам
+/// ёқилганлигига БОҒЛИҚ ЭМАС; супермаркет очиқ (модул + сервер рухсати) бўлса доим. Байрамлар фақат эслатма/сарлавҳага.
+bool holidayCardVisible({required bool smOpenable, required bool smAllowed}) => smOpenable && smAllowed;
 
 /// Бозор мақсадли байрам (Қурбон ҳайит → Мол бозори) бош саҳифа карточкаси учун: супермаркет рухсатига БОҒЛИҚ ЭМАС
 /// (сервер `occasionVisibleFor` ҳам уни супермаркет дарвозасидан озод қилган, эга 2026-11-27/28). Давр — байрамгача
@@ -920,4 +930,24 @@ String holidayRouteOccasion(HolidayPushTarget t) {
   if (fromTarget.isNotEmpty) return fromTarget;
   if (t.occasionId.isNotEmpty) return t.occasionId;
   return t.kind == HolidayPushKind.self ? kHolidayKindBirthday : '';
+}
+
+/// Саватча сарлавҳасидаги мавзу (эга 2026-11-28): эслатма даври ичидаги (0..remindDaysBefore кун) энг яқин ёқилган
+/// байрам, мавзуси бор бўлса. Йўқ — null.
+HolidayOccasion? holidayThemeNow(Iterable<HolidayOccasion> occasions, DateTime today) {
+  final t0 = DateTime.utc(today.year, today.month, today.day);
+  HolidayOccasion? best;
+  var bestDiff = 1 << 30;
+  for (final o in occasions) {
+    if (!o.isOn || o.isBirthday || o.theme.isEmpty) continue;
+    final d = nextOccasionDate(o, today);
+    if (d == null) continue;
+    final diff = DateTime.utc(d.year, d.month, d.day).difference(t0).inDays;
+    if (diff < 0 || diff > o.remindDaysBefore) continue;
+    if (diff < bestDiff) {
+      best = o;
+      bestDiff = diff;
+    }
+  }
+  return best;
 }

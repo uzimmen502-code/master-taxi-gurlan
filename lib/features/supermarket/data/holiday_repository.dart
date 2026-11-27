@@ -86,14 +86,14 @@ class HolidayCatalogCache {
   }
 }
 
-/// Саватча карточкаси/тугмаси учун: супермаркет рухсати + сервер каталоги (иккаласи ҳам кешдан). Саватча
-/// (супермаркет) мақсадли байрамлар — рухсат ШАРТ.
+/// Ҳафталик саватча карточкаси/тугмаси (эга 2026-11-28): ФАҚАТ супермаркет рухсати (модул + сервер) — байрам
+/// ёқилганлиги шарт ЭМАС. Каталог кешга олдиндан юкланади (туғилган кун сарлавҳаси, «Яқинлар» экрани учун).
 Future<bool> holidayAvailable({required bool smOpenable, SupermarketApi? smApi, HolidayApi? api}) async {
   if (!smOpenable) return false;
   final SmAccess access = await SupermarketAccessCache.get(smApi ?? FirebaseSupermarketApi());
   if (!access.allowed) return false;
-  final cat = await HolidayCatalogCache.get(api ?? FirebaseHolidayApi());
-  return holidayCardVisible(smOpenable: smOpenable, smAllowed: access.allowed, occasions: cat.occasions);
+  await HolidayCatalogCache.get(api ?? FirebaseHolidayApi());
+  return holidayCardVisible(smOpenable: smOpenable, smAllowed: access.allowed);
 }
 
 /// Бозор мақсадли фаол байрам (Қурбон ҳайит → Мол бозори) — супермаркет рухсатисиз (эга 2026-11-28; сервер

@@ -232,13 +232,37 @@ void main() {
   });
 
   group('бош саҳифа карточкалари', () {
-    test('байрам картаси: супермаркет очиқ + рухсат + каталогда байрам', () {
-      expect(holidayCardVisible(smOpenable: true, smAllowed: true, occasions: _catalog.occasions), isTrue);
-      expect(holidayCardVisible(smOpenable: false, smAllowed: true, occasions: _catalog.occasions), isFalse);
-      expect(holidayCardVisible(smOpenable: true, smAllowed: false, occasions: _catalog.occasions), isFalse);
-      expect(holidayCardVisible(smOpenable: true, smAllowed: true, occasions: const []), isFalse);
-      const off = HolidayOccasion(id: 'x', names: {}, stage: 'off');
-      expect(holidayCardVisible(smOpenable: true, smAllowed: true, occasions: const [off]), isFalse);
+    test('мавзу (эга 2026-11-28): эслатма даври ичидаги энг яқин байрам; мавзусиз/ўчиқ/узоқ — йўқ; админга сақланади', () {
+      HolidayOccasion o(String id, String next, {String stage = '', bool theme = true, int remind = 5}) => HolidayOccasion.fromMap({
+            'id': id, 'names': _n(id), 'kind': 'holiday', 'nextDate': next, 'stage': stage, 'remindDaysBefore': remind,
+            if (theme) 'theme': {'uz_Cyrl': 'гуллар', 'uz_Latn': 'gullar', 'ru': 'цветы'},
+          })!;
+      final today = DateTime(2027, 2, 10);
+      expect(holidayThemeNow([o('sevishganlar', '2027-02-14'), o('xotin_qizlar', '2027-03-08', remind: 10)], today)?.id, 'sevishganlar');
+      expect(holidayThemeNow([o('sevishganlar', '2027-02-14')], today)!.themeText('uz_Latn'), 'gullar');
+      expect(holidayThemeNow([o('a', '2027-02-20')], today), isNull, reason: '10 кун > 5');
+      expect(holidayThemeNow([o('a', '2027-02-12', theme: false)], today), isNull);
+      expect(holidayThemeNow([o('a', '2027-02-12', stage: 'off')], today), isNull);
+      expect(o('a', '2027-02-12').toAdminMap()['theme'], {'uz_Cyrl': 'гуллар', 'uz_Latn': 'gullar', 'ru': 'цветы'});
+      expect(o('a', '2027-02-12', theme: false).toAdminMap().containsKey('theme'), isFalse);
+    });
+
+    // Эга 2026-11-28: ҳафталик саватча — байрамга боғлиқ эмас, фақат супермаркет рухсати.
+    test('ҳафталик саватча картаси: супермаркет очиқ + рухсат (байрам шарт ЭМАС)', () {
+      expect(holidayCardVisible(smOpenable: true, smAllowed: true), isTrue);
+      expect(holidayCardVisible(smOpenable: false, smAllowed: true), isFalse);
+      expect(holidayCardVisible(smOpenable: true, smAllowed: false), isFalse);
+    });
+
+    test('holidayAvailable: каталогда ёқилган байрам ЙЎҚ бўлса ҳам — рухсат бўлса true; рухсат йўқ — false', () async {
+      HolidayCatalogCache.resetForTest();
+      SupermarketAccessCache.resetForTest(smAccessFixture);
+      addTearDown(HolidayCatalogCache.resetForTest);
+      addTearDown(() => SupermarketAccessCache.resetForTest());
+      final empty = _FakeHolidayApi(HolidayCatalog.empty);
+      expect(await holidayAvailable(smOpenable: true, api: empty, smApi: FakeSupermarketApi()), isTrue);
+      expect(empty.loads, 1, reason: 'каталог кешга олдиндан юкланади');
+      expect(await holidayAvailable(smOpenable: false, api: empty), isFalse);
     });
 
     // Эга 2026-11-28: карточка 5 тагача (аввал 3); бонус мақсади 3 ўзгармади.

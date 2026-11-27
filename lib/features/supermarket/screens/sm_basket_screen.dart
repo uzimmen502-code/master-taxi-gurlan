@@ -6,6 +6,7 @@ import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/formatters.dart';
 import '../../restaurants/domain/restaurants_access.dart' show kRestaurantsModuleId;
 import '../../restaurants/screens/restaurants_list_screen.dart';
+import '../data/holiday_repository.dart' show HolidayCatalogCache;
 import '../data/sm_basket_birthdays.dart';
 import '../data/sm_lists_repository.dart';
 import '../data/supermarket_repository.dart' show smOriginHoliday, smOriginWeekly;
@@ -296,6 +297,16 @@ class _SmBasketScreenState extends State<SmBasketScreen> {
             ),
           ),
         ),
+        // Эга 2026-11-28: яқинлашаётган байрам мавзуси («Севишганлар куни: гуллар, шоколад, совғалар»).
+        if (holidayThemeNow(HolidayCatalogCache.cached?.occasions ?? const [], widget.today ?? smTashkentDate()) case final o?)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+            child: Text(
+              '${o.name(lang)}: ${o.themeText(lang)}',
+              key: const ValueKey('smb_holiday_theme'),
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
         _pastRow(context, b, lang, scale),
         SizedBox(
           height: 40 + 16 * scale,

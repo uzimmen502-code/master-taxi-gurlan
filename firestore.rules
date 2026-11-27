@@ -2320,6 +2320,17 @@ service cloud.firestore {
       allow get, list: if isAdmin();
       allow write: if false;
     }
+    // ── Автомобил суғуртаси (functions/car_insurance.js, эга 2026-11-28) ── ёзиш ФАҚАТ callable.
+    // Ариза ва рағбат — эгаси (`uid` = ўз рақами; list фақат `where uid == <ўз рақами>`) ёки админ. Бошқа insurance_*
+    // (config/тариф/файл токени/индекс/ҳисобот) — қоида йўқ = мижоз учун ёпиқ (агент/админ — callable).
+    match /insurance_requests/{id} {
+      allow get, list: if isAdmin() || resource.data.uid == phoneFromToken();
+      allow write: if false;
+    }
+    match /insurance_enrollments/{id} {
+      allow get, list: if isAdmin() || resource.data.uid == phoneFromToken();
+      allow write: if false;
+    }
     match /china_suppliers/{supplierId} {
       allow read: if isAdmin();
       allow write: if false;

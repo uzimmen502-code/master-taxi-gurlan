@@ -140,6 +140,28 @@ async function main() {
     assert.ok(p.body.endsWith('Улгуржи бозор'), p.body);
   });
 
+  // ── N12 (эга 2026-11-21, 54e07faf порти): «AVA Супермаркет» (platform + subtype supermarket) ──
+  await reset();
+  await check('N12 supermarket: chek/status — «AVA Супермаркет»; admin push «Yangi AVA Supermarket buyurtmasi»; Ulgurji o\'zgarmagan', async () => {
+    const ADMIN_TOKEN = 'tok_admin_1234567890';
+    await db.collection('users').doc('998901000099').set({ role: 'admin', fcmToken: ADMIN_TOKEN });
+    const sm = { ...base, type: 'platform', subtype: 'supermarket' };
+    const ref = db.collection('orders').doc('s1');
+    await ref.set(sm);
+    await fns.onOrderCreate.run(await ref.get(), { eventId: 'e-s1', params: { orderId: 's1' } });
+    const [p] = await orderNews('s1');
+    assert.ok(p.body.endsWith('AVA Супермаркет') && !p.body.includes('Улгуржи'), p.body);
+    assert.ok(sent.some((m) => m.token === ADMIN_TOKEN && m.notification.title === 'Yangi AVA Supermarket buyurtmasi'));
+    await updateOrder('s2', sm, { status: 'accepted' }, 'evt-s2');
+    const [n] = await orderNews('s2');
+    assert.ok(n.body.includes('AVA Супермаркет') && !n.body.includes('Улгуржи'), n.body);
+    const r3 = db.collection('orders').doc('s3');
+    await r3.set({ ...base, type: 'platform' });
+    await fns.onOrderCreate.run(await r3.get(), { eventId: 'e-s3', params: { orderId: 's3' } });
+    assert.ok((await orderNews('s3'))[0].body.endsWith('Улгуржи бозор'));
+    assert.ok(sent.some((m) => m.token === ADMIN_TOKEN && m.data.orderId === 's3' && m.notification.title === 'Yangi Ulgurji buyurtmasi'));
+  });
+
   // ── N5 ───────────────────────────────────────────────────────────────
   await reset();
   await check('N5 notifyUserInApp → onAdminNewsCreate: push BIR marta (avval ikki)', async () => {

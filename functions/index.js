@@ -992,8 +992,13 @@ async function notifyCourierArrivedToCustomer(customerPhone, extraData = {}) {
   });
 }
 
-/** Буюртма тури — мижоз хабари матни учун (`orders.type`). */
-function orderTypeLabel(type) {
+/** «AVA Супермаркет» (`type: platform`, `subtype: supermarket`, эга 2026-11-21) — хабарлардаги ном, 3 тил. */
+const SUPERMARKET_LABELS = Object.freeze({ uz_Cyrl: 'AVA Супермаркет', uz_Latn: 'AVA Supermarket', ru: 'AVA Супермаркет' });
+const isSupermarketOrder = (order) => String((order && order.type) || '') === 'platform' && String((order && order.subtype) || '') === 'supermarket';
+
+/** Буюртма тури — мижоз хабари матни учун (`orders.type`; супермаркет — `subtype`). */
+function orderTypeLabel(type, subtype) {
+  if (String(type || '') === 'platform' && String(subtype || '') === 'supermarket') return SUPERMARKET_LABELS.uz_Cyrl;
   switch (String(type || '')) {
     case 'platform': return 'Улгуржи бозор';
     default: return 'Нон';
@@ -1106,7 +1111,7 @@ exports.onOrderUpdate = functions.firestore
     }
 
     const orderType = after.type || 'bread';
-    const typeLabel = orderTypeLabel(orderType);
+    const typeLabel = orderTypeLabel(orderType, after.subtype);
     const newsBody = [body, typeLabel].filter(Boolean).join('\n');
     // Битта ўтиш (event) — битта хабар. eventId бўлмаса (эски runtime) —
     // аввалгидек тасодифий ID.
@@ -1204,7 +1209,7 @@ exports.onOrderCreate = functions.firestore
     if (String(orderType) === 'restaurant') return;
     const total = order.total || 0;
     const fmt = new Intl.NumberFormat('uz-UZ').format(total);
-    const emoji = orderType === 'platform' ? 'Ulgurji' : 'Non';
+    const emoji = isSupermarketOrder(order) ? 'AVA Supermarket' : (orderType === 'platform' ? 'Ulgurji' : 'Non');
     const title = `Yangi ${emoji} buyurtmasi`;
     const body = `${fmt} sum - ${order.userName || order.userPhone || '-'}`;
 
@@ -1263,7 +1268,7 @@ exports.onOrderCreate = functions.firestore
 
     const uid = canonicalUid(order.userPhone || order.phone || '');
     if (uid.length >= 9) {
-      const typeLabel = orderTypeLabel(orderType);
+      const typeLabel = orderTypeLabel(orderType, order.subtype);
       const receipt = formatOrderReceiptBody(order);
       try {
         // Буюртмага битта чек: триггер қайта етказилса иккинчиси ёзилмайди.

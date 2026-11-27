@@ -19,9 +19,14 @@ class ChatScreen extends StatelessWidget {
     super.key,
     required this.targetPhone,
     @visibleForTesting this.dismissedIds,
+    this.initialDraft = '',
   });
 
   final String targetPhone;
+
+  /// Ёзиш майдонига олдиндан қўйиладиган матн (юборилмайди — фойдаланувчи ўзи юборади).
+  /// Мас. splash «Реклама бериш» (эга 2026-11-28).
+  final String initialDraft;
 
   /// Тест учун: «яширилди» белгилари (`users/{uid}/dismissed_news`) ўрнига.
   final Stream<Set<String>>? dismissedIds;
@@ -43,15 +48,16 @@ class ChatScreen extends StatelessWidget {
         chatId: chatId,
         isAdmin: false, // Мобил: ҳар доим false. Admin web — chat_support_screen.dart
       ),
-      child: _ChatView(dismissedIds: dismissed),
+      child: _ChatView(dismissedIds: dismissed, initialDraft: initialDraft),
     );
   }
 }
 
 class _ChatView extends StatefulWidget {
-  const _ChatView({required this.dismissedIds});
+  const _ChatView({required this.dismissedIds, this.initialDraft = ''});
 
   final Stream<Set<String>> dismissedIds;
+  final String initialDraft;
 
   @override
   State<_ChatView> createState() => _ChatViewState();
@@ -68,6 +74,7 @@ class _ChatViewState extends State<_ChatView> {
   void initState() {
     super.initState();
     _messages = context.read<ChatController>().messages;
+    if (widget.initialDraft.isNotEmpty) _msgCtrl.text = widget.initialDraft;
     _dismissedSub = widget.dismissedIds.listen((ids) {
       final at = InboxHideKeys.supportChatClearedAt(ids);
       if (mounted && at != _clearedAt) setState(() => _clearedAt = at);

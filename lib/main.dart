@@ -58,6 +58,9 @@ import 'core/navigation/app_route_observer.dart';
 import 'core/navigation/home_screen_resolver.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/app_launch_splash.dart';
+import 'features/splash_ad/splash_ad_actions.dart';
+import 'features/splash_ad/splash_ad_cache.dart';
+import 'features/splash_ad/splash_ad_prefetcher.dart';
 import 'core/widgets/zone_gate.dart';
 import 'features/home/screens/home_screen.dart';
 import 'core/utils/formatters.dart';
@@ -151,6 +154,12 @@ void main() async {
   // yangilanishi splash tugagach (`_deferredMobileBootstrap`).
   await AppVersionGate.loadCacheOnly();
 
+  // Splash реклама (эга 2026-11-28): ФАҚАТ маҳаллий кеш (prefs + файл) — тармоқ кутилмайди.
+  // Кейинги очилиш учун креатив splash тугагач олдиндан юкланади (`SplashAdPrefetcher`).
+  final splashLaunch = await SplashAdCache.instance
+      .loadForLaunch(now: DateTime.now(), districtId: GeoContext.active.districtId)
+      .timeout(const Duration(milliseconds: 400), onTimeout: () => null);
+
   // —— Stage B: splash/UI bilan parallel (Firestore network) ——
   unawaited(PassengerCancelRulesHolder.load());
 
@@ -169,6 +178,7 @@ void main() async {
     reportService: reportService,
     deferRoleSync: onboarding,
     initialLocale: initialLocale,
+    splashLaunch: splashLaunch,
   ));
 }
 
@@ -255,10 +265,14 @@ class MyApp extends StatefulWidget {
     required this.reportService,
     this.deferRoleSync = false,
     this.initialLocale,
+    this.splashLaunch,
   });
 
   /// `main()` da prefs'dan sinxron hisoblangan til (LocaleNotifier boshlang'ich qiymati).
   final Locale? initialLocale;
+
+  /// Кешдаги splash реклама креативи (`null` — сукут матни).
+  final SplashAdLaunch? splashLaunch;
 
   final bool isReturningUser;
   final bool languageSelected;
@@ -295,6 +309,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       deferRoleSync: widget.deferRoleSync,
       isAnonymousAuth: widget.isAnonymousAuth,
     ));
+    // Сессияда БИР марта: кечаги кўрсатишлар йиғмаси серверга + кейинги очилиш креативи кешга.
+    unawaited(SplashAdPrefetcher().run(districtId: GeoContext.active.districtId));
   }
 
   @override
@@ -365,8 +381,18 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       ],
       child: Consumer<LocaleNotifier>(
         builder: (context, localeNotifier, _) {
+          final splashLang = LocaleUtils.contentLangCode(
+              localeNotifier.locale ?? widget.initialLocale ?? LocaleUtils.resolveFromDevice());
           return AppLaunchSplash(
             onFinished: _onSplashFinished,
+            launch: widget.splashLaunch,
+            lang: splashLang,
+            onShown: (ad) => unawaited(SplashAdCache.instance.recordImpression(ad.id, DateTime.now())),
+            onAdvertise: () {
+              final nav = MyApp.navigatorKey.currentState;
+              if (nav != null) unawaited(openSplashAdvertise(nav, lang: splashLang));
+            },
+            onOpenAd: (ad) => unawaited(openSplashAdLink(ad)),
             child: MaterialApp(
             localizationsDelegates: const [
               AppLocalizations.delegate,

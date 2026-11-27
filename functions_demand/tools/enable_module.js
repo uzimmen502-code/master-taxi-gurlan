@@ -20,6 +20,7 @@ const path = require('path');
 
 const admin = require(path.join(__dirname, '..', 'node_modules', 'firebase-admin'));
 const SA = path.join(__dirname, '..', '..', 'functions', 'service-account.json');
+const { moduleRegionKey } = require('../core/ids');
 
 function arg(name, def) {
   const i = process.argv.indexOf(`--${name}`);
@@ -50,7 +51,8 @@ function initDb() {
 }
 
 async function show(db) {
-  const cfgRef = db.collection('module_config').doc(`${MODULE}_${REGION}`);
+  // Yadro bilan bir xil kalit qoidasi (`_`li hudud: `service__toshkent_shahri`).
+  const cfgRef = db.collection('module_config').doc(moduleRegionKey(MODULE, REGION));
   const defRef = db.collection('config').doc('module_defaults');
   const [cfg, def] = await Promise.all([cfgRef.get(), defRef.get()]);
   console.log(`module_config/${cfgRef.id}:`, cfg.exists ? JSON.stringify(cfg.data()) : '(yo\'q → DEFAULTS: enabled:false)');

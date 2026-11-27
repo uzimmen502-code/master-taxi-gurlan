@@ -36,6 +36,13 @@ function makeDb(seedDocs) {
         return ref.get();
       },
       set: (ref, data, opts) => { tx._ops.push(() => ref.set(data, opts)); },
+      // Haqiqiy SDK kabi: hujjat bor bo'lsa butun tranzaksiya rad (ALREADY_EXISTS).
+      create: (ref, data) => {
+        tx._ops.push(async () => {
+          if ((await ref.get()).exists) throw Object.assign(new Error('ALREADY_EXISTS'), { code: 6 });
+          return ref.set(data);
+        });
+      },
       update: (ref, data) => { tx._ops.push(() => ref.update(data)); },
       delete: (ref) => { tx._ops.push(() => ref.delete()); },
       _ops: [],
@@ -80,9 +87,14 @@ function seed(extra = {}) {
     [`users/${K1}`]: { accountId: `acc${K1}` },
     [`users/${K2}`]: { accountId: `acc${K2}` },
     [`users/${F1}`]: { accountId: `acc${F1}` },
-    [`provider_capabilities/acc${K1}`]: capDoc(K1, 'courier', {
-      active: true, regionIds: ['xorazm'], districtIds: ['gurlan'], acceptsParcels: true,
-    }, 'approved'),
+    // K1 — «Туман» + тасдиқланган «Вилоят» (Gurlan → Urganch LEG вилоят тоифаси, 2026-10-31).
+    [`provider_capabilities/acc${K1}`]: {
+      ...capDoc(K1, 'courier', {
+        active: true, regionIds: ['xorazm'], districtIds: ['gurlan'], acceptsParcels: true,
+        scopes: ['district', 'region'],
+      }, 'approved'),
+      review: { courierScopes: { region: { status: 'approved' } } },
+    },
     [`provider_capabilities/acc${K2}`]: capDoc(K2, 'courier', {
       active: true, regionIds: ['xorazm'], districtIds: ['gurlan'], acceptsParcels: false,
     }, 'approved'),

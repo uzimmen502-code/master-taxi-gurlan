@@ -33,6 +33,10 @@ const REASON = {
   DAILY_LIMIT: 'daily_limit',
   NO_TOKEN: 'no_token',
   SEEN_ALREADY: 'seen_already',
+  /** Moslik bor, lekin score `push.minScore` dan past — push yo'q, ko'rinish saqlanadi. */
+  BELOW_MIN_SCORE: 'below_min_score',
+  /** `push.minScore` hali o'lchab tanlanmagan (null) — quote/alert push ketmaydi. */
+  SCORE_NOT_CALIBRATED: 'score_not_calibrated',
 };
 
 /**
@@ -104,6 +108,8 @@ function limitsForMode(mode, config) {
  * @param {number}  input.provider.sentToday      bugun nechta push
  * @param {boolean} input.alreadyLogged    `demand_push_log`da yozuv bormi
  * @param {boolean} input.alreadySeen      taklifchi talabni allaqachon ko'rganmi
+ * @param {number}  [input.score]          moslikning yakuniy score'i (0..1);
+ *                                         dispatch'dan boshqa rejimlarda `push.minScore` bilan solishtiriladi
  * @param {Date}    input.now
  * @returns {{send: boolean, digest: boolean, reason: string, retryAt: Date|null}}
  */
@@ -111,6 +117,7 @@ function decidePush(input) {
   const {
     mode, config, pushEnabled, provider = {},
     alreadyLogged = false, alreadySeen = false,
+    score,
     now = new Date(),
   } = input;
 
@@ -152,6 +159,19 @@ function decidePush(input) {
   //    yubormaslik uchun to'lqinlar bor (bu limitning o'rnini bosadi).
   if (mode === 'dispatch') {
     return { send: true, digest: false, reason: REASON.SEND, retryAt: null };
+  }
+
+  // 6-bis) HAR MOSLIK UCHUN PUSH CHEGARASI (ega 2026-10-20, variant 3).
+  //    Faqat dispatch'dan boshqa rejimlar (quote/alert/recurring). Chegaradan
+  //    past moslik dayjestga ham TUSHMAYDI — u faqat ro'yxatda ko'rinadi
+  //    (dayjest «yaxshi, lekin limitdan oshgan» uchun). `null` — o'lchov yo'q:
+  //    push ketmaydi (xavfsiz tomon, 28-band).
+  const minScore = (config.push || {}).minScore;
+  if (minScore === null || minScore === undefined) {
+    return { send: false, digest: false, reason: REASON.SCORE_NOT_CALIBRATED, retryAt: null };
+  }
+  if (typeof score !== 'number' || !Number.isFinite(score) || score < minScore) {
+    return { send: false, digest: false, reason: REASON.BELOW_MIN_SCORE, retryAt: null };
   }
 
   // 7) Taklifchi «faqat dayjest» tanlagan.

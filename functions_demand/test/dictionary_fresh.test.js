@@ -59,7 +59,11 @@ ok('KOMMITLANGAN nusxa generator natijasi bilan AYNAN bir xil', () => {
     execFileSync(process.execPath, [GENERATOR], { stdio: 'pipe' });
     const regenerated = fs.readFileSync(ASSET, 'utf8');
 
-    if (regenerated !== committed) {
+    // Windows'da `core.autocrlf=true`: git faylni LF saqlaydi, lekin CRLF bilan chiqaradi,
+    // generator esa LF yozadi — mazmun bir xil bo'lsa ham baytlar farq qiladi. Qator
+    // oxirlarini tenglab solishtiramiz (mazmun tekshiruvi, checkout sozlamasi emas).
+    const lf = (s) => s.replace(/\r\n/g, '\n');
+    if (lf(regenerated) !== lf(committed)) {
       // Farqni tushunarli ko'rsatamiz: qaysi kalitlar o'zgargan.
       const a = JSON.parse(committed);
       const b = JSON.parse(regenerated);

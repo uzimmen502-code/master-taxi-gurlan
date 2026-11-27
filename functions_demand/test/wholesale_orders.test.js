@@ -1,6 +1,6 @@
 /**
  * Ulgurji buyurtma zanjiri, 2-bosqich — demand codebase (2026-10-31):
- * `quoteWholesaleOrder`, `cancelWholesaleOrder` (sotuvchi aralashmaydi),
+ * `quoteWholesaleOrder`, `cancelWholesaleOrder` (faqat xaridor; sotuvchi qabuli/radi — wholesale_accept.test.js),
  * `setWholesaleOrderSettings`, holatlar jadvali, narx pog'onasi pariteti.
  *
  *   node functions_demand/test/wholesale_orders.test.js
@@ -231,18 +231,28 @@ ok('parseQuoteRequest: noto\'g\'ri kirish RAD', () => {
 ok('holatlar jadvali: ruxsat etilgan va taqiqlangan o\'tishlar (aktor bo\'yicha)', () => {
   const { STATUS: S, ACTOR: A } = WO;
   assert.ok(WO.canActorTransition(A.BUYER, S.PLACED, S.CANCELLED));
-  assert.ok(WO.canActorTransition(A.SYSTEM, S.PLACED, S.IN_DELIVERY), 'zanjir avtomatik — sotuvchi qabulisiz');
+  assert.ok(WO.canActorTransition(A.SYSTEM, S.PLACED, S.IN_DELIVERY), 'yetkazish haqi eskrouga o\'tganda (default codebase)');
   assert.ok(WO.canActorTransition(A.SYSTEM, S.IN_DELIVERY, S.DELIVERED));
   assert.ok(WO.canActorTransition(A.ADMIN, S.PLACED, S.CANCELLED));
   assert.ok(WO.canActorTransition(A.ADMIN, S.IN_DELIVERY, S.CANCELLED));
   assert.ok(!WO.canActorTransition(A.BUYER, S.IN_DELIVERY, S.CANCELLED), 'yetkazish ochilgach xaridor bekor qilmaydi');
   assert.ok(!WO.canActorTransition(A.BUYER, S.PLACED, S.IN_DELIVERY));
-  // Sotuvchi buyurtmaga aralashmaydi (ega, 2026-10-31): na aktor, na holat.
-  assert.strictEqual(A.SELLER, undefined, 'seller aktori yo\'q');
+  // Sotuvchi qabuli (ega, 2026-11-13): seller aktori faqat placed → cancelled (rad); qaror —
+  // alohida maydon (`sellerDecision`), yangi HOLAT YO'Q (default codebase paritet testi shunga tayanadi).
+  assert.strictEqual(A.SELLER, 'seller');
   assert.strictEqual(S.ACCEPTED, undefined, 'accepted holati yo\'q');
   assert.strictEqual(S.REJECTED, undefined, 'rejected holati yo\'q');
-  assert.ok(!WO.canActorTransition('seller', S.PLACED, S.CANCELLED));
+  assert.ok(WO.canActorTransition(A.SELLER, S.PLACED, S.CANCELLED));
+  assert.ok(!WO.canActorTransition(A.SELLER, S.IN_DELIVERY, S.CANCELLED), 'yetkazish ochilgach sotuvchi bekor qilmaydi');
+  // S4 (2026-11-13/14): sotuvchi placed → in_delivery / in_delivery → refused / refused → returned — FAQAT o'z
+  // yetkazishi callable'lari orqali (ular `isSelf` ni tekshiradi; test: wholesale_self.test.js). Delivered — system.
+  assert.ok(WO.canActorTransition(A.SELLER, S.PLACED, S.IN_DELIVERY));
+  assert.ok(!WO.canActorTransition(A.SELLER, S.IN_DELIVERY, S.DELIVERED), 'delivered — faqat system (pul bilan)');
   assert.ok(!WO.canActorTransition('seller', S.PLACED, 'rejected'));
+  assert.ok(WO.canActorTransition(A.SYSTEM, S.PLACED, S.CANCELLED), 'qaror muddati o\'tdi');
+  // S57: system in_delivery → cancelled — FAQAT relay zanjiri yig'ilmaganda (default `onChainExpired`).
+  assert.ok(WO.canActorTransition(A.SYSTEM, S.IN_DELIVERY, S.CANCELLED));
+  assert.ok(!WO.canActorTransition(A.BUYER, S.IN_DELIVERY, S.CANCELLED), 'xaridor yetkazish ochilgach bekor qilmaydi');
   assert.ok(!WO.canTransition(S.PLACED, S.DELIVERED), 'placed → delivered to\'g\'ridan-to\'g\'ri yo\'q');
   assert.ok(!WO.canTransition(S.CANCELLED, S.PLACED));
   assert.ok(!WO.canTransition(S.DELIVERED, S.CANCELLED));
@@ -327,6 +337,36 @@ ok('miqdor: MOQ dan kam RAD, MOQ ga teng o\'tadi (chegara)', async () => {
     assert.strictEqual(e.details.moq, 5);
     const r = await quote(db)(req({ packId: 'p2', qty: 5 }), ctx(BUYER));
     assert.strictEqual(r.goodsTotal, 1600000);
+  } finally { loud(); }
+});
+
+ok('minimal buyurtma (ega 2026-11-13): sotuvchi soni pog\'onadan katta bo\'lsa — u; kichik yoki noto\'g\'ri — pog\'ona', () => {
+  const withMoq = (packMoq, productMoq) => ({
+    ...RICE,
+    packs: RICE.packs.map((p) => (p.id === 'p1' ? { ...p, minOrderQty: packMoq } : p)),
+    ...(productMoq === undefined ? {} : { minOrderQty: productMoq }),
+  });
+  assert.strictEqual(api.resolvePack(withMoq(25), 'p1').moq, 25);
+  assert.strictEqual(api.resolvePack(withMoq(1), 'p1').moq, 1, 'pog\'ona ham 1');
+  assert.strictEqual(api.resolvePack({ ...RICE, packs: [{ ...RICE.packs[1], minOrderQty: 3 }] }, 'p2').moq, 5, 'pog\'ona (5) katta');
+  for (const bad of [0, -4, 2.5, '25', null, 1000001]) {
+    assert.strictEqual(api.resolvePack(withMoq(bad), 'p1').moq, 1, `noto'g'ri: ${bad}`);
+  }
+  // Mahsulot darajasidagi son qadoqli mahsulotga TA'SIR QILMAYDI (faqat default qadoq).
+  assert.strictEqual(api.resolvePack(withMoq(undefined, 40), 'p1').moq, 1);
+  assert.strictEqual(api.resolvePack({ ...FLOUR, minOrderQty: 40 }, 'default').moq, 40);
+  assert.strictEqual(api.resolvePack({ ...FLOUR, minOrderQty: 1000000 }, 'default').moq, 1000000, 'chegara');
+});
+
+ok('miqdor: sotuvchi minimal soni (25) — 24 RAD (details.moq=25), 25 o\'tadi', async () => {
+  quiet();
+  try {
+    const rice = { ...RICE, packs: RICE.packs.map((p) => (p.id === 'p1' ? { ...p, minOrderQty: 25 } : p)) };
+    const db = makeDb({ 'wholesale_products/rice': rice });
+    const e = await rejects(quote(db)(req({ packId: 'p1', qty: 24 }), ctx(BUYER)), 'invalid-argument', 'below_moq');
+    assert.strictEqual(e.details.moq, 25);
+    const r = await quote(db)(req({ packId: 'p1', qty: 25 }), ctx(BUYER));
+    assert.strictEqual(r.qty, 25);
   } finally { loud(); }
 });
 
@@ -485,10 +525,10 @@ const ORDER = {
   buyerId: BUYER, sellerId: SELLER, status: 'placed', historySeq: 1, refundStatus: null, total: 200000,
 };
 
-ok('sotuvchi buyurtmaga aralashmaydi: rad callable yo\'q, bekor qila olmaydi', async () => {
+ok('sotuvchi xaridor bekor qilish callable\'ini ishlata olmaydi (rad — alohida rejectWholesaleOrder)', async () => {
   quiet();
   try {
-    assert.strictEqual(api.makeRejectWholesaleOrder, undefined, 'rejectWholesaleOrder olib tashlangan');
+    assert.strictEqual(typeof api.makeRejectWholesaleOrder, 'function', 'rejectWholesaleOrder (ega, 2026-11-13)');
     const db = makeDb({ 'wholesale_orders/o1': ORDER });
     await rejects(cancel(db)({ orderId: 'o1' }, ctx(SELLER)), 'permission-denied', 'not_order_party');
     const o = db.dump('wholesale_orders').o1;

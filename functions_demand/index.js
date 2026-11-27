@@ -44,13 +44,19 @@ const agreementsApi = require('./api/agreements');
 const adminCapsApi = require('./api/admin_capabilities');
 const logisticsApi = require('./api/logistics');
 const wholesaleAdminApi = require('./api/wholesale_admin');
+const coreConfigAdminApi = require('./api/core_config_admin');
 const wholesaleStockApi = require('./api/wholesale_stock');
 const wholesaleOrdersApi = require('./api/wholesale_orders');
 const wholesaleCardApi = require('./api/wholesale_card');
 const wholesaleEventsApi = require('./api/wholesale_events');
+const wholesaleFailedApi = require('./api/wholesale_failed');
+const wholesaleBankApi = require('./api/wholesale_bank');
+const wholesaleSelfApi = require('./api/wholesale_self');
+const wholesaleFeeStatementApi = require('./api/wholesale_fee_statement');
+const wholesaleOrdersAdminApi = require('./api/wholesale_orders_admin');
 const { makeDispatchNotifications } = require('./notify/dispatch');
 const trustEventsApi = require('./trust/events');
-const { getModuleConfig } = require('./core/config');
+const { getModuleConfig, ALL_REGION } = require('./core/config');
 const caps = require('./core/capabilities');
 const { toCanonicalId } = require('./core/ids');
 const { enabledModules } = require('./core/registry');
@@ -128,7 +134,12 @@ exports.cancelDemand = fn.https.onCall(wrapCallable(
 
 /** 13.2.8 — ijrochi bekor qiladi, talab qayta ochiladi. */
 exports.cancelAssignment = fn.https.onCall(wrapCallable(
-  offersApi.makeCancelAssignment({ db }),
+  // Relay zanjiri (2026-11-07): yig'ish paytida bo'shatilgan LEG qayta matching.
+  // Boshqa talablar uchun `onLegReopened` hech narsa qilmaydi (not_chain_leg).
+  offersApi.makeCancelAssignment({
+    db,
+    onReopened: (info) => logisticsApi.makeOnLegReopened({ db, keywordIndex, notify: dispatchNotifications })(info),
+  }),
 ));
 
 /** 13.2.10 — baho. */
@@ -247,6 +258,15 @@ exports.adminReactivateLeg = fn.https.onCall(wrapCallable(
 ));
 
 /**
+ * ADMIN — qulflangan zanjirda (assemble_all) kuryer tushib qoldi (2026-11-07):
+ * shu LEG qayta ochiladi (matching + push), qolgan LEG'lar kuryerini saqlaydi,
+ * zanjir `locked`da qoladi. Idempotent, `logistics_audit`.
+ */
+exports.adminReopenChainLeg = fn.https.onCall(wrapCallable(
+  logisticsApi.makeAdminReopenChainLeg(logisticsDeps),
+));
+
+/**
  * ADMIN — posilka YO'QOLDI (D1, ega qarori 2026-10-16): faqat admin/superadmin.
  * Bitta tranzaksiya: jo'natma `lost` + `loss_pending`, LEG `disputed`, incident, audit.
  * Pulni (G mijozga, kuryer hamyonidan) default codebase trigger/reconcile hisoblaydi.
@@ -262,6 +282,25 @@ exports.adminMarkShipmentLost = fn.https.onCall(wrapCallable(
  */
 exports.adminSetLogisticsStage = fn.https.onCall(wrapCallable(
   logisticsApi.makeAdminSetLogisticsStage({ db }),
+));
+
+// ═══════════════════════════════════════════════════════════════════════
+// TALAB YADROSI — admin: hudud bo'yicha yoqish va push chegarasi
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * ADMIN — hududni yoqish/o'chirish (off | shadow | push) va `push.minScore`
+ * (ega 2026-10-20). Faqat admin/superadmin. Server tekshiradi: hududda
+ * ishlay oladigan taklifchi >= 5; push uchun chegara o'lchab qo'yilgan bo'lishi
+ * shart. Har o'zgarish `admin_audit`ga (41-qoida), konfig bilan bir tranzaksiyada.
+ */
+exports.adminSetCoreConfig = fn.https.onCall(wrapCallable(
+  coreConfigAdminApi.makeAdminSetCoreConfig({ db }),
+));
+
+/** ADMIN (o'qish: admin/superadmin/dispatcher) — hududlar holati, taklifchilar, audit. */
+exports.adminGetCoreOverview = fn.https.onCall(wrapCallable(
+  coreConfigAdminApi.makeAdminGetCoreOverview({ db }),
 ));
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -299,9 +338,78 @@ exports.setWholesaleOrderSettings = fn.https.onCall(wrapCallable(
   wholesaleOrdersApi.makeSetWholesaleOrderSettings({ db }),
 ));
 
+// Sotuvchi qabuli / radi (ega, 2026-11-13): faqat buyurtma sotuvchisi, `placed` + `pending`,
+// 2 ish kuni ichida. Rad — placed → cancelled, pul/qoldiq default trigger orqali (xaridor bekor qilgandek).
+exports.acceptWholesaleOrder = fn.https.onCall(wrapCallable(
+  wholesaleOrdersApi.makeAcceptWholesaleOrder({ db }),
+));
+exports.rejectWholesaleOrder = fn.https.onCall(wrapCallable(
+  wholesaleOrdersApi.makeRejectWholesaleOrder({ db }),
+));
+// Ulgurji buyurtma, 5-bosqich (admin): darvoza `module_config/wholesale_orders_all`
+// {enabled, stage, testerIds} — faqat admin/superadmin, tranzaksiya, admin_audit.
+exports.adminGetWholesaleOrdersStage = fn.https.onCall(wrapCallable(
+  wholesaleOrdersAdminApi.makeAdminGetWholesaleOrdersStage({ db }),
+));
+exports.adminSetWholesaleOrdersStage = fn.https.onCall(wrapCallable(
+  wholesaleOrdersAdminApi.makeAdminSetWholesaleOrdersStage({ db }),
+));
+
 /**
- * Ulgurji buyurtma, 3-bosqich: buyurtma berilishi bilan relay jo'natmasi AVTOMATIK
- * (sotuvchi qabul/rad qilmaydi, ega 2026-10-31). Narx — kvotada muhrlangan;
+ * Qaror muddati (`acceptDeadlineAt`) o'tgan `pending` buyurtmalar → cancelled (system, `seller_timeout`).
+ * Kompozit indeks: wholesale_orders (status, sellerDecision, acceptDeadlineAt).
+ */
+exports.wholesaleSellerDecisionSweeper = fn.pubsub
+  .schedule('every 15 minutes')
+  .timeZone('Asia/Tashkent')
+  .onRun(async () => {
+    await wholesaleOrdersApi.runWholesaleSellerDecisionSweep({ db });
+    return null;
+  });
+
+// Sotuvchining o'z yetkazishi (S4, ega 2026-11-13/14; api/wholesale_self.js): jo'natma yo'q, yetkazish narxi
+// tovar ichida. Boshlash → xaridor kodi bilan yakunlash (pul/«delivered» — default `releaseSelf`) | rad → tovar qaytdi.
+exports.startWholesaleSelfDelivery = fn.https.onCall(wrapCallable(
+  wholesaleSelfApi.makeStartWholesaleSelfDelivery({ db }),
+));
+exports.completeWholesaleSelfDelivery = fn.https.onCall(wrapCallable(
+  wholesaleSelfApi.makeCompleteWholesaleSelfDelivery({ db }),
+));
+exports.markWholesaleSelfDeliveryRefused = fn.https.onCall(wrapCallable(
+  wholesaleSelfApi.makeMarkWholesaleSelfDeliveryRefused({ db }),
+));
+exports.completeWholesaleSelfReturn = fn.https.onCall(wrapCallable(
+  wholesaleSelfApi.makeCompleteWholesaleSelfReturn({ db }),
+));
+
+// Bank o'tkazmasi (ega, 2026-11-13/14; api/wholesale_bank.js): tovar puli ilovadan tashqarida.
+// Sotuvchi «Пул тушди» → jo'natma ochiladi; 5 ish kunida tasdiqlanmasa — bekor (yetkazish haqi xaridorga).
+exports.confirmWholesaleBankPayment = fn.https.onCall(wrapCallable(
+  wholesaleBankApi.makeConfirmWholesaleBankPayment({ db }),
+));
+/** Kompozit indeks: wholesale_orders (bankPayment.status ASC, bankPayDeadlineAt ASC). */
+exports.wholesaleBankPaymentSweeper = fn.pubsub
+  .schedule('every 15 minutes')
+  .timeZone('Asia/Tashkent')
+  .onRun(async () => {
+    await wholesaleBankApi.runWholesaleBankPaymentSweep({ db });
+    return null;
+  });
+// AVA ulushi hisoboti (ega: «ҳар 10 кунда ... 2% ҳисоботи»; api/wholesale_fee_statement.js) — qat'iy admin.
+exports.adminGetWholesaleFeeStatement = fn.https.onCall(wrapCallable(
+  wholesaleFeeStatementApi.makeAdminGetWholesaleFeeStatement({ db }),
+));
+exports.adminGetWholesaleOrdersReport = fn.https.onCall(wrapCallable(
+  wholesaleFeeStatementApi.makeAdminGetWholesaleOrdersReport({ db }),
+));
+exports.adminMarkWholesaleFeeCollected = fn.https.onCall(wrapCallable(
+  wholesaleFeeStatementApi.makeAdminMarkWholesaleFeeCollected({ db }),
+));
+
+/**
+ * Ulgurji buyurtma, 3-bosqich: relay jo'natmasi. Ega, 2026-11-13: yangi buyurtmada onCreate
+ * faqat qaror belgisini (`sellerDecision: pending` + `acceptDeadlineAt`) yozadi va sotuvchiga
+ * xabar beradi; jo'natma — qabuldan keyin (onWholesaleOrderUpdated). Narx — kvotada muhrlangan;
  * idempotent (`demand_idempotency/wholesale_ship_{orderId}`). Holat o'zgarmaydi —
  * `in_delivery` ga default codebase o'tkazadi (yetkazish haqi eskrouga o'tganda).
  * Logistika jo'natuvchi darvozasi bu yerda YO'Q (Ulgurji darvozasi kvotada); LEG
@@ -349,9 +457,31 @@ exports.submitWholesaleCardReceipt = fn.https.onCall(wrapCallable(
 exports.confirmWholesaleCardPayment = fn.https.onCall(wrapCallable(
   wholesaleCardApi.makeConfirmWholesaleCardPayment({ db }),
 ));
+// «Етказилмади» харидор тасдиғи билан (ega, 2026-11-01; api/wholesale_failed.js): эски ном —
+// эски курьер APK шуни чақиради; энди дарҳол rad ЭМАС, харидор тасдиғи сўрови.
 exports.markWholesaleBuyerRefused = fn.https.onCall(wrapCallable(
-  wholesaleCardApi.makeMarkWholesaleBuyerRefused({ db }),
+  wholesaleCardApi.makeMarkWholesaleBuyerRefused({ db, messaging }),
 ));
+exports.respondWholesaleDeliveryFailed = fn.https.onCall(wrapCallable(
+  wholesaleFailedApi.makeRespondWholesaleDeliveryFailed({ db, messaging }),
+));
+exports.resolveWholesaleDeliveryFailed = fn.https.onCall(wrapCallable(
+  wholesaleFailedApi.makeResolveWholesaleDeliveryFailed({ db, messaging }),
+));
+exports.listWholesaleDeliveryFailedPending = fn.https.onCall(wrapCallable(
+  wholesaleFailedApi.makeListWholesaleDeliveryFailedPending({ db }),
+));
+exports.getWholesaleDeliveryFailedState = fn.https.onCall(wrapCallable(
+  wholesaleFailedApi.makeGetWholesaleDeliveryFailedState({ db }),
+));
+/** Харидор `failedTimeoutMin` (стандарт 15) ичида жавоб бермаса — қарор сотувчи/админга (ҳар дақиқа). */
+exports.wholesaleDeliveryFailedSweeper = fn.pubsub
+  .schedule('every 1 minutes')
+  .timeZone('Asia/Tashkent')
+  .onRun(async () => {
+    await wholesaleFailedApi.runWholesaleDeliveryFailedSweep({ db, messaging });
+    return null;
+  });
 exports.adminResolveWholesaleCardDispute = fn.https.onCall(wrapCallable(
   wholesaleCardApi.makeAdminResolveWholesaleCardDispute({ db }),
 ));
@@ -374,8 +504,10 @@ exports.onWholesaleOrderUpdated = fn.firestore
   .document('wholesale_orders/{orderId}')
   .onUpdate(async (change, context) => {
     try {
+      // S57: `logisticsDeps` (keywordIndex + notify) — naqd jo'natma `openCashShipment` LEG'larni shu yerda ochadi
+      // (matching + push relay `onShipmentFunded` bilan AYNI bog'liqliklar bilan).
       await wholesaleEventsApi.onWholesaleOrderUpdated(
-        { db, messaging }, change.before.data() || {}, change.after.data() || {}, context.params.orderId,
+        { ...logisticsDeps, messaging }, change.before.data() || {}, change.after.data() || {}, context.params.orderId,
       );
     } catch (e) {
       console.error(JSON.stringify({
@@ -392,7 +524,7 @@ exports.wholesaleShipmentReconcile = fn.pubsub
   .schedule('every 10 minutes')
   .timeZone('Asia/Tashkent')
   .onRun(async () => {
-    await wholesaleOrdersApi.reconcileWholesaleShipments({ db });
+    await wholesaleOrdersApi.reconcileWholesaleShipments({ ...logisticsDeps, messaging });
     return null;
   });
 
@@ -434,6 +566,8 @@ exports.expireDemandsSweeper = fn.pubsub
  * Relay zanjiri qotib qolmasin (audit L3c): to'langan jo'natmaning draft
  * LEG'ini (eskrou triggeri / scanHandover / qayta rejalash ochmay qolgan)
  * mavjud idempotent activateLeg bilan ochadi. Har 10 daqiqada; chegarali.
+ * 2026-11-07: `assemble_all` yig'ish muddati o'tgan zanjirni bekor qiladi
+ * (refund_pending) — kompozit indeks `shipments(chain.state, chain.deadlineAt)`.
  */
 exports.legChainSweeper = fn.pubsub
   .schedule('every 10 minutes')
@@ -544,8 +678,9 @@ exports.recomputeTrust = fn.firestore
     if (!e.subjectId) return null;
     try {
       // Konfig modul bo'yicha, lekin trust GLOBAL — shuning uchun
-      // pilot modulining konfigi ishlatiladi (vaznlar bir xil).
-      const config = await getModuleConfig(db, 'service', 'xorazm');
+      // pilot modulining UMUMIY (`service_all`) konfigi ishlatiladi: hech bir
+      // hududga bog'lanmaydi (ega 2026-10-20: qoidalar butun respublikada).
+      const config = await getModuleConfig(db, 'service', ALL_REGION);
       await trustEventsApi.recompute(db, e.subjectId, config);
     } catch (err) {
       console.error(`recomputeTrust xatosi (${e.subjectId}): ${err.message}`);

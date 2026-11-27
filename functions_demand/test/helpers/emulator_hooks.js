@@ -125,4 +125,29 @@ function dbWithHooks(db, { queryOn, updateOn }, hook) {
   });
 }
 
-module.exports = { resetEmulator, dbWithHook, dbWithQueryHook, dbWithHooks };
+/**
+ * Emulator qulf to'qnashuvi (deadlock) artefakti: ikki tranzaksiya bir hujjatni o'qib, ikkalasi ham
+ * yozmoqchi bo'lsa, emulator (cloud-firestore-emulator v1.21.0) birini `ABORTED: Transaction lock
+ * timeout` bilan qaytaradi (SDK qayta uradi), ikkinchisining osilib qolgan o'qishini esa ~9 s dan keyin
+ * `3 INVALID_ARGUMENT: Transaction is invalid or closed.` bilan yopadi. Admin SDK INVALID_ARGUMENT'ni
+ * faqat /transaction has expired/ matnida qayta uradi — bu matnni emas, shuning uchun xato chaqiruvchiga
+ * chiqadi (tranzaksiya rollback, hech narsa yozilmagan). Poyga testlari invariantni (faqat bitta g'olib)
+ * tekshiradi; shu xato kelsa chaqiruvni foydalanuvchi qayta bosgandek qayta chaqiramiz
+ * (ko'pi bilan 2 marta; boshqa har qanday xato darhol chiqadi).
+ * (2026-10-31: 20 marta ishga tushirishda 15 tasi shu sabab yiqilgan; ikkala g'olib — 0.)
+ */
+function isEmulatorClosedTx(e) {
+  return !!e && e.code === 3 && /Transaction is invalid or closed/.test(String(e.message || ''));
+}
+
+async function retryOnEmulatorClosedTx(fn, attempts = 3) {
+  for (let i = 1; ; i += 1) {
+    try { return await fn(); } catch (e) {
+      if (i >= attempts || !isEmulatorClosedTx(e)) throw e;
+    }
+  }
+}
+
+module.exports = {
+  resetEmulator, dbWithHook, dbWithQueryHook, dbWithHooks, isEmulatorClosedTx, retryOnEmulatorClosedTx,
+};

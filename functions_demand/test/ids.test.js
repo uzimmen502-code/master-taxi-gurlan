@@ -141,11 +141,30 @@ ok('`capabilityKey` OLIB TASHLANDI (D-12…D-16)', () => {
 ok('moduleRegionKey module_region', () => {
   assert.strictEqual(ids.moduleRegionKey('service', 'xorazm'), 'service_xorazm');
 });
-ok('module nomida pastki chiziq rad etiladi', () => {
-  assert.throws(
-    () => ids.moduleRegionKey('my_service', 'xorazm'),
-    (e) => e.code === 'invalid-argument',
-  );
+ok('`_` li hudud ID`si (toshkent_shahri) QABUL qilinadi — respublika uchun shart', () => {
+  // Haqiqiy geo_regions ID'lari: toshkent_shahri, toshkent_viloyati (14 tadan 2 tasi).
+  assert.strictEqual(ids.moduleRegionKey('service', 'toshkent_shahri'), 'service__toshkent_shahri');
+  assert.strictEqual(ids.moduleRegionKey('service', 'toshkent_viloyati'), 'service__toshkent_viloyati');
+});
+ok('`_` li modul nomi (intercity_taxi) ham qabul qilinadi', () => {
+  assert.strictEqual(ids.moduleRegionKey('intercity_taxi', 'xorazm'), 'intercity_taxi__xorazm');
+});
+ok('eski kalitlar O`ZGARMAYDI (logistics_all, restaurants_all, service_xorazm)', () => {
+  assert.strictEqual(ids.moduleRegionKey('logistics', 'all'), 'logistics_all');
+  assert.strictEqual(ids.moduleRegionKey('restaurants', 'all'), 'restaurants_all');
+});
+ok('ikki sxema to`qnashmaydi: (a_b, c) != (a, b_c)', () => {
+  assert.notStrictEqual(ids.moduleRegionKey('a_b', 'c'), ids.moduleRegionKey('a', 'b_c'));
+});
+ok('xavfli qiymatlar rad etiladi: `/`, `__`, bosh/oxirgi `_`, bo`sh', () => {
+  for (const bad of ['a/b', 'a__b', '_a', 'a_', '', null, undefined]) {
+    assert.throws(
+      () => ids.moduleRegionKey('service', bad),
+      (e) => e.code === 'invalid-argument',
+      `hudud ${JSON.stringify(bad)} rad etilishi kerak`,
+    );
+  }
+  assert.throws(() => ids.moduleRegionKey('a/b', 'xorazm'), (e) => e.code === 'invalid-argument');
 });
 
 console.log('callerIdFrom');

@@ -45,6 +45,13 @@ function sample(arr, n) {
   return a.slice(0, n);
 }
 
+/** Telefon ID niqobi: 9989012****67 (audit asboblaridagi bilan bir xil). */
+function mask(id) {
+  const s = String(id || '');
+  if (!/^\d{9,12}$/.test(s)) return s ? '***' : '';
+  return `${s.slice(0, 7)}****${s.slice(-2)}`;
+}
+
 function fmt(v, width) {
   const s = v === null || v === undefined ? '—' : String(v);
   return width ? s.padEnd(width).slice(0, width) : s;
@@ -84,10 +91,12 @@ function fmt(v, width) {
     const sp = m.scoreParts || {};
     const metrics = m.metrics || {};
     return {
-      key: doc.id,
+      // Telefon (providerId) CSV ga CHIQMAYDI — niqoblanadi (40-band): fayl
+      // baholash uchun boshqalarga ham berilishi mumkin.
+      key: `${m.demandId}_${mask(m.providerId)}`,
       demandTitle: (d.title || (d.input || {}).rawText || '').slice(0, 44),
       demandCategory: d.categoryId || '—',
-      providerId: m.providerId,
+      providerId: mask(m.providerId),
       score: m.score,
       base: sp.base,
       cat: sp.categoryMatch,
@@ -100,6 +109,9 @@ function fmt(v, width) {
       distKm: metrics.distanceKm,
       region: (m.projection || {}).regionId || '—',
       status: m.status,
+      // Odam to'ldiradi: ha / yo'q («mantiqan mosmi?»). Keyin
+      // `calibrate_push_threshold.js` shu ustundan push chegarasini hisoblaydi.
+      relevant: '',
     };
   });
 

@@ -97,7 +97,16 @@ function makeDispatchNotifications(deps) {
       const decision = policy.decidePush({
         mode: demand.mode,
         config,
-        pushEnabled,
+        // SHADOW MODE: siyosat «push yoqilgan» deb baholanadi (kimlar olardi?),
+        // YUBORISH esa pastda `dryRun: !pushEnabled` bilan to'xtatiladi. Avval
+        // bu yerga haqiqiy `pushEnabled` berilardi: shadow'da siyosat har
+        // doim `push_disabled_module` qaytarib, `pushEligible` hamisha 0 chiqardi
+        // va «push spam bo'ladimi / chegara to'g'rimi?» savollariga javob yo'q edi.
+        // O'lim kaliti (flags.pushEnabled=false) baribir yuborishni to'xtatadi.
+        pushEnabled: true,
+        // Moslikning yakuniy score'i — `push.minScore` bilan solishtiriladi
+        // (dispatch'dan boshqa rejimlar, ega 2026-10-20 variant 3).
+        score: s.finalScore,
         provider: {
           moduleOptOut: c.pushOptOut === true,
           digestOnly: c.digestOnly === true,
@@ -114,7 +123,8 @@ function makeDispatchNotifications(deps) {
 
       if (decision.digest) {
         summary.digest += 1;
-        await queueDigest(db, providerId, demand, decision, now);
+        // Shadow'da dayjest navbati yozilmaydi (hech kimga yuborilmaydi).
+        if (pushEnabled) await queueDigest(db, providerId, demand, decision, now);
         continue;
       }
       if (!decision.send) {

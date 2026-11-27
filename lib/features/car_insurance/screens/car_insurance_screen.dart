@@ -39,6 +39,11 @@ class _CarInsuranceScreenState extends State<CarInsuranceScreen> {
   String _policyType = 'osago';
   String? _vehicleType;
   int? _term;
+
+  /// schema 2: фойдаланувчи тузатган ҳудуд (null — профилдан), МДҲ рақамли, ҳайдовчилар.
+  String? _zone;
+  bool _cis = false;
+  String? _scope;
   String? _pendingKey;
   bool? _remindersOptIn;
 
@@ -373,6 +378,7 @@ class _CarInsuranceScreenState extends State<CarInsuranceScreen> {
     if (s.options.isEmpty) {
       return _section(key: const ValueKey('ins_no_prices'), child: Text(context.tr('ins_no_prices')));
     }
+    if (s.tariffSchema >= 2) return _zoneRequestCard(s, types);
     final policy = types.contains(_policyType) ? _policyType : types.first;
     final forPolicy = s.options.where((o) => o.policyType == policy).toList();
     final vehicles = insuranceDistinct(forPolicy.map((o) => o.vehicleType));
@@ -440,7 +446,114 @@ class _CarInsuranceScreenState extends State<CarInsuranceScreen> {
     );
   }
 
-  Future<void> _submit(InsuranceOption opt) async {
+  /// Эга ОСАГО жадвали (2026-11-28): ҳудуд (профилдан, тузатиш мумкин) · МДҲ рақамли · тоифа · ҳайдовчилар · муддат.
+  /// Нарх — олдиндан кўриш; ҳақиқий нархни сервер ҳисоблайди ва аризага ёзади.
+  Widget _zoneRequestCard(InsuranceState s, List<String> types) {
+    final policy = types.contains(_policyType) ? _policyType : types.first;
+    final zone = _cis ? 'cis' : (_zone ?? s.derivedZone);
+    final forPolicy = s.options.where((o) => o.policyType == policy).toList();
+    final vehicles = insuranceVehiclesFor(forPolicy, policy, zone);
+    final vehicle = vehicles.contains(_vehicleType) ? _vehicleType : (vehicles.isEmpty ? null : vehicles.first);
+    final scope = _scope ?? 'limited';
+    final terms = insuranceDistinct(
+      forPolicy.where((o) => o.zone == zone && o.vehicleType == vehicle && o.driverScope == scope).map((o) => '${o.termMonths}'),
+    ).map(int.parse).toList();
+    final term = terms.contains(_term) ? _term! : (terms.isEmpty ? 0 : terms.first);
+    final opt = vehicle == null
+        ? null
+        : insuranceZoneOption(forPolicy, policyType: policy, zone: zone, vehicleType: vehicle, driverScope: scope, termMonths: term);
+    Widget chips(String labelKey, List<Widget> children) => Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(context.tr(labelKey), style: TextStyle(color: Colors.grey.shade700)),
+            Wrap(spacing: 8, children: children),
+          ]),
+        );
+    return _section(
+      key: const ValueKey('ins_request'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _title(context.tr('ins_request_title'), Icons.shield_outlined),
+          if (types.length > 1)
+            Wrap(spacing: 8, children: [
+              for (final t in types)
+                ChoiceChip(
+                  key: ValueKey('ins_policy_$t'),
+                  label: Text(_policyName(t)),
+                  selected: policy == t,
+                  onSelected: (_) => setState(() => _policyType = t),
+                ),
+            ]),
+          SwitchListTile(
+            key: const ValueKey('ins_cis'),
+            contentPadding: EdgeInsets.zero,
+            value: _cis,
+            title: Text(context.tr('ins_zone_cis_toggle')),
+            onChanged: (v) => setState(() => _cis = v),
+          ),
+          if (!_cis)
+            chips('ins_zone_label', [
+              for (final z in const ['tashkent', 'other'])
+                ChoiceChip(
+                  key: ValueKey('ins_zone_$z'),
+                  label: Text(context.tr('ins_zone_$z')),
+                  selected: zone == z,
+                  onSelected: (_) => setState(() => _zone = z),
+                ),
+            ]),
+          chips('ins_vehicle_label', [
+            for (final v in vehicles)
+              ChoiceChip(
+                key: ValueKey('ins_vehicle_$v'),
+                label: Text(_vehicleName(v)),
+                selected: vehicle == v,
+                onSelected: (_) => setState(() => _vehicleType = v),
+              ),
+          ]),
+          chips('ins_scope_label', [
+            for (final d in kInsuranceDriverScopes)
+              ChoiceChip(
+                key: ValueKey('ins_scope_$d'),
+                label: Text(context.tr('ins_scope_$d')),
+                selected: scope == d,
+                onSelected: (_) => setState(() => _scope = d),
+              ),
+          ]),
+          if (terms.length > 1)
+            chips('ins_term_label', [
+              for (final m in terms)
+                ChoiceChip(
+                  key: ValueKey('ins_term_$m'),
+                  label: Text(_termName(m)),
+                  selected: term == m,
+                  onSelected: (_) => setState(() => _term = m),
+                ),
+            ]),
+          const SizedBox(height: 10),
+          Text(
+            opt == null ? context.tr('ins_no_prices') : context.tr('ins_price').replaceAll('{price}', formatMoney(opt.price)),
+            key: const ValueKey('ins_price'),
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+          ),
+          if (opt != null) Text('${_termName(opt.termMonths)} · ${_policyName(opt.policyType)}', style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700)),
+          Text(context.tr('ins_request_hint'), style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700)),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              key: const ValueKey('ins_request_submit'),
+              onPressed: _busy || !s.carComplete || opt == null ? null : () => _submit(opt, zone: _cis || _zone != null ? zone : ''),
+              icon: const Icon(Icons.send),
+              label: Text(context.tr(s.carComplete ? 'ins_request_submit' : 'ins_car_required')),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _submit(InsuranceOption opt, {String zone = ''}) async {
     _pendingKey ??= 'k${DateTime.now().microsecondsSinceEpoch}${Random().nextInt(1 << 20)}';
     String? requestId;
     await _run(() async {
@@ -449,6 +562,8 @@ class _CarInsuranceScreenState extends State<CarInsuranceScreen> {
         vehicleType: opt.vehicleType,
         termMonths: opt.termMonths,
         idempotencyKey: _pendingKey!,
+        zone: zone,
+        driverScope: opt.driverScope,
       );
       requestId = r.requestId;
       _pendingKey = null;
@@ -547,6 +662,12 @@ class _CarInsuranceScreenState extends State<CarInsuranceScreen> {
         children: [
           Text('${_policyName(r.policyType)} · ${_termName(r.termMonths)} · ${formatMoney(r.price)}',
               style: const TextStyle(fontWeight: FontWeight.w600)),
+          if (r.zone.isNotEmpty)
+            Text(
+              '${context.tr('ins_zone_${r.zone == 'cis' ? 'cis_short' : r.zone}')} · ${_vehicleName(r.vehicleType)} · '
+              '${context.tr('ins_scope_${r.driverScope == 'unlimited' ? 'unlimited' : 'limited'}')}',
+              style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
+            ),
           Text(context.tr(insuranceStatusKey(r.status)), style: TextStyle(color: Colors.grey.shade700)),
           if (r.status == 'issued')
             Text(

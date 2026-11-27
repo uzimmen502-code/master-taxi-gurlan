@@ -9,21 +9,41 @@ String _s(Object? v) => v == null ? '' : '$v';
 /// Ҳолатлар (сервер `STATUSES`).
 const kInsuranceStatuses = ['requested', 'paid', 'in_progress', 'issued', 'cancelled'];
 
-/// Транспорт турлари (сервер `VEHICLE_TYPES`, PROPOSED рўйхат).
+/// Транспорт тоифалари (сервер `VEHICLE_TYPES`; эга ОСАГО жадвали 2026-11-28): car — Енгил автомобил, truck — Юк
+/// автомобили, bus — Микроавтобус, moto — Трактор ва мотоцикл.
 const kInsuranceVehicleTypes = ['car', 'truck', 'bus', 'moto'];
 
+/// Нарх ҳудудлари (сервер `ZONES`): tashkent — Тошкент ш. ва вилояти, other — бошқа ҳудудлар, cis — МДҲ рақамли.
+const kInsuranceZones = ['tashkent', 'other', 'cis'];
+
+/// Ҳайдовчилар (сервер `DRIVER_SCOPES`): limited — Чекланган, unlimited — Чекланмаган.
+const kInsuranceDriverScopes = ['limited', 'unlimited'];
+
 class InsuranceOption {
-  const InsuranceOption({required this.policyType, required this.vehicleType, required this.termMonths, required this.price});
+  const InsuranceOption({
+    required this.policyType,
+    required this.vehicleType,
+    required this.termMonths,
+    required this.price,
+    this.zone = '',
+    this.driverScope = '',
+  });
   final String policyType;
   final String vehicleType;
   final int termMonths;
   final int price;
+
+  /// schema 2 жадвалида (бўш — эски вилоят жадвали).
+  final String zone;
+  final String driverScope;
 
   factory InsuranceOption.fromMap(Map m) => InsuranceOption(
         policyType: _s(m['policyType']),
         vehicleType: _s(m['vehicleType']),
         termMonths: _i(m['termMonths']),
         price: _i(m['price']),
+        zone: _s(m['zone']),
+        driverScope: _s(m['driverScope']),
       );
 }
 
@@ -97,6 +117,8 @@ class InsuranceState {
     this.kaskoEnabled = false,
     this.options = const [],
     this.tariffVersion = 0,
+    this.tariffSchema = 1,
+    this.derivedZone = 'other',
     this.carModel = '',
     this.carBrand = '',
     this.carPlate = '',
@@ -113,6 +135,12 @@ class InsuranceState {
   final bool kaskoEnabled;
   final List<InsuranceOption> options;
   final int tariffVersion;
+
+  /// 2 — ҳудуд × тоифа × ҳайдовчи жадвали (эга 2026-11-28); 1 — эски вилоят жадвали.
+  final int tariffSchema;
+
+  /// Профил туманидан (сервер): tashkent | other.
+  final String derivedZone;
   final String carModel;
   final String carBrand;
   final String carPlate;
@@ -140,6 +168,8 @@ class InsuranceState {
           if (o is Map) InsuranceOption.fromMap(o),
       ],
       tariffVersion: _i(m['tariffVersion']),
+      tariffSchema: m['tariffSchema'] is num ? (m['tariffSchema'] as num).toInt() : 1,
+      derivedZone: m['derivedZone'] == 'tashkent' ? 'tashkent' : 'other',
       carModel: _s(car['model']),
       carBrand: _s(car['brand']),
       carPlate: _s(car['plate']),
@@ -206,6 +236,10 @@ class InsuranceRequest {
     this.validTo = '',
     this.cancelReason = '',
     this.regionId = '',
+    this.zone = '',
+    this.zoneDerived = '',
+    this.zoneSource = '',
+    this.driverScope = '',
     this.createdAt,
   });
   final String id;
@@ -227,6 +261,12 @@ class InsuranceRequest {
   final String validTo;
   final String cancelReason;
   final String regionId;
+  final String zone;
+  final String zoneDerived;
+
+  /// 'user' — мижоз ҳудудни ўзи танлаган (агент полисда текширади).
+  final String zoneSource;
+  final String driverScope;
   final DateTime? createdAt;
 
   factory InsuranceRequest.fromMap(String id, Map m) {
@@ -258,6 +298,10 @@ class InsuranceRequest {
       validTo: _s(pol['validTo']),
       cancelReason: _s(m['cancelReason']),
       regionId: _s(m['regionId']),
+      zone: _s(m['zone']),
+      zoneDerived: _s(m['zoneDerived']),
+      zoneSource: _s(m['zoneSource']),
+      driverScope: _s(m['driverScope']),
       createdAt: created,
     );
   }
@@ -295,12 +339,16 @@ class CarInsuranceService {
     required String vehicleType,
     required int termMonths,
     required String idempotencyKey,
+    String zone = '',
+    String driverScope = '',
   }) async {
     final d = await _call('insuranceCreateRequest', {
       'policyType': policyType,
       'vehicleType': vehicleType,
       'termMonths': termMonths,
       'idempotencyKey': idempotencyKey,
+      if (zone.isNotEmpty) 'zone': zone,
+      if (driverScope.isNotEmpty) 'driverScope': driverScope,
     });
     return (requestId: _s(d['requestId']), price: _i(d['price']));
   }
@@ -402,3 +450,28 @@ List<String> insuranceDistinct(Iterable<String> xs) {
   }
   return out;
 }
+
+/// schema 2 нархини олдиндан кўриш (сервер барибир қайта ҳисоблайди); мос қатор йўқ — `null`.
+InsuranceOption? insuranceZoneOption(
+  Iterable<InsuranceOption> options, {
+  required String policyType,
+  required String zone,
+  required String vehicleType,
+  required String driverScope,
+  required int termMonths,
+}) {
+  for (final o in options) {
+    if (o.policyType == policyType &&
+        o.zone == zone &&
+        o.vehicleType == vehicleType &&
+        o.driverScope == driverScope &&
+        o.termMonths == termMonths) {
+      return o;
+    }
+  }
+  return null;
+}
+
+/// Ҳудуддаги тоифалар (МДҲ — фақат енгил ва юк; сервер `CIS_VEHICLE_TYPES`), жадвалдаги тартибда.
+List<String> insuranceVehiclesFor(Iterable<InsuranceOption> options, String policyType, String zone) =>
+    insuranceDistinct(options.where((o) => o.policyType == policyType && o.zone == zone).map((o) => o.vehicleType));

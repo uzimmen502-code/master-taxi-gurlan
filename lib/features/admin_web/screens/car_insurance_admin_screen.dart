@@ -6,10 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/utils/formatters.dart';
-import '../../../models/geo_area.dart';
 import '../../../models/oil_vehicle.dart';
 import '../../../repositories/oil_change_repository.dart';
-import '../../../repositories/service_config_repository.dart';
 import '../../car_insurance/car_insurance_service.dart';
 
 /// «Автомобил суғуртаси» — админ (эга 2026-11-28; матн фақат кирилл):
@@ -53,7 +51,9 @@ const _statusNames = {
   'issued': 'Берилган',
   'cancelled': 'Бекор қилинган',
 };
-const _vehicleNames = {'car': 'Енгил', 'truck': 'Юк', 'bus': 'Автобус', 'moto': 'Мото'};
+const _vehicleNames = {'car': 'Енгил автомобил', 'truck': 'Юк автомобили', 'bus': 'Микроавтобус', 'moto': 'Трактор ва мотоцикл'};
+const _zoneNames = {'tashkent': 'Тошкент шаҳри ва Тошкент вилояти', 'other': 'Ўзбекистоннинг бошқа ҳудудлари', 'cis': 'МДҲ давлатларидан кирувчи автомобиллар'};
+const _scopeNames = {'limited': 'Чекланган', 'unlimited': 'Чекланмаган'};
 const _policyNames = {'osago': 'ОСАГО', 'kasko': 'КАСКО'};
 const _stageNames = {'off': 'Ўчиқ', 'internal': 'Ички синов', 'pilot': 'Пилот', 'public': 'Ҳамма'};
 
@@ -186,6 +186,8 @@ class _InsuranceRequestsAdminTabState extends State<InsuranceRequestsAdminTab> {
                 style: const TextStyle(fontWeight: FontWeight.w700)),
             Text('Машина: $car · ${r.carPlate}'),
             Text('Мижоз: +${r.uid} · вилоят: ${r.regionId.isEmpty ? '—' : r.regionId}'),
+            if (r.zone.isNotEmpty)
+              Text('Ҳудуд: ${_zoneNames[r.zone] ?? r.zone}${r.zoneSource == 'user' ? ' (мижоз танлаган; профилдан: ${_zoneNames[r.zoneDerived] ?? r.zoneDerived} — текширинг)' : ''} · ҳайдовчилар: ${_scopeNames[r.driverScope] ?? r.driverScope}'),
             Text('Нарх: ${formatMoney(r.price)} · ҳамёндан: ${formatMoney(r.walletPaid)} · бонус: ${formatMoney(r.incentiveApplied)} · мой чегирмаси: ${formatMoney(r.oilDiscount)}'),
             if (r.status == 'issued') Text('Полис № ${r.policyNumber}: ${insuranceDisplayDate(r.validFrom)} — ${insuranceDisplayDate(r.validTo)}'),
             if (r.status == 'cancelled') Text('Сабаб: ${r.cancelReason}'),
@@ -423,6 +425,48 @@ class _ServiceReportTabState extends State<_ServiceReportTab> {
 
 // ══════════════════ Нарх жадвали ══════════════════
 
+/// Нарх жадвали катаги калити: `zone|vehicle|scope`.
+String _gridKey(String zone, String vehicle, String scope) => '$zone|$vehicle|$scope';
+
+/// Эга ОСАГО жадвали шакли (2026-11-28): ҳудуд × тоифа × ҳайдовчи; МДҲ — фақат енгил ва юк (сервер ҳам текширади).
+@visibleForTesting
+List<String> insuranceGridVehicles(String zone) => zone == 'cis' ? const ['car', 'truck'] : kInsuranceVehicleTypes;
+
+/// Сервер қаторлари → катаклар (фақат ОСАГО 12 ой) ва бошқа қаторлар (КАСКО/бошқа муддат — ўзгармай сақланади).
+@visibleForTesting
+({Map<String, int> prices, List<Map<String, dynamic>> others}) insuranceGridFromRows(Iterable rows) {
+  final prices = <String, int>{};
+  final others = <Map<String, dynamic>>[];
+  for (final r in rows) {
+    if (r is! Map) continue;
+    final m = Map<String, dynamic>.from(r);
+    final zone = '${m['zone'] ?? ''}';
+    if (m['policyType'] == 'osago' && m['termMonths'] == 12 && kInsuranceZones.contains(zone)) {
+      prices[_gridKey(zone, '${m['vehicleType']}', '${m['driverScope']}')] = m['price'] is num ? (m['price'] as num).toInt() : 0;
+    } else if (zone.isNotEmpty) {
+      others.add(m);
+    }
+  }
+  return (prices: prices, others: others);
+}
+
+/// Катаклар → сервер қаторлари (ҳар комбинация; бўш катак 0 — сервер `ROW_i_PRICE` билан рад этади).
+@visibleForTesting
+List<Map<String, dynamic>> insuranceGridToRows(Map<String, int> prices, {List<Map<String, dynamic>> others = const []}) => [
+      for (final zone in kInsuranceZones)
+        for (final v in insuranceGridVehicles(zone))
+          for (final scope in kInsuranceDriverScopes)
+            {
+              'policyType': 'osago',
+              'zone': zone,
+              'vehicleType': v,
+              'driverScope': scope,
+              'termMonths': 12,
+              'price': prices[_gridKey(zone, v, scope)] ?? 0,
+            },
+      ...others,
+    ];
+
 class _TariffTab extends StatefulWidget {
   const _TariffTab({required this.service});
   final CarInsuranceService service;
@@ -432,11 +476,15 @@ class _TariffTab extends StatefulWidget {
 }
 
 class _TariffTabState extends State<_TariffTab> {
-  final List<Map<String, dynamic>> _rows = [];
+  Map<String, int> _prices = {};
+  List<Map<String, dynamic>> _others = [];
   final _note = TextEditingController();
-  late final Future<List<GeoRegion>> _regions = ServiceConfigRepository().fetchRegions(activeOnly: false);
   Map? _settings;
   bool _busy = false;
+
+  /// Фаол жадвал schema 2 эмас — эга расмий жадвали қоралама сифатида тўлдирилган (сервер `draftRows`).
+  bool _draft = false;
+  int _gen = 0;
 
   @override
   void initState() {
@@ -448,14 +496,16 @@ class _TariffTabState extends State<_TariffTab> {
     try {
       final s = await widget.service.adminSettings();
       final t = s['tariff'];
+      final active = t is Map && t['schema'] == 2 && t['rows'] is List;
+      final rows = active ? t['rows'] as List : (s['draftRows'] is List ? s['draftRows'] as List : const []);
+      final g = insuranceGridFromRows(rows);
       setState(() {
         _settings = s;
-        _rows
-          ..clear()
-          ..addAll([
-            for (final r in (t is Map && t['rows'] is List ? t['rows'] as List : const []))
-              if (r is Map) Map<String, dynamic>.from(r),
-          ]);
+        _prices = g.prices;
+        _others = active ? g.others : [];
+        _draft = !active && rows.isNotEmpty;
+        _gen++;
+        if (_draft && _note.text.isEmpty) _note.text = 'Эга расмий ОСАГО жадвали 2026-11-28';
       });
     } catch (e) {
       if (mounted) _snack(context, _adminErr(e));
@@ -465,7 +515,7 @@ class _TariffTabState extends State<_TariffTab> {
   Future<void> _publish() async {
     setState(() => _busy = true);
     try {
-      final v = await widget.service.adminPublishTariff(_rows, _note.text.trim());
+      final v = await widget.service.adminPublishTariff(insuranceGridToRows(_prices, others: _others), _note.text.trim());
       if (mounted) _snack(context, 'Янги версия v$v фаол. Эски аризалар ўз нархида қолади.');
       _note.clear();
       await _load();
@@ -480,89 +530,68 @@ class _TariffTabState extends State<_TariffTab> {
   Widget build(BuildContext context) {
     final cfg = _settings?['config'];
     final versions = _settings?['tariffVersions'] is List ? _settings!['tariffVersions'] as List : const [];
-    return FutureBuilder<List<GeoRegion>>(
-      future: _regions,
-      builder: (context, rs) {
-        final regions = rs.data ?? const <GeoRegion>[];
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Text('Фаол версия: v${cfg is Map ? cfg['activeTariffVersion'] ?? 0 : 0}. Нархлар бутун сўм. «Барча вилоятлар» қатори — вилоят қатори бўлмаса.'),
-            const SizedBox(height: 8),
-            for (var i = 0; i < _rows.length; i++) _rowEditor(i, regions),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: () => setState(() => _rows.add({'policyType': 'osago', 'regionId': '*', 'vehicleType': 'car', 'termMonths': 12, 'price': 0})),
-                icon: const Icon(Icons.add),
-                label: const Text('Қатор қўшиш'),
-              ),
-            ),
-            TextField(controller: _note, decoration: const InputDecoration(labelText: 'Изоҳ (нима ўзгарди)')),
-            const SizedBox(height: 8),
-            FilledButton(onPressed: _busy || _rows.isEmpty ? null : _publish, child: const Text('Янги версияни эълон қилиш')),
-            const Divider(height: 32),
-            const Text('Версиялар', style: TextStyle(fontWeight: FontWeight.w700)),
-            for (final v in versions)
-              if (v is Map) Text('v${v['version']} · ${v['rowCount']} қатор · ${v['note'] ?? ''}'),
-          ],
-        );
-      },
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text('Фаол версия: v${cfg is Map ? cfg['activeTariffVersion'] ?? 0 : 0}. ОСАГО, 12 ой, нархлар бутун сўм '
+            '(чекланган / чекланмаган ҳайдовчилар). Ҳудуд мижоз туманидан автоматик, МДҲ — мижоз танлайди.'),
+        if (_draft)
+          Container(
+            key: const ValueKey('ins_tariff_draft'),
+            margin: const EdgeInsets.only(top: 8),
+            padding: const EdgeInsets.all(10),
+            color: Colors.amber.shade50,
+            child: const Text('ҚОРАЛАМА: эга расмий жадвали (2026-11-28) тўлдирилди. Текширинг ва «Эълон қилиш» босинг — '
+                'шундан кейингина нархлар кучга киради.'),
+          ),
+        for (final zone in kInsuranceZones) _zoneTable(zone),
+        const SizedBox(height: 8),
+        TextField(controller: _note, decoration: const InputDecoration(labelText: 'Изоҳ (нима ўзгарди)')),
+        const SizedBox(height: 8),
+        FilledButton(
+          key: const ValueKey('ins_tariff_publish'),
+          onPressed: _busy || _prices.isEmpty ? null : _publish,
+          child: const Text('Эълон қилиш (янги версия)'),
+        ),
+        const Divider(height: 32),
+        const Text('Версиялар', style: TextStyle(fontWeight: FontWeight.w700)),
+        for (final v in versions)
+          if (v is Map) Text('v${v['version']} · ${v['rowCount']} қатор · ${v['note'] ?? ''}'),
+      ],
     );
   }
 
-  Widget _rowEditor(int i, List<GeoRegion> regions) {
-    final r = _rows[i];
-    final regionIds = ['*', ...regions.map((g) => g.id)];
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Wrap(
-        spacing: 8,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          DropdownButton<String>(
-            value: r['policyType'] as String?,
-            items: [for (final e in _policyNames.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
-            onChanged: (v) => setState(() => r['policyType'] = v),
-          ),
-          DropdownButton<String>(
-            value: regionIds.contains(r['regionId']) ? r['regionId'] as String : '*',
-            items: [
-              const DropdownMenuItem(value: '*', child: Text('Барча вилоятлар')),
-              for (final g in regions) DropdownMenuItem(value: g.id, child: Text(g.nameFor('uz_Cyrl'))),
-            ],
-            onChanged: (v) => setState(() => r['regionId'] = v),
-          ),
-          DropdownButton<String>(
-            value: r['vehicleType'] as String?,
-            items: [for (final e in _vehicleNames.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
-            onChanged: (v) => setState(() => r['vehicleType'] = v),
-          ),
-          SizedBox(
-            width: 70,
-            child: TextFormField(
-              initialValue: '${r['termMonths']}',
-              decoration: const InputDecoration(labelText: 'Ой'),
-              keyboardType: TextInputType.number,
-              onChanged: (v) => r['termMonths'] = int.tryParse(v.trim()) ?? 0,
-            ),
-          ),
-          SizedBox(
-            width: 130,
-            child: TextFormField(
-              initialValue: '${r['price']}',
-              decoration: const InputDecoration(labelText: 'Нарх, сўм'),
-              keyboardType: TextInputType.number,
-              onChanged: (v) => r['price'] = int.tryParse(v.replaceAll(RegExp(r'\D'), '')) ?? 0,
-            ),
-          ),
-          IconButton(onPressed: () => setState(() => _rows.removeAt(i)), icon: const Icon(Icons.delete_outline)),
-        ],
-      ),
-    );
-  }
+  Widget _zoneTable(String zone) => Padding(
+        key: ValueKey('ins_tariff_zone_$zone'),
+        padding: const EdgeInsets.only(top: 14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(_zoneNames[zone] ?? zone, style: const TextStyle(fontWeight: FontWeight.w700)),
+          Row(children: [
+            const Expanded(flex: 3, child: SizedBox()),
+            for (final s in kInsuranceDriverScopes)
+              Expanded(flex: 2, child: Text(_scopeNames[s] ?? s, style: const TextStyle(fontSize: 12, color: Colors.black54))),
+          ]),
+          for (final v in insuranceGridVehicles(zone))
+            Row(children: [
+              Expanded(flex: 3, child: Text(_vehicleNames[v] ?? v)),
+              for (final s in kInsuranceDriverScopes)
+                Expanded(
+                  flex: 2,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 8, bottom: 4),
+                    child: TextFormField(
+                      key: ValueKey('ins_tariff_${zone}_${v}_${s}_$_gen'),
+                      initialValue: '${_prices[_gridKey(zone, v, s)] ?? ''}',
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(isDense: true, suffixText: 'сўм'),
+                      onChanged: (x) => _prices[_gridKey(zone, v, s)] = int.tryParse(x.replaceAll(RegExp(r'\D'), '')) ?? 0,
+                    ),
+                  ),
+                ),
+            ]),
+        ]),
+      );
 }
-
 // ══════════════════ Созламалар (босқич + кампания) ══════════════════
 
 class _SettingsTab extends StatefulWidget {

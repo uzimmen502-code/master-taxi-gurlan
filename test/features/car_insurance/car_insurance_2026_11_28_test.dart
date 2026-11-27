@@ -30,6 +30,39 @@ class _FakeSvc extends CarInsuranceService {
   Future<void> chooseCarOffer(String option) async => calls.add('choose:$option');
 }
 
+class _ZoneSvc extends CarInsuranceService {
+  _ZoneSvc(this.state, {this.settings = const {}});
+  final InsuranceState state;
+  final Map settings;
+  final created = <(String, String, int, String, String)>[];
+  List<Map<String, dynamic>> published = [];
+
+  @override
+  Future<InsuranceState> myState() async => state;
+
+  @override
+  Future<({String requestId, int price})> createRequest({
+    required String policyType,
+    required String vehicleType,
+    required int termMonths,
+    required String idempotencyKey,
+    String zone = '',
+    String driverScope = '',
+  }) async {
+    created.add((policyType, vehicleType, termMonths, zone, driverScope));
+    throw StateError('stop'); // тўлов оқими бу тестда керак эмас
+  }
+
+  @override
+  Future<Map> adminSettings() async => settings;
+
+  @override
+  Future<int> adminPublishTariff(List<Map<String, dynamic>> rows, String note) async {
+    published = rows;
+    return 1;
+  }
+}
+
 InsuranceState _state({InsuranceEnrollment? enrollment, InsuranceCampaign? campaign, String expiresOn = ''}) => InsuranceState.fromMap({
       'available': true,
       'tariffVersion': 3,
@@ -233,6 +266,108 @@ void main() {
       await t.pumpWidget(l10nApp(home: CarInsuranceScreen(phone: '998901234567', service: _FakeSvc(InsuranceState.unavailable), requestsStream: Stream.value(const []))));
       await t.pumpAndSettle();
       expect(find.byKey(const ValueKey('ins_not_available')), findsOneWidget);
+    });
+  });
+
+  // Эга расмий ОСАГО жадвали (2026-11-28): ҳудуд × тоифа × [чекланган, чекланмаган].
+  group('ОСАГО жадвали (schema 2)', () {
+    const owner = {
+      'tashkent': {'car': [192000, 384000], 'truck': [336000, 672000], 'bus': [384000, 768000], 'moto': [72000, 144000]},
+      'other': {'car': [160000, 320000], 'truck': [280000, 560000], 'bus': [320000, 640000], 'moto': [60000, 120000]},
+      'cis': {'car': [320000, 640000], 'truck': [560000, 1120000]},
+    };
+    List<Map<String, dynamic>> ownerRows() => [
+          for (final z in owner.entries)
+            for (final v in z.value.entries)
+              for (var i = 0; i < 2; i++)
+                {'policyType': 'osago', 'zone': z.key, 'vehicleType': v.key, 'driverScope': kInsuranceDriverScopes[i], 'termMonths': 12, 'price': v.value[i]},
+        ];
+
+    test('админ катаклари: қаторлар ↔ катак (20 та, МДҲ фақат енгил/юк), КАСКО сақланади, бўш катак 0', () {
+      final g = insuranceGridFromRows([...ownerRows(), {'policyType': 'kasko', 'zone': 'other', 'vehicleType': 'car', 'driverScope': 'limited', 'termMonths': 12, 'price': 900000}]);
+      expect(g.prices.length, 20);
+      expect(g.others.single['policyType'], 'kasko');
+      final rows = insuranceGridToRows(g.prices, others: g.others);
+      expect(rows.length, 21);
+      for (final r in ownerRows()) {
+        expect(rows.any((x) => x['zone'] == r['zone'] && x['vehicleType'] == r['vehicleType'] && x['driverScope'] == r['driverScope'] && x['price'] == r['price']), isTrue, reason: '$r');
+      }
+      expect(insuranceGridVehicles('cis'), ['car', 'truck']);
+      expect(insuranceGridVehicles('other'), kInsuranceVehicleTypes);
+      expect(insuranceGridToRows(const {}).every((r) => r['price'] == 0), isTrue);
+      expect(insuranceGridToRows(const {}).length, 20);
+    });
+
+    test('нархни олдиндан кўриш: ҳар комбинация; МДҲ микроавтобус — йўқ', () {
+      final opts = [for (final r in ownerRows()) InsuranceOption.fromMap(r)];
+      for (final r in ownerRows()) {
+        expect(
+          insuranceZoneOption(opts, policyType: 'osago', zone: r['zone'] as String, vehicleType: r['vehicleType'] as String, driverScope: r['driverScope'] as String, termMonths: 12)?.price,
+          r['price'],
+        );
+      }
+      expect(insuranceZoneOption(opts, policyType: 'osago', zone: 'cis', vehicleType: 'bus', driverScope: 'limited', termMonths: 12), isNull);
+      expect(insuranceVehiclesFor(opts, 'osago', 'cis'), ['car', 'truck']);
+    });
+
+    testWidgets('ариза формаси: ҳудуд профилдан, ҳайдовчи/тоифа/МДҲ — нарх; юборилганда zone + driverScope', (t) async {
+      await t.binding.setSurfaceSize(const Size(800, 2400));
+      addTearDown(() => t.binding.setSurfaceSize(null));
+      final d = JsonL10nDelegate();
+      final svc = _ZoneSvc(InsuranceState.fromMap({
+        'available': true, 'tariffVersion': 4, 'tariffSchema': 2, 'derivedZone': 'tashkent', 'options': ownerRows(),
+        'car': {'brand': 'Chevrolet', 'model': 'Cobalt', 'year': 2020, 'plate': '01 A 123 BC', 'complete': true},
+      }));
+      await t.pumpWidget(l10nApp(delegate: d, home: CarInsuranceScreen(phone: '998901234567', service: svc, requestsStream: Stream.value(const []))));
+      await t.pumpAndSettle();
+      String price(int p) => d.tr('ins_price').replaceAll('{price}', formatMoney(p));
+      Future<void> tap(String key) async {
+        await t.ensureVisible(find.byKey(ValueKey(key)));
+        await t.pumpAndSettle();
+        await t.tap(find.byKey(ValueKey(key)));
+        await t.pumpAndSettle();
+      }
+
+      await t.scrollUntilVisible(find.byKey(const ValueKey('ins_price')), 200);
+      expect(find.text(price(192000)), findsOneWidget, reason: 'Тошкент · енгил · чекланган');
+      await tap('ins_scope_unlimited');
+      expect(find.text(price(384000)), findsOneWidget);
+      await tap('ins_vehicle_truck');
+      expect(find.text(price(672000)), findsOneWidget);
+      await tap('ins_zone_other');
+      expect(find.text(price(560000)), findsOneWidget);
+      await tap('ins_cis');
+      expect(find.byKey(const ValueKey('ins_vehicle_bus')), findsNothing);
+      expect(find.byKey(const ValueKey('ins_vehicle_moto')), findsNothing);
+      expect(find.byKey(const ValueKey('ins_zone_other')), findsNothing);
+      expect(find.text(price(1120000)), findsOneWidget);
+      await tap('ins_request_submit');
+      expect(svc.created, [('osago', 'truck', 12, 'cis', 'unlimited')]);
+    });
+
+    testWidgets('админ: эга жадвали қоралама (сервер draftRows) — катаклар тўла, «Эълон қилиш» → 20 қатор', (t) async {
+      final svc = _ZoneSvc(InsuranceState.unavailable, settings: {
+        'config': {'activeTariffVersion': 0}, 'tariff': null, 'tariffVersions': const [], 'draftRows': ownerRows(),
+      });
+      await t.binding.setSurfaceSize(const Size(1000, 2400));
+      addTearDown(() => t.binding.setSurfaceSize(null));
+      await t.pumpWidget(MaterialApp(home: CarInsuranceAdminScreen(service: svc)));
+      await t.pumpAndSettle();
+      await t.tap(find.widgetWithText(Tab, 'Нарх жадвали'));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('ins_tariff_draft')), findsOneWidget);
+      expect(find.byKey(const ValueKey('ins_tariff_zone_cis')), findsOneWidget);
+      expect(find.byKey(const ValueKey('ins_tariff_cis_bus_limited_1')), findsNothing);
+      final f = t.widget<TextFormField>(find.byKey(const ValueKey('ins_tariff_cis_truck_unlimited_1')));
+      expect(f.initialValue, '1120000');
+      await t.ensureVisible(find.byKey(const ValueKey('ins_tariff_publish')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('ins_tariff_publish')));
+      await t.pumpAndSettle();
+      expect(svc.published.length, 20);
+      for (final r in ownerRows()) {
+        expect(svc.published.any((x) => x['zone'] == r['zone'] && x['vehicleType'] == r['vehicleType'] && x['driverScope'] == r['driverScope'] && x['price'] == r['price']), isTrue, reason: '$r');
+      }
     });
   });
 

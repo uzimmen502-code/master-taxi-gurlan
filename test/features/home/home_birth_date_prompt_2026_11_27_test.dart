@@ -30,17 +30,20 @@ void main() {
   });
 
   group('«Эълон ва хизматлар» тартиби', () {
-    test('кўринса — бўлим ЭНГ БОШИДА (байрам саватчасидан ҳам олдин)', () {
+    // Эга 2026-11-28: «Пул ўтказмалари»дан кейин, «Яқинларингиз…»дан олдин (аввал бўлим бошида эди).
+    test('кўринса — Пул ўтказмаларидан кейин, Яқинлар карточкасидан олдин', () {
       final ids = homeAdsServicesCardIds(
         isVisible: _all,
         viewerBirthDate: '',
         restaurantsAllowed: false,
         holidayVisible: true,
+        relativesPromptVisible: true,
         birthDatePromptVisible: true,
       );
-      expect(ids.first, 'birth_date');
-      expect(ids.indexOf('holiday'), 1);
+      expect(ids.indexOf('birth_date'), ids.indexOf('pay') + 1);
+      expect(ids.last, 'relatives_bday');
       expect(ids.where((e) => e == 'birth_date').length, 1);
+      expect(ids.contains('holiday'), isFalse);
     });
     test('кўринмаса — карточка йўқ (сукут ҳам)', () {
       expect(
@@ -64,7 +67,7 @@ void main() {
     final src = File('lib/features/home/home_screen.dart').readAsStringSync();
     final i = src.indexOf("'birth_date' => HomeLiteCardData(");
     expect(i, greaterThan(0));
-    final card = src.substring(i, src.indexOf("'holiday' =>", i));
+    final card = src.substring(i, src.indexOf("'relatives_bday' =>", i));
     expect(card.contains("context.tr('home_lite_birth_title')"), isTrue);
     expect(card.contains("context.tr('home_lite_birth_caption')"), isTrue);
     expect(card.contains('onTap: () => openUserInfoScreen(context)'), isTrue);

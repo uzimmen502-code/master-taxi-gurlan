@@ -9,14 +9,14 @@ import '../../supermarket/domain/sm_holiday.dart';
 /// (эга 2026-11-26). Кўриниш қоидалари — `sm_holiday.dart` (тоза, тестланади).
 @immutable
 class HomeHolidayState {
-  const HomeHolidayState({this.holiday = false, this.birthdays = kRelativesBirthdayGoal, this.bonusActive = false});
+  const HomeHolidayState({this.holiday = false, this.birthdays = kRelativesPromptHideAt, this.bonusActive = false});
 
   static const none = HomeHolidayState();
 
   /// Байрам саватчаси очиқми (супермаркет рухсати + сервер каталоги).
   final bool holiday;
 
-  /// Туғилган куни киритилган қариндошлар (≤ goal); номаълум — goal (карточка чиқмайди).
+  /// Туғилган куни киритилган қариндошлар (≤ [kRelativesPromptHideAt]); номаълум — шу чегара (карточка чиқмайди).
   final int birthdays;
 
   /// «Яқинлар» бонус дастури фаол ва шу фойдаланувчига тегишли (сервер `NOT_ENOUGH_RELATIVES` жавоби).
@@ -55,7 +55,8 @@ class HomeHolidayCards {
       if (!ok) return HomeHolidayState.none;
       final uid = canonicalPhoneId(phone);
       if (uid.length < 12) return const HomeHolidayState(holiday: true);
-      final n = await (_count?.call(uid) ?? RelativesRepository().countBirthdays(uid));
+      final n = await (_count?.call(uid) ?? RelativesRepository().countBirthdays(uid, cap: kRelativesPromptHideAt));
+      // Бонус мақсадига (3) етган — бонус сўралмайди (сервер granted/duplicate қайтаради), карточка 5 гача умумий матн билан.
       if (n >= kRelativesBirthdayGoal) return HomeHolidayState(holiday: true, birthdays: n);
       if (_bonusActive == null) {
         try {

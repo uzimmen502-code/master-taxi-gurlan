@@ -24,7 +24,7 @@ class HomeMarketEntry {
     this.taxonomyMarketId,
   });
 
-  /// Блок ичидаги ID (тест/калит учун): `electronics` … `aralash`.
+  /// Блок ичидаги ID (тест/калит учун): `supermarket` … `china`.
   final String id;
 
   /// Админ дарвозаси (`kKnownModuleIds`).
@@ -42,8 +42,9 @@ class HomeMarketEntry {
   final String sloganKey;
 }
 
-/// Эга тартиби (2026-11-20): Электроника, Мошина, Мол, Гўшт, Деҳқон, Маиший техника,
-/// Хизматлар, Уй-жой, Улгуржи, Хитой товарлари, Аралаш.
+/// Эга тартиби (2026-11-28): AVA Супермаркет · [саватча — [HomeMarketsBlock.basketCard]] · Электроника ·
+/// Маиший техника · Деҳқон · Гўшт · Мол · Хизматлар бозори · Мошина · Уй-жой · Улгуржи · Заводлар · Хитой товарлари.
+/// «Аралаш бозор» карточкаси олиб ташланди (Аралаш маҳсулот тасмаси бош саҳифада қолади).
 const kHomeMarketEntries = <HomeMarketEntry>[
   // «AVA Супермаркет» (эга 2026-11-20): блок ТЕПАСИДА. Дарвоза: модул ёқилган ВА сервер
   // `getSupermarketAccess.allowed` ([visibleHomeMarkets] `supermarketAllowed`). Расм — эга берган (2026-11-20).
@@ -64,28 +65,12 @@ const kHomeMarketEntries = <HomeMarketEntry>[
     sloganKey: 'home_market_electronics_slogan',
   ),
   HomeMarketEntry(
-    id: 'auto',
-    moduleId: 'auto_market',
-    titleKey: 'home_module_auto_market',
-    imagePath: 'assets/images/markets/market_auto_v3.webp',
-    taxonomyMarketId: 'auto',
-    sloganKey: 'home_market_auto_slogan',
-  ),
-  HomeMarketEntry(
-    id: 'livestock',
-    moduleId: 'livestock_market',
-    titleKey: 'home_module_livestock_market',
-    imagePath: 'assets/images/markets/market_livestock_v3.webp',
-    taxonomyMarketId: 'livestock',
-    sloganKey: 'home_market_livestock_slogan',
-  ),
-  HomeMarketEntry(
-    id: 'meat',
-    moduleId: 'meat_market',
-    titleKey: 'home_module_meat_market',
-    imagePath: 'assets/images/markets/market_meat_v2.webp',
-    taxonomyMarketId: 'meat',
-    sloganKey: 'home_market_meat_slogan',
+    id: 'appliances',
+    moduleId: 'appliances_market',
+    titleKey: 'home_module_appliances_market',
+    imagePath: 'assets/images/markets/market_appliances_v2.webp',
+    taxonomyMarketId: 'appliances',
+    sloganKey: 'home_market_appliances_slogan',
   ),
   HomeMarketEntry(
     id: 'farm',
@@ -96,12 +81,20 @@ const kHomeMarketEntries = <HomeMarketEntry>[
     sloganKey: 'home_market_farm_slogan',
   ),
   HomeMarketEntry(
-    id: 'appliances',
-    moduleId: 'appliances_market',
-    titleKey: 'home_module_appliances_market',
-    imagePath: 'assets/images/markets/market_appliances_v2.webp',
-    taxonomyMarketId: 'appliances',
-    sloganKey: 'home_market_appliances_slogan',
+    id: 'meat',
+    moduleId: 'meat_market',
+    titleKey: 'home_module_meat_market',
+    imagePath: 'assets/images/markets/market_meat_v2.webp',
+    taxonomyMarketId: 'meat',
+    sloganKey: 'home_market_meat_slogan',
+  ),
+  HomeMarketEntry(
+    id: 'livestock',
+    moduleId: 'livestock_market',
+    titleKey: 'home_module_livestock_market',
+    imagePath: 'assets/images/markets/market_livestock_v3.webp',
+    taxonomyMarketId: 'livestock',
+    sloganKey: 'home_market_livestock_slogan',
   ),
   // Эга 2026-11-20: бош саҳифадаги «Яқиндаги хизматлар» бўлими ўрнига — мавжуд хизматлар
   // рўйхати (jobs, kind=service), дарвоза `jobs`. Расм — эга чизгани (2026-11-20, 3-тур).
@@ -112,6 +105,14 @@ const kHomeMarketEntries = <HomeMarketEntry>[
     imagePath: 'assets/images/home/card_services_market_v1.webp',
     icon: Icons.handyman_rounded,
     sloganKey: 'home_market_services_slogan',
+  ),
+  HomeMarketEntry(
+    id: 'auto',
+    moduleId: 'auto_market',
+    titleKey: 'home_module_auto_market',
+    imagePath: 'assets/images/markets/market_auto_v3.webp',
+    taxonomyMarketId: 'auto',
+    sloganKey: 'home_market_auto_slogan',
   ),
   HomeMarketEntry(
     id: 'realty',
@@ -127,19 +128,21 @@ const kHomeMarketEntries = <HomeMarketEntry>[
     imagePath: 'assets/images/markets/market_wholesale_v2.webp',
     sloganKey: 'home_market_wholesale_slogan',
   ),
+  // «Заводлар» (эга 2026-11-28): алоҳида бўлим ўрнига шу рўйхатда. Завод = бизнес харитаси объекти — дарвоза
+  // `business_map`; очиш — `FactoriesScreen` (`home_screen.dart` `_openHomeMarket`).
+  HomeMarketEntry(
+    id: 'factories',
+    moduleId: 'business_map',
+    titleKey: 'factory_title',
+    imagePath: kHomeFactoriesCardImage,
+    sloganKey: 'home_lite_factories_caption',
+  ),
   HomeMarketEntry(
     id: 'china',
     moduleId: 'china_market',
     titleKey: 'home_market_china_title',
     imagePath: 'assets/images/markets/market_china_v2.webp',
     sloganKey: 'home_market_china_slogan',
-  ),
-  HomeMarketEntry(
-    id: 'aralash',
-    moduleId: 'cheap_products_home',
-    titleKey: 'home_market_aralash_title',
-    imagePath: 'assets/images/markets/market_aralash_v2.webp',
-    sloganKey: 'home_market_aralash_slogan',
   ),
 ];
 
@@ -183,7 +186,12 @@ class HomeMarketsBlock extends StatefulWidget {
     this.isVisible,
     this.loadTaxonomy,
     this.loadSupermarketAccess,
+    this.basketCard,
   });
+
+  /// «Туғилган кун саватчаси / Менинг ҳафталик харид саватчам» (эга 2026-11-28: «Эълон ва хизматлар»дан шу ерга) —
+  /// Супермаркетдан кейин (у бўлмаса — биринчи). Дарвоза ва сарлавҳа/расм — чақирувчида; `null` — карточка йўқ.
+  final HomeLiteCardData? basketCard;
 
   /// Тест учун; сукут — [SupermarketAccessCache.get] (`getSupermarketAccess`, 5 дақ кеш).
   /// Фақат `supermarket` модули дарвозадан ўтса чақирилади (37-банд).
@@ -240,7 +248,9 @@ class _HomeMarketsBlockState extends State<HomeMarketsBlock> {
       _loadSmAccess();
     }
     final items = visibleHomeMarkets(isVisible, supermarketAllowed: _smAllowed);
-    if (items.isEmpty) return const SizedBox.shrink();
+    final basket = widget.basketCard;
+    if (items.isEmpty && basket == null) return const SizedBox.shrink();
+    final basketAt = items.isNotEmpty && items.first.id == 'supermarket' ? 1 : 0;
     return HomeLiteSection(
       key: const ValueKey('home_markets_block'),
       title: context.tr('home_markets_block_title'),
@@ -254,7 +264,7 @@ class _HomeMarketsBlockState extends State<HomeMarketsBlock> {
             icon: e.icon,
             onTap: () => widget.onOpen(e),
           ),
-      ],
+      ]..insertAll(basketAt, [if (basket != null) basket]),
     );
   }
 }

@@ -808,11 +808,15 @@ List<DateTime> smSelectableDates(Map<String, List<SmSlot>> dateSlots, DateTime t
 bool holidayCardVisible({required bool smOpenable, required bool smAllowed, required Iterable<HolidayOccasion> occasions}) =>
     smOpenable && smAllowed && occasions.any((o) => o.isOn);
 
-/// Туғилган куни киритилган қариндошлар шунча бўлса — «Яқинларингиз…» карточкаси яширилади (эга 2026-11-26).
+/// «Яқинлар» бонус дастури мақсади — прогресс ({n}/{goal}) учун (эга 2026-11-26). Карточка кўриниши — алоҳида
+/// [kRelativesPromptHideAt] (эга 2026-11-28 уни 5 га оширди; бонус мақсади ўзгармади).
 const int kRelativesBirthdayGoal = 3;
 
+/// Туғилган куни киритилган қариндошлар шунча бўлса — «Яқинларингиз…» карточкаси яширилади (эга 2026-11-28: 3 → 5).
+const int kRelativesPromptHideAt = 5;
+
 bool relativesPromptVisible({required bool holidayAvailable, required int birthdaysCount}) =>
-    holidayAvailable && birthdaysCount < kRelativesBirthdayGoal;
+    holidayAvailable && birthdaysCount < kRelativesPromptHideAt;
 
 /// Бонус дастури фаол бўлса — `(n, goal, left)`; акс ҳолда `null` (прогресс кўрсатилмайди).
 ({int n, int goal, int left})? relativesBonusProgress({required bool bonusActive, required int birthdaysCount, int goal = kRelativesBirthdayGoal}) {

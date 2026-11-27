@@ -201,16 +201,15 @@ List<String> visiblePayModules(bool Function(String moduleId) isVisible) => [
         if (isVisible(id)) id,
     ];
 
-/// «Эълон ва хизматлар» бўлими карточкалари (эга 2026-11-20), шу ТАРТИБДА:
-/// Танишув (`dating` + ёш 18..60) · Янги эълонлар (`jobs`) · Почта жўнатиш (`logistics`) ·
-/// Пул ўтказмалари (камида битта `pay_*`) · Кафе-ресторанлар (ўз дарвозаси, [restaurantsAllowed]).
+/// «Эълон ва хизматлар» бўлими карточкалари — эга тартиби (2026-11-28), шу ТАРТИБДА:
+/// Танишув (`dating` + ёш 18..60) · Янги эълонлар (`jobs`) · Кафе-ресторанлар (ўз дарвозаси, [restaurantsAllowed]) ·
+/// Вакансиялар (`vacancies`, [homeVacanciesCardVisible]; аввал алоҳида бўлим эди) · Суғурта (`car_insurance`,
+/// [insuranceAvailable] — [homeInsuranceVisible] / [homeInsuranceCard] ҳуклари) · Почта жўнатиш (`logistics`) · Пул ўтказмалари (камида битта
+/// `pay_*`) · «Туғилган кунингизни киритинг» (`birth_date`, [birthDatePromptVisible] — [birthDatePromptVisibleFor]) ·
+/// «Яқинларингиз туғилган кунини қўшинг» (`relatives_bday`, [holidayVisible] ВА [relativesPromptVisible] —
+/// `relativesPromptVisible`: ≥ `kRelativesPromptHideAt` (5) туғилган кун бўлса яширин).
 ///
-/// Эга 2026-11-26: «Байрам саватчаси» (`holiday`, [holidayVisible] — `holidayCardVisible`) бўлим БОШИДА (жозибали,
-/// юқорига яқин); «Яқинларингиз туғилган кунини қўшинг» (`relatives_bday`, [relativesPromptVisible] —
-/// `relativesPromptVisible`: ≥ 3 туғилган кун бўлса яширин) ундан кейин.
-///
-/// Эга 2026-11-27: туғилган санаси йўқ фойдаланувчига «Туғилган кунингизни киритинг» (`birth_date`,
-/// [birthDatePromptVisible] — [birthDatePromptVisibleFor]) бўлим ЭНГ БОШИДА; сана киритилгач — йўқ.
+/// «Байрам / ҳафталик харид саватчаси» бу бўлимда ЙЎҚ — «Бозорлар»га кўчди ([HomeMarketsBlock.basketCard]).
 List<String> homeAdsServicesCardIds({
   required bool Function(String moduleId) isVisible,
   required String viewerBirthDate,
@@ -218,17 +217,28 @@ List<String> homeAdsServicesCardIds({
   bool holidayVisible = false,
   bool relativesPromptVisible = false,
   bool birthDatePromptVisible = false,
+  bool insuranceAvailable = false,
 }) =>
     [
-      if (birthDatePromptVisible) 'birth_date',
-      if (holidayVisible) 'holiday',
-      if (holidayVisible && relativesPromptVisible) 'relatives_bday',
       if (isVisible('dating') && datingSectionVisibleFor(viewerBirthDate)) 'dating',
       if (isVisible('jobs')) 'ads',
+      if (restaurantsAllowed) 'restaurants',
+      if (homeVacanciesCardVisible(isVisible)) 'vacancies',
+      if (insuranceAvailable) 'car_insurance',
       if (isVisible('logistics')) 'logistics',
       if (visiblePayModules(isVisible).isNotEmpty) 'pay',
-      if (restaurantsAllowed) 'restaurants',
+      if (birthDatePromptVisible) 'birth_date',
+      if (holidayVisible && relativesPromptVisible) 'relatives_bday',
     ];
+
+/// «Суғурта» карточкаси ҳуки (эга 2026-11-28). Суғурта клиенти бошқа шохда (`feat/car-insurance`,
+/// `lib/features/car_insurance/widgets/car_insurance_home_section.dart`). Merge'дан кейин фақат шу икки ҳук
+/// танаси алмашади: [homeInsuranceCard] → `carInsuranceHomeCard(context, phone: phone, onReturn: onReturn)`,
+/// [homeInsuranceVisible] → `carInsuranceHomeVisible(phone, refresh: refresh)`. Ҳозир — карточка йўқ.
+HomeLiteCardData? homeInsuranceCard(BuildContext context, {required String phone, VoidCallback? onReturn}) => null;
+
+/// Суғурта карточкаси дарвозаси (сессия кешли бўлади); ҳозир доим `false`.
+Future<bool> homeInsuranceVisible(String phone, {bool refresh = false}) async => false;
 
 /// «Туғилган кунингизни киритинг» карточкаси кўринадими (эга 2026-11-27) — ЯГОНА манба.
 ///
@@ -257,13 +267,11 @@ List<String> homeTransportCardIds(bool Function(String moduleId) isVisible) => [
         if (isVisible(id)) id,
     ];
 
-/// «Ишлаб чиқарувчи завод/фабрикалар» бўлими (эга 2026-11-28): завод = бизнес харитаси объекти, шунинг учун
-/// `business_map` дарвозаси. Расм — эга расми (30.webp → 400×230, тепадаги бўш осмон кесилган).
+/// «Заводлар» карточкаси (эга 2026-11-28; «Бозорлар» рўйхатида — `kHomeMarketEntries` `factories`): завод = бизнес
+/// харитаси объекти, шунинг учун `business_map` дарвозаси. Расм — эга расми (30.webp → 400×230, тепадаги бўш осмон кесилган).
 const kHomeFactoriesCardImage = 'assets/images/home/card_factories_v1.webp';
 
-bool homeFactoriesCardVisible(bool Function(String moduleId) isVisible) => isVisible('business_map');
-
-/// «Иш ўринлари — Вакансиялар» бўлими (эга 2026-11-28): мавжуд `jobs` модули (`ads` type `work`).
+/// «Вакансиялар» карточкаси (эга 2026-11-28; «Эълон ва хизматлар» ичида): мавжуд `jobs` модули (`ads` type `work`).
 /// Расм — эга расми (33.webp «IŞGA TAKLIF!», ўзгаришсиз).
 const kHomeVacanciesCardImage = 'assets/images/home/card_vacancies_v1.webp';
 

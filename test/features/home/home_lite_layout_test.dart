@@ -41,11 +41,57 @@ HomeLiteCardData _card(String id, {String? image, HomeLiteImageFit fit = HomeLit
 
 void main() {
   group('«Эълон ва хизматлар» — тартиб ва дарвозалар', () {
-    test('ҳаммаси очиқ, ёш 30 — Танишув · Янги эълонлар · Почта · Пул ўтказмалари · Кафе-ресторанлар', () {
+    // Эга тартиби 2026-11-28.
+    test('ҳаммаси очиқ, ёш 30 — Танишув · Янги эълонлар · Кафе · Вакансиялар · Почта · Пул ўтказмалари', () {
       expect(
         homeAdsServicesCardIds(isVisible: _all, viewerBirthDate: _birthDateForAge(30), restaurantsAllowed: true),
-        ['dating', 'ads', 'logistics', 'pay', 'restaurants'],
+        ['dating', 'ads', 'restaurants', 'vacancies', 'logistics', 'pay'],
       );
+    });
+
+    test('тўлиқ тартиб (эга 2026-11-28): … Вакансиялар · Суғурта · Почта · Пул · Туғилган кун · Яқинлар; саватча йўқ', () {
+      expect(
+        homeAdsServicesCardIds(
+          isVisible: _all,
+          viewerBirthDate: _birthDateForAge(30),
+          restaurantsAllowed: true,
+          holidayVisible: true,
+          relativesPromptVisible: true,
+          birthDatePromptVisible: true,
+          insuranceAvailable: true,
+        ),
+        ['dating', 'ads', 'restaurants', 'vacancies', 'car_insurance', 'logistics', 'pay', 'birth_date', 'relatives_bday'],
+      );
+    });
+
+    test('дарвозалар: Вакансиялар — jobs; Яқинлар — саватча ВА таклиф; Суғурта — ҳук бўлса', () {
+      List<String> ids({bool h = false, bool r = false, bool ins = false, bool Function(String)? v}) =>
+          homeAdsServicesCardIds(
+            isVisible: v ?? _all,
+            viewerBirthDate: '',
+            restaurantsAllowed: false,
+            holidayVisible: h,
+            relativesPromptVisible: r,
+            insuranceAvailable: ins,
+          );
+      expect(ids(v: (id) => id != 'jobs').contains('vacancies'), isFalse);
+      expect(ids().contains('vacancies'), isTrue);
+      expect(ids(h: true).contains('relatives_bday'), isFalse);
+      expect(ids(r: true).contains('relatives_bday'), isFalse);
+      expect(ids(h: true, r: true).contains('relatives_bday'), isTrue);
+      expect(ids(h: true, r: true).contains('holiday'), isFalse, reason: 'саватча «Бозорлар»га кўчди');
+      expect(ids().contains('car_insurance'), isFalse);
+      expect(ids(ins: true).contains('car_insurance'), isTrue);
+    });
+
+    testWidgets('суғурта ҳуклари ҳозир: карточка null, дарвоза false (клиент бошқа шохда)', (t) async {
+      expect(await homeInsuranceVisible('998901234567'), isFalse);
+      HomeLiteCardData? got = _card('x');
+      await t.pumpWidget(MaterialApp(home: Builder(builder: (c) {
+        got = homeInsuranceCard(c, phone: '998901234567');
+        return const SizedBox();
+      })));
+      expect(got, isNull);
     });
 
     // Эга 2026-11-27: 18..60 (аввал 18..45).

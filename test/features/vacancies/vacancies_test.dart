@@ -4,6 +4,7 @@ import 'package:ava_gurlan/features/business_map/domain/business.dart';
 import 'package:ava_gurlan/features/business_map/domain/business_category.dart';
 import 'package:ava_gurlan/features/home/widgets/home_ads_section.dart';
 import 'package:ava_gurlan/features/home/widgets/home_lite_cards.dart';
+import 'package:ava_gurlan/features/home/widgets/home_markets_block.dart';
 import 'package:ava_gurlan/features/vacancies/domain/job_vacancy.dart';
 import 'package:ava_gurlan/features/vacancies/screens/vacancies_screen.dart';
 import 'package:ava_gurlan/features/vacancies/screens/vacancy_detail_screen.dart';
@@ -145,9 +146,10 @@ void main() {
   });
 
   group('Bosh sahifa darvozalari', () {
-    test('zavodlar — business_map, vakansiyalar — jobs', () {
-      expect(homeFactoriesCardVisible((id) => id == 'business_map'), isTrue);
-      expect(homeFactoriesCardVisible((id) => id == 'jobs'), isFalse);
+    test('zavodlar — business_map («Bozorlar» ičida, ega 2026-11-28), vakansiyalar — jobs', () {
+      final f = kHomeMarketEntries.firstWhere((e) => e.id == 'factories');
+      expect(f.moduleId, 'business_map');
+      expect(f.imagePath, kHomeFactoriesCardImage);
       expect(homeVacanciesCardVisible((id) => id == 'jobs'), isTrue);
       expect(homeVacanciesCardVisible((_) => false), isFalse);
     });

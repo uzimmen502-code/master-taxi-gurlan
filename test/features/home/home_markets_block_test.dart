@@ -5,6 +5,7 @@ import 'dart:io';
 
 import 'package:ava_gurlan/core/service_config_holder.dart';
 import 'package:ava_gurlan/features/home/home_services_catalog.dart';
+import 'package:ava_gurlan/features/home/widgets/home_lite_cards.dart';
 import 'package:ava_gurlan/features/home/widgets/home_markets_block.dart';
 import 'package:ava_gurlan/features/home/widgets/service_spotlight_item.dart';
 import 'package:ava_gurlan/features/markets/domain/market_taxonomy.dart';
@@ -29,22 +30,22 @@ final _taxonomy = MarketTaxonomy.fromMap({
   },
 });
 
-// Эга тартиби (2026-11-20): Электроника, Мошина, Мол, Гўшт, Деҳқон, Маиший техника, Хизматлар,
-// Уй-жой, Улгуржи, Хитой товарлари, Аралаш.
-const _order = ['supermarket', 'electronics', 'auto', 'livestock', 'meat', 'farm', 'appliances', 'services', 'realty', 'wholesale', 'china', 'aralash'];
+// Эга тартиби (2026-11-28): Супермаркет, [саватча], Электроника, Маиший техника, Деҳқон, Гўшт, Мол, Хизматлар,
+// Мошина, Уй-жой, Улгуржи, Заводлар, Хитой товарлари. «Аралаш бозор» карточкаси йўқ.
+const _order = ['supermarket', 'electronics', 'appliances', 'farm', 'meat', 'livestock', 'services', 'auto', 'realty', 'wholesale', 'factories', 'china'];
 const _allIds = [
   'supermarket',
   'electronics_market',
-  'auto_market',
-  'livestock_market',
-  'meat_market',
-  'farm_market',
   'appliances_market',
+  'farm_market',
+  'meat_market',
+  'livestock_market',
   'jobs',
+  'auto_market',
   'realty',
   'wholesale_market',
+  'business_map',
   'china_market',
-  'cheap_products_home',
 ];
 
 Finder _card(String id) => find.byKey(ValueKey('home_lite_card_market_$id'));
@@ -53,6 +54,7 @@ Future<List<HomeMarketEntry>> _pump(
   WidgetTester t, {
   bool Function(String)? isVisible,
   Future<MarketTaxonomy> Function()? load,
+  HomeLiteCardData? basket,
 }) async {
   final opened = <HomeMarketEntry>[];
   await t.pumpWidget(MaterialApp(
@@ -61,6 +63,7 @@ Future<List<HomeMarketEntry>> _pump(
         child: HomeMarketsBlock(
           onOpen: opened.add,
           isVisible: isVisible,
+          basketCard: basket,
           // «AVA Супермаркет» (эга 2026-11-20): сервер рухсати — тестда доим бор.
           loadSupermarketAccess: () async => true,
           loadTaxonomy: load ?? () async => _taxonomy,
@@ -95,7 +98,7 @@ void main() {
       expect(_card('meat'), findsOneWidget);
       expect(_card('china'), findsOneWidget);
       expect(_card('services'), findsOneWidget);
-      for (final id in ['supermarket', 'livestock', 'auto', 'farm', 'electronics', 'appliances', 'realty', 'wholesale', 'aralash']) {
+      for (final id in ['supermarket', 'livestock', 'auto', 'farm', 'electronics', 'appliances', 'realty', 'wholesale', 'factories']) {
         expect(_card(id), findsNothing, reason: id);
       }
       await _pump(t, isVisible: (_) => false);
@@ -107,13 +110,15 @@ void main() {
         defaults: ServiceModuleConfig({
           for (final id in _allIds) id: ModuleStatus.hidden,
           'auto_market': ModuleStatus.enabled,
-          'cheap_products_home': ModuleStatus.comingSoon,
+          'business_map': ModuleStatus.comingSoon,
+          'cheap_products_home': ModuleStatus.enabled,
         }),
         enforce: true,
       );
       await _pump(t);
       expect(_card('auto'), findsOneWidget);
-      expect(_card('aralash'), findsOneWidget);
+      expect(_card('factories'), findsOneWidget, reason: 'Заводлар — business_map дарвозаси');
+      expect(_card('aralash'), findsNothing, reason: 'эга 2026-11-28: «Аралаш бозор» карточкаси олиб ташланди');
       expect(_card('realty'), findsNothing);
       expect(_card('wholesale'), findsNothing);
       expect(_card('services'), findsNothing, reason: 'Хизматлар бозори — jobs дарвозаси');
@@ -121,12 +126,40 @@ void main() {
 
     testWidgets('босилганда — шу карточка ёзуви чақирувчига', (t) async {
       final opened = await _pump(t, isVisible: (_) => true);
-      for (final id in ['china', 'meat', 'services']) {
+      for (final id in ['china', 'meat', 'services', 'factories']) {
         await t.ensureVisible(_card(id));
         await t.pumpAndSettle();
         await t.tap(_card(id));
       }
-      expect(opened.map((e) => e.id).toList(), ['china', 'meat', 'services']);
+      expect(opened.map((e) => e.id).toList(), ['china', 'meat', 'services', 'factories']);
+      expect(opened.last.moduleId, 'business_map');
+    });
+
+    HomeLiteCardData basket(void Function() onTap) =>
+        HomeLiteCardData(id: 'holiday', title: 'basket', caption: 'hb', icon: Icons.celebration_rounded, onTap: onTap);
+
+    testWidgets('саватча карточкаси (эга 2026-11-28): Супермаркетдан кейин, Электроникадан олдин; босилса — ўз onTap', (t) async {
+      await t.binding.setSurfaceSize(const Size(400, 1800));
+      addTearDown(() => t.binding.setSurfaceSize(null));
+      var taps = 0;
+      await _pump(t, isVisible: (_) => true, basket: basket(() => taps++));
+      final b = find.byKey(const ValueKey('home_lite_card_holiday'));
+      expect(b, findsOneWidget);
+      expect(t.getTopLeft(b).dy, greaterThan(t.getTopLeft(_card('supermarket')).dy));
+      expect(t.getTopLeft(b).dy, lessThan(t.getTopLeft(_card('electronics')).dy));
+      await t.tap(b);
+      expect(taps, 1);
+    });
+
+    testWidgets('саватча: Супермаркет бўлмаса — биринчи; бозорлар йўқ бўлса ҳам блок саватча билан чиқади', (t) async {
+      await _pump(t, isVisible: (id) => id == 'electronics_market', basket: basket(() {}));
+      final b = find.byKey(const ValueKey('home_lite_card_holiday'));
+      expect(t.getTopLeft(b).dy, lessThan(t.getTopLeft(_card('electronics')).dy));
+      await _pump(t, isVisible: (_) => false, basket: basket(() {}));
+      expect(find.byKey(const ValueKey('home_markets_block')), findsOneWidget);
+      expect(b, findsOneWidget);
+      await _pump(t, isVisible: (_) => true);
+      expect(b, findsNothing, reason: 'basketCard null — карточка йўқ');
     });
 
     testWidgets('изоҳ: 11 та карта — lang калити; расм ўрни эни 100, баландлиги ≥ 64 (карточка бўйи)', (t) async {
@@ -209,7 +242,10 @@ void main() {
       final confirm = src.indexOf('const CustomerConfirmBanner()');
       final order = src.indexOf('_ActiveOrderSlot(onOpen:');
       final ticker = src.indexOf('HomeWalletTickerSlot(');
-      final block = src.indexOf('HomeMarketsBlock(onOpen: _openHomeMarket)');
+      final block = src.indexOf('HomeMarketsBlock(onOpen: _openHomeMarket, basketCard: _basketCard())');
+      final adMarkets = src.indexOf('_adCarousel(HomeAdPlacement.markets)');
+      final adServices = src.indexOf('_adCarousel(HomeAdPlacement.services)');
+      final adTransport = src.indexOf('_adCarousel(HomeAdPlacement.transport)');
       final ads = src.indexOf("ValueKey('home_section_ads_services')");
       final transport = src.indexOf("ValueKey('home_section_transport')");
       final adsStrip = src.indexOf("titleKey: 'home_section_ads'");
@@ -220,7 +256,12 @@ void main() {
       final header = src.indexOf('HomeAllServicesHeader(');
       // Эга 2026-11-20 (2-тур): Аралаш тасмаси «Бозорлар»дан кейин; EV / Бизнес / AVAGram бўлимлари аввалгидек қайтди.
       // Эга 2026-11-27: «Барча хизматлар ›» — қидирув тагида, «Бозорлар»дан олдин; пастда йўқ (битта).
-      final all = [top, confirm, order, ticker, search, header, block, aralash, ads, transport, adsStrip, ev, biz, avagram];
+      // Эга 2026-11-28: реклама каруселлари — «Бозорлар»дан кейин (Аралаш тасмасидан олдин), «Эълон ва хизматлар» ва «Транспорт»дан кейин.
+      final all = [top, confirm, order, ticker, search, header, block, adMarkets, aralash, ads, adServices, transport, adTransport, adsStrip, ev, biz, avagram];
+      expect(RegExp(r'_adCarousel\(HomeAdPlacement\.').allMatches(src).length, 3);
+      // Заводлар / Вакансиялар алоҳида бўлимлари олиб ташланди (карточкалар рўйхатларга кўчди).
+      expect(src.contains("ValueKey('home_section_factories')"), isFalse);
+      expect(src.contains("ValueKey('home_section_vacancies')"), isFalse);
       expect(RegExp(r'HomeAllServicesHeader\(').allMatches(src).length, 1);
       expect(all.every((i) => i > 0), isTrue, reason: '$all');
       for (var i = 1; i < all.length; i++) {
@@ -256,7 +297,7 @@ void main() {
       expect(src.contains("await _openGated('realty', const RealtyScreen());"), isTrue);
       expect(src.contains('await _openWholesale(WholesaleProduct.marketWholesale);'), isTrue);
       expect(src.contains('await _openWholesale(WholesaleProduct.marketChina);'), isTrue);
-      expect(src.contains("await _openModule(HomeModulesCatalog.byId('cheap_products_home'));"), isTrue);
+      expect(src.contains("await _openGated('business_map', const FactoriesScreen());"), isTrue);
       // Хизматлар бозори — мавжуд хизматлар рўйхати (jobs, kind=service).
       expect(src.contains("await _openGated('jobs', const JobsScreen(kind: AdKind.service));"), isTrue);
     });

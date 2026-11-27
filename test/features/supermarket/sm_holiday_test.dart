@@ -222,9 +222,15 @@ void main() {
       expect(holidayCardVisible(smOpenable: true, smAllowed: true, occasions: const [off]), isFalse);
     });
 
-    test('қариндошлар картаси: 2 — кўринади, 3 — яширин, байрам ёпиқ — яширин; прогресс фақат бонус фаолда', () {
+    // Эга 2026-11-28: карточка 5 тагача (аввал 3); бонус мақсади 3 ўзгармади.
+    test('қариндошлар картаси: 4 — кўринади, 5 — яширин, байрам ёпиқ — яширин; прогресс фақат бонус фаолда', () {
+      expect(kRelativesPromptHideAt, 5);
+      expect(kRelativesBirthdayGoal, 3);
       expect(relativesPromptVisible(holidayAvailable: true, birthdaysCount: 2), isTrue);
-      expect(relativesPromptVisible(holidayAvailable: true, birthdaysCount: 3), isFalse);
+      expect(relativesPromptVisible(holidayAvailable: true, birthdaysCount: 3), isTrue);
+      expect(relativesPromptVisible(holidayAvailable: true, birthdaysCount: 4), isTrue);
+      expect(relativesPromptVisible(holidayAvailable: true, birthdaysCount: 5), isFalse);
+      expect(relativesPromptVisible(holidayAvailable: true, birthdaysCount: 6), isFalse);
       expect(relativesPromptVisible(holidayAvailable: false, birthdaysCount: 0), isFalse);
       expect(relativesBonusProgress(bonusActive: false, birthdaysCount: 2), isNull);
       final p = relativesBonusProgress(bonusActive: true, birthdaysCount: 2)!;
@@ -240,7 +246,7 @@ void main() {
       expect(relativesBonusFromClaim(null).active, isFalse);
     });
 
-    test('«Эълон ва хизматлар» тартиби: байрам биринчи, қариндошлар — фақат байрам бўлса', () {
+    test('«Эълон ва хизматлар» тартиби (эга 2026-11-28): саватча йўқ («Бозорлар»да), қариндошлар — охирида, фақат байрам бўлса', () {
       List<String> ids({bool h = false, bool r = false}) => homeAdsServicesCardIds(
             isVisible: (id) => id == 'jobs',
             viewerBirthDate: '',
@@ -248,13 +254,33 @@ void main() {
             holidayVisible: h,
             relativesPromptVisible: r,
           );
-      expect(ids(), ['ads']);
-      expect(ids(h: true, r: true), ['holiday', 'relatives_bday', 'ads']);
-      expect(ids(h: true), ['holiday', 'ads']);
-      expect(ids(r: true), ['ads']);
+      expect(ids(), ['ads', 'vacancies']);
+      expect(ids(h: true, r: true), ['ads', 'vacancies', 'relatives_bday']);
+      expect(ids(h: true), ['ads', 'vacancies']);
+      expect(ids(r: true), ['ads', 'vacancies']);
     });
 
-    test('HomeHolidayCards: байрам ёпиқ — ҳеч нарса; ≥3 — бонус сўралмайди; <3 — бонус бир марта сўралади', () async {
+    test('HomeHolidayCards: 3..4 — карточка бор, бонус сўралмайди; 5 — карточка йўқ', () async {
+      var claims = 0;
+      Future<Object?> claim() async {
+        claims++;
+        return {'result': 'skip', 'code': 'NOT_ENOUGH_RELATIVES', 'count': 2};
+      }
+
+      for (final n in [3, 4]) {
+        final s = await HomeHolidayCards(holidayCheck: () async => true, countBirthdays: (_) async => n, claimBonus: claim)
+            .resolve(smOpenable: true, phone: '998901234567');
+        expect([s.showRelativesPrompt, s.bonusActive], [true, false], reason: '$n');
+      }
+      final s5 = await HomeHolidayCards(holidayCheck: () async => true, countBirthdays: (_) async => 5, claimBonus: claim)
+          .resolve(smOpenable: true, phone: '998901234567');
+      expect(s5.showRelativesPrompt, isFalse);
+      expect(claims, 0);
+      expect(HomeHolidayState.none.showRelativesPrompt, isFalse);
+      expect(const HomeHolidayState(holiday: true).showRelativesPrompt, isFalse, reason: 'номаълум сон — карточка йўқ');
+    });
+
+    test('HomeHolidayCards: байрам ёпиқ — ҳеч нарса; ≥5 — карточка йўқ; <3 — бонус бир марта сўралади', () async {
       var claims = 0;
       Future<Object?> claim() async {
         claims++;
@@ -263,7 +289,7 @@ void main() {
 
       final closed = HomeHolidayCards(holidayCheck: () async => false, countBirthdays: (_) async => 0, claimBonus: claim);
       expect(await closed.resolve(smOpenable: true, phone: '998901234567'), HomeHolidayState.none);
-      final full = HomeHolidayCards(holidayCheck: () async => true, countBirthdays: (_) async => 3, claimBonus: claim);
+      final full = HomeHolidayCards(holidayCheck: () async => true, countBirthdays: (_) async => 5, claimBonus: claim);
       final s3 = await full.resolve(smOpenable: true, phone: '998901234567');
       expect([s3.holiday, s3.showRelativesPrompt, claims], [true, false, 0]);
       final two = HomeHolidayCards(holidayCheck: () async => true, countBirthdays: (_) async => 2, claimBonus: claim);

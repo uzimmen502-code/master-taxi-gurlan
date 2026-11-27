@@ -54,7 +54,7 @@ void main() {
     final src = File('lib/features/home/home_screen.dart').readAsStringSync();
     final search = RegExp(r'HomeGlobalSearchBar\(\s*key:').firstMatch(src)!.start;
     final header = src.indexOf('HomeAllServicesHeader(');
-    final block = src.indexOf('HomeMarketsBlock(onOpen: _openHomeMarket)');
+    final block = src.indexOf('HomeMarketsBlock(onOpen: _openHomeMarket');
     expect(search, greaterThan(0));
     expect(header, greaterThan(search));
     expect(block, greaterThan(header));

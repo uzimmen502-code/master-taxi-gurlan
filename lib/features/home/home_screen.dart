@@ -127,6 +127,8 @@ import 'widgets/home_restaurants_section.dart';
 import '../ads/models/ad_model.dart';
 import '../wholesale/screens/wholesale_product_detail_screen.dart';
 import 'widgets/home_lite_cards.dart';
+import 'widgets/home_ad_carousel.dart';
+import '../tv_market/models/tv_clip.dart';
 import '../profile/screens/user_info_screen.dart' show openUserInfoScreen;
 import 'widgets/service_spotlight_item.dart';
 import '../restaurants/domain/restaurants_access.dart';
@@ -267,6 +269,8 @@ class _HomeViewState extends State<_HomeView> {
       unawaited(_refreshShopPresence());
       unawaited(_resolveRestaurantsCard());
       unawaited(_resolveHolidayCards());
+      unawaited(_adFeed.refresh());
+      unawaited(_resolveInsuranceCard());
       // Эга 2026-11-28 (I): турмуш ўртоғи / қариндошлар таклифи — бир марта, дастур фаол бўлса.
       unawaited(maybeShowFamilyPrompt(context));
     });
@@ -334,6 +338,8 @@ class _HomeViewState extends State<_HomeView> {
       _refreshShopPresence(),
       _syncUnread(),
       _resolveRestaurantsCard(),
+      _adFeed.refresh(),
+      _resolveInsuranceCard(refresh: true),
       () async {
         _holidayCards.invalidate();
         await _resolveHolidayCards();
@@ -417,6 +423,7 @@ class _HomeViewState extends State<_HomeView> {
 
   @override
   void dispose() {
+    _adFeed.dispose();
     _walletHideTimer?.cancel();
     _deferredBootstrapTimer?.cancel();
     _promoSub?.cancel();
@@ -1286,6 +1293,25 @@ class _HomeViewState extends State<_HomeView> {
   bool _holidayResolving = false;
   bool _birthdayBasket = false;
 
+  // Реклама каруселлари (эга 2026-11-28): учала карусел учун битта юклагич (1 сўров / очилиш ёки тортиб янгилаш).
+  final _adFeed = HomeAdCarouselFeed();
+
+  /// Пуллик Home тарифидаги AVAGram рекламаси айланади; `tv_market` модули кўринмаса — карусел йўқ
+  /// (реклама ҳам, «Реклама бериш» ҳам AVAGram'га олиб боради).
+  Widget _adCarousel(HomeAdPlacement placement) {
+    if (!HomeModuleGate.showInGrid('tv_market')) return const SizedBox.shrink();
+    return ValueListenableBuilder<List<TvClip>>(
+      valueListenable: _adFeed.ads,
+      builder: (context, ads, _) => HomeAdCarousel(
+        placement: placement,
+        slides: [for (final c in ads) HomeAdSlide.fromClip(c)],
+        // Реклама берувчи нишони — AVAGram'да шу реклама клипидан бошлаб (қидирувдаги клип йўли билан бир хил).
+        onOpen: (i) => _push(TvMarketFeedScreen(initialClip: ads[i])),
+        onAdvertise: () => _push(const TvPublishScreen()),
+      ),
+    );
+  }
+
   Future<void> _resolveHolidayCards() async {
     if (_holidayResolving || !mounted) return;
     _holidayResolving = true;
@@ -1333,9 +1359,43 @@ class _HomeViewState extends State<_HomeView> {
         for (final e in buildHomeServices(context, a: _serviceActions)) e.moduleId: e,
       };
 
+  /// «Туғилган кун саватчаси / Менинг ҳафталик харид саватчам» (эга 2026-11-26; 2026-11-28 дан «Бозорлар»да) —
+  /// дарвоза [HomeHolidayState.holiday]; сарлавҳа/расм туғилган кун режимига қараб.
+  HomeLiteCardData? _basketCard() => !_holidayState.holiday
+      ? null
+      : HomeLiteCardData(
+          id: 'holiday',
+          title: context.tr(smBasketTitleKey(birthday: _birthdayBasket)),
+          caption: context.tr('hb_home_caption'),
+          icon: Icons.celebration_rounded,
+          imagePath: smBasketImage(birthday: _birthdayBasket),
+          fit: HomeLiteImageFit.cover,
+          onTap: () => openHolidayBasket(Navigator.of(context)),
+        );
+
+  // «Суғурта» карточкаси (эга 2026-11-28) — ҳуклар `home_lite_cards.dart` да ([homeInsuranceVisible] / [homeInsuranceCard]).
+  bool _insuranceVisible = false;
+
+  Future<void> _resolveInsuranceCard({bool refresh = false}) async {
+    try {
+      final ok = await homeInsuranceVisible(context.read<HomeController>().phone, refresh: refresh);
+      if (mounted && ok != _insuranceVisible) setState(() => _insuranceVisible = ok);
+    } catch (e) {
+      debugPrint('[Home] INSURANCE_CARD_CHECK_FAILED: $e');
+    }
+  }
+
   List<HomeLiteCardData> _adsServicesCards(UserModel? user) {
     final catalog = _catalogById();
+    final insurance = _insuranceVisible
+        ? homeInsuranceCard(
+            context,
+            phone: context.read<HomeController>().phone,
+            onReturn: () => unawaited(_resolveInsuranceCard(refresh: true)),
+          )
+        : null;
     final ids = homeAdsServicesCardIds(
+      insuranceAvailable: insurance != null,
       isVisible: HomeModuleGate.showInGrid,
       viewerBirthDate: user?.birthDate ?? '',
       restaurantsAllowed: _restaurantsAllowed,
@@ -1363,16 +1423,16 @@ class _HomeViewState extends State<_HomeView> {
               fit: HomeLiteImageFit.contain,
               onTap: () => openUserInfoScreen(context),
             ),
-          // «Байрам саватчаси» (эга 2026-11-26).
-          'holiday' => HomeLiteCardData(
-              id: 'holiday',
-              title: context.tr(smBasketTitleKey(birthday: _birthdayBasket)),
-              caption: context.tr('hb_home_caption'),
-              icon: Icons.celebration_rounded,
-              imagePath: smBasketImage(birthday: _birthdayBasket),
-              fit: HomeLiteImageFit.cover,
-              onTap: () => openHolidayBasket(Navigator.of(context)),
+          // «Вакансиялар» (эга 2026-11-28): аввалги алоҳида бўлим ўрнига шу бўлимда.
+          'vacancies' => HomeLiteCardData(
+              id: 'vacancies',
+              title: context.tr('vac_title'),
+              caption: context.tr('home_lite_vacancies_caption'),
+              imagePath: kHomeVacanciesCardImage,
+              onTap: () => _openGated('jobs', const VacanciesScreen()),
             ),
+          // «Суғурта» — ҳук ([homeInsuranceCard] → merge'дан кейин `carInsuranceHomeCard`); ҳозир `null`, [ids]да йўқ.
+          'car_insurance' => insurance!,
           'relatives_bday' => HomeLiteCardData(
               id: 'relatives_bday',
               title: context.tr('hb_rel_home_title'),
@@ -1550,7 +1610,7 @@ class _HomeViewState extends State<_HomeView> {
 
   /// «Бозорлар» блоки карточкаси (STAGE 12) — мавжуд очиш йўллари, дарвоза текшируви билан:
   /// янги 4 бозор → [openMarket] (ўзи `canOpen`/`onTapBlocked`); Уй-жой → [_openGated];
-  /// Улгуржи/Хитой → [_openWholesale] (ҳар бири ўз дарвозаси); Аралаш → [_openModule].
+  /// Улгуржи/Хитой → [_openWholesale] (ҳар бири ўз дарвозаси); Заводлар → [_openGated] (`business_map`).
   Future<void> _openHomeMarket(HomeMarketEntry entry) async {
     final taxonomyId = entry.taxonomyMarketId;
     if (taxonomyId != null) {
@@ -1567,8 +1627,9 @@ class _HomeViewState extends State<_HomeView> {
         await _openWholesale(WholesaleProduct.marketWholesale);
       case 'china_market':
         await _openWholesale(WholesaleProduct.marketChina);
-      case 'cheap_products_home':
-        await _openModule(HomeModulesCatalog.byId('cheap_products_home'));
+      // «Заводлар» (эга 2026-11-28): аввалги алоҳида бўлимдаги йўл — `business_map` дарвозаси.
+      case 'business_map':
+        await _openGated('business_map', const FactoriesScreen());
       // «AVA Супермаркет» (эга 2026-11-20): модул дарвозаси; сервер рухсати карточкани кўрсатишда.
       case 'supermarket':
         if (!ServiceConfigHolder.isOpenable('supermarket')) {
@@ -1880,7 +1941,10 @@ class _HomeViewState extends State<_HomeView> {
                               onTap: _openAllServices,
                             ),
                             // «Бозорлар» (эга 2026-11-20): 11 карточка эга тартибида, ҳар бири ўз дарвозаси билан.
-                            HomeMarketsBlock(onOpen: _openHomeMarket),
+                            // Эга 2026-11-28: саватча карточкаси Супермаркетдан кейин, «Заводлар» Улгуржидан кейин; «Аралаш бозор» карточкаси йўқ.
+                            HomeMarketsBlock(onOpen: _openHomeMarket, basketCard: _basketCard()),
+                            // Реклама каруселлари (эга 2026-11-28): «Бозорлар» / «Эълон ва хизматлар» / «Транспорт» дан кейин.
+                            _adCarousel(HomeAdPlacement.markets),
                             // Аралаш маҳсулот тасмаси — «Бозорлар»дан кейин (эга 2026-11-20 қайтарилди; аввалгидек).
                             if (HomeModuleGate.showInGrid(
                                 'cheap_products_home')) ...[
@@ -1911,41 +1975,14 @@ class _HomeViewState extends State<_HomeView> {
                               title: context.tr('home_lite_section_ads_services'),
                               cards: _adsServicesCards(user),
                             ),
+                            _adCarousel(HomeAdPlacement.services),
                             // «Транспорт ва логистика» (эга 2026-11-20). Халқаро такси/юк — кейинга.
                             HomeLiteSection(
                               key: const ValueKey('home_section_transport'),
                               title: context.tr('home_lite_section_transport'),
                               cards: _transportCards(),
                             ),
-                            // «Ишлаб чиқарувчи завод/фабрикалар» ва «Иш ўринлари — Вакансиялар» — алоҳида бўлимлар (эга 2026-11-28).
-                            HomeLiteSection(
-                              key: const ValueKey('home_section_factories'),
-                              title: context.tr('home_lite_section_factories'),
-                              cards: [
-                                if (homeFactoriesCardVisible(HomeModuleGate.showInGrid))
-                                  HomeLiteCardData(
-                                    id: 'factories',
-                                    title: context.tr('factory_title'),
-                                    caption: context.tr('home_lite_factories_caption'),
-                                    imagePath: kHomeFactoriesCardImage,
-                                    onTap: () => _openGated('business_map', const FactoriesScreen()),
-                                  ),
-                              ],
-                            ),
-                            HomeLiteSection(
-                              key: const ValueKey('home_section_vacancies'),
-                              title: context.tr('home_lite_section_vacancies'),
-                              cards: [
-                                if (homeVacanciesCardVisible(HomeModuleGate.showInGrid))
-                                  HomeLiteCardData(
-                                    id: 'vacancies',
-                                    title: context.tr('vac_title'),
-                                    caption: context.tr('home_lite_vacancies_caption'),
-                                    imagePath: kHomeVacanciesCardImage,
-                                    onTap: () => _openGated('jobs', const VacanciesScreen()),
-                                  ),
-                              ],
-                            ),
+                            _adCarousel(HomeAdPlacement.transport),
                             // Ресторанлар тасмаси (кафе карточкалари, «Уй таоми» белгиси) — аввалгидек (эга 2026-11-20 «б»), [kHomeShowRestaurantsStrip].
                             if (kHomeShowRestaurantsStrip) ...[
                               const SizedBox(height: AvaSpace.homeSection),

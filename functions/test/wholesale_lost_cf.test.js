@@ -134,7 +134,7 @@ async function seed({ card = false, courierWallet = 250000 } = {}) {
   await db.collection('users').doc(SELLER).set({ bonusBalance: 0 });
   await db.collection('users').doc(K1).set({ bonusBalance: 0, accountId: 'acc_k1' });
   await db.collection('users').doc(ADMIN).set({ bonusBalance: 0, role: 'admin' });
-  await db.collection('wholesale_products').doc('rice').set({ sellerId: SELLER, status: 'active', market: 'wholesale' });
+  await db.collection('wholesale_products').doc('rice').set({ sellerId: SELLER, status: 'active', market: 'wholesale', packs: [{ id: 'p1', label: '1 kg', priceTiers: [{ minQty: 1, price: 15000 }, { minQty: 10, price: 14000 }], unitWeightG: 1000 }] }); // place narxni qayta hisoblaydi (ega 2026-11-20)
   await db.collection('wholesale_stock').doc('rice').set({ productId: 'rice', sellerId: SELLER, packs: { p1: 100 }, version: 1 });
   await db.collection('wholesale_sellers').doc(SELLER).set({ phone: SELLER, companyName: 'Guruch savdo', approvalStatus: 'approved' });
   if (card) {

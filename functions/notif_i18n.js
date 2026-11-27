@@ -326,6 +326,18 @@ const MESSAGES = {
     uz_Latn: { title: 'Kuryer yozgan miqdorni tasdiqlaysizmi?', body: 'Kuryer quyidagini yozdi: {summary}. Jami: {amount} so\'m. To\'g\'ri bo\'lsa, tasdiqlang — shundan keyin hisob-kitob amalga oshadi.' },
     ru: { title: 'Подтверждаете количество, указанное курьером?', body: 'Курьер указал: {summary}. Итого: {amount} сум. Если всё верно, подтвердите — после этого будет произведён расчёт.' },
   },
+
+  // ── Улгуржи: харидор қарзини ҳамёндан тўлади (`payWholesaleBuyerDebt`, эга 2026-11-15, A вариант). Матн PROPOSED.
+  ws_debt_paid_buyer: {
+    uz_Cyrl: { title: 'Қарз тўланди', body: '{product}: {amount} сўм қарз AVA ҳамёнингиздан тўланди. Қарз ёпилди.' },
+    uz_Latn: { title: 'Qarz to\'landi', body: '{product}: {amount} so\'m qarz AVA hamyoningizdan to\'landi. Qarz yopildi.' },
+    ru: { title: 'Долг оплачен', body: '{product}: долг {amount} сум оплачен из вашего кошелька AVA. Долг закрыт.' },
+  },
+  ws_debt_paid_admin: {
+    uz_Cyrl: { title: 'Улгуржи: харидор қарзини тўлади', body: 'Буюртма {orderId}: харидор {amount} сўм қарзни ҳамёндан тўлади.' },
+    uz_Latn: { title: 'Ulgurji: xaridor qarzini to\'ladi', body: 'Buyurtma {orderId}: xaridor {amount} so\'m qarzni hamyondan to\'ladi.' },
+    ru: { title: 'Оптовый рынок: покупатель оплатил долг', body: 'Заказ {orderId}: покупатель оплатил долг {amount} сум из кошелька.' },
+  },
 };
 
 // AVA дўкони (`orders` type platform, «Оформить заказ») — эга 2026-11-07: мижоз ва сотувчига

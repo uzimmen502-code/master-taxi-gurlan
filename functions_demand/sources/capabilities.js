@@ -77,6 +77,8 @@ async function fetchCandidates(db, demand, config) {
       pushOptOut: svc.pushOptOut === true,
       digestOnly: svc.digestOnly === true,
       capabilityStatus: statusOf(d, service),
+      /** Kuryer toifalari tasdig'i (server kaliti) — `adapters/logistics` LEG toifasini tekshiradi. */
+      courierScopeReview: service === 'courier' ? ((d.review || {}).courierScopes || {}) : null,
       /** ROZILIK BOR — odam capability'ni o'zi to'ldirgan, push oladi. */
       consentGiven: true,
       raw: svc,

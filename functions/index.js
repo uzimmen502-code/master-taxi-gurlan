@@ -74,12 +74,17 @@ const { attachRelayEscrow } = require('./relay_escrow');
 attachRelayEscrow(exports, {
   functions, db, admin, callerPhone, canonicalUid, settlementLedger, notifyUserInApp, requireCallerRoles,
 });
+// AVA Logistics NAQD yetkazish haqi (S5, ega 2026-11-14): `onRelayCashShipmentUpdate`,
+// `relayCashReconcile` — YANGI nomlar, relay_escrow'ga tegmaydi (relay_cash.js izohi).
+const { attachRelayCash } = require('./relay_cash');
+const relayCash = attachRelayCash(exports, { functions, db, admin, canonicalUid, settlementLedger });
 // Ulgurji buyurtma zanjiri, 2-bosqich (docs/ulgurji_buyurtma_zanjiri_uz.md): pul ushlash
 // (escrow:wholesale:{id}) + qoldiq −N bitta tranzaksiyada; rad/bekor → qaytarish + qoldiq +N.
 // Kvota va holatlar jadvali — `functions_demand` (api/core wholesale_orders.js).
 const { attachWholesaleOrders } = require('./wholesale_orders');
 attachWholesaleOrders(exports, {
-  functions, db, admin, callerPhone, canonicalUid, settlementLedger, requireCallerRoles,
+  // S57: `relayCash` — naqd raddagi qaytish eskrousini darhol o'tkazish (bir codebase, idempotent).
+  functions, db, admin, callerPhone, canonicalUid, settlementLedger, requireCallerRoles, relayCash,
 });
 // Relay kuryer haqi AVTOMATIK hamyonga (ega, 2026-10-31): EARNED → courierPayout:{s}:{l},
 // xizmat haqi % ushlanadi (settings/courier_service_fee). relay_escrow.js o'zgarmaydi.

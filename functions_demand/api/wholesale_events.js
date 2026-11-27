@@ -9,8 +9,12 @@
  *   2) Holat/to'lov o'tishlari bo'yicha xabarlar (in-app + push, 3 til) — `transitionNotifications`
  *      (sof funksiya, testlanadi). Har xabar idempotent (`wholesale_notify` deterministik ID).
  *
- * Yangi karta buyurtmasi haqida sotuvchiga xabar — onCreate (`notifyNewCardOrder`,
- * `onWholesaleOrderCreated` dan chaqiriladi).
+ *   3) Jo'natma darvozasi ochildi (`WO.shipmentAllowed` false → true): sotuvchi qabul qildi (ega,
+ *      2026-11-13) yoki bank o'tkazmasida «Пул тушди» (2026-11-14) → `ensureWholesaleShipment`.
+ *
+ * Yangi buyurtma haqida sotuvchiga «qabul qiling» xabari — onCreate (`notifySellerDecide`,
+ * `onWholesaleOrderCreated` dan). Karta buyurtmasi xabari (`ws_card_new_order`) — qabuldan keyin;
+ * `notifyNewCardOrder` (eski onCreate yo'li) testlar va moslik uchun saqlanadi.
  *
  * Pul — bu yerda YO'Q (default codebase `onWholesaleOrderStatusChange`).
  */
@@ -20,7 +24,26 @@ const notify = require('../notify/wholesale_notify');
 const { ensureWholesaleReturnShipment } = require('./wholesale_return');
 
 const cpStatus = (o) => ((o || {}).cardPayment || {}).status || null;
+const bpStatus = (o) => ((o || {}).bankPayment || {}).status || null;
 const changedTo = (b, a, v) => (b || {}).status !== v && (a || {}).status === v;
+const AFTER_REFUSAL = [WO.STATUS.REFUSED, WO.STATUS.RETURNING, WO.STATUS.RETURNED];
+const isWalletMethod = (o) => WO.methodOf(o) === WO.PAYMENT_METHOD.WALLET;
+
+/**
+ * Karta buyurtmasi rad etilganda xaridor xabari — SABABGA qarab (ega, 2026-11-01). Admin nizoni rad etgan
+ * (`via: admin_dispute`) yoki sabab kodi yo'q eski yozuv — avvalgi `ws_refused_buyer` («тўлов амалга ошмади»).
+ */
+function refusedBuyerKey(o) {
+  const r = (o || {}).refusal || {};
+  // Eski kuryer APK («Харидор тўламади» tugmasi, sabab kodi yo'q → `deliveryFailed.legacyClient`) — avvalgi ma'no.
+  const legacy = ((o || {}).deliveryFailed || {}).legacyClient === true;
+  if (r.via === 'admin_dispute' || !r.reasonCode || legacy) return 'ws_refused_buyer';
+  return {
+    customer_absent: 'ws_refused_buyer_absent',
+    customer_refused: 'ws_refused_buyer_refused',
+    courier_problem: 'ws_refused_buyer_courier',
+  }[r.reasonCode] || 'ws_refused_buyer_other';
+}
 
 /**
  * Qaysi xabarlar yuborilishi kerak (before → after). Qabul qiluvchi: seller | buyer | admins | courier.
@@ -30,6 +53,58 @@ function transitionNotifications(before, after) {
   const b = before || {};
   const a = after || {};
   const out = [];
+  // Sotuvchi qabuli (ega, 2026-11-13). Karta buyurtmasi haqidagi sotuvchi xabari endi qabuldan keyin
+  // (yaratilganda — `ws_seller_decide`). Bekor qilish sababi `cancelReason` dan.
+  const isBank = WO.methodOf(a) === WO.PAYMENT_METHOD.BANK;
+  const isCard = WO.methodOf(a) === WO.PAYMENT_METHOD.CARD;
+  // S4: o'z yetkazishi — kuryer yo'q, yetkazishni sotuvchi boshlaydi va yakunlaydi (alohida matnlar `ws_self_*`).
+  const isSelf = WO.isSelf(a);
+  if (b.sellerDecision !== WO.SELLER_DECISION.ACCEPTED && a.sellerDecision === WO.SELLER_DECISION.ACCEPTED) {
+    // Bank o'tkazmasi (2026-11-14): qabuldan keyin yetkazish EMAS, tovar puli kutiladi — alohida matnlar.
+    if (isBank) out.push({ to: 'buyer', key: 'ws_bank_await_buyer' }, { to: 'seller', key: 'ws_bank_await_seller' });
+    else if (isSelf) out.push({ to: 'buyer', key: 'ws_self_accepted_buyer' }, { to: 'seller', key: 'ws_self_start_seller' });
+    else out.push({ to: 'buyer', key: 'ws_seller_accepted_buyer' });
+    if (isCard) out.push({ to: 'seller', key: 'ws_card_new_order' });
+  }
+  if (isBank && bpStatus(b) !== WO.BANK_PAYMENT.CONFIRMED && bpStatus(a) === WO.BANK_PAYMENT.CONFIRMED) {
+    out.push({ to: 'buyer', key: 'ws_bank_confirmed_buyer' });
+    if (isSelf) out.push({ to: 'seller', key: 'ws_self_start_seller' });
+  }
+  if (isSelf && changedTo(b, a, WO.STATUS.IN_DELIVERY) && b.status === WO.STATUS.PLACED) {
+    out.push({ to: 'buyer', key: isCard ? 'ws_self_started_buyer_card' : 'ws_self_started_buyer' });
+  }
+  if (isSelf && changedTo(b, a, WO.STATUS.DELIVERED)) {
+    out.push({ to: 'buyer', key: 'ws_self_delivered_buyer' }, { to: 'seller', key: 'ws_self_delivered_seller' });
+  }
+  if (changedTo(b, a, WO.STATUS.CANCELLED)) {
+    if (a.cancelReason === WO.CANCEL_REASON.SELLER_REJECTED) out.push({ to: 'buyer', key: 'ws_seller_rejected_buyer' });
+    if (a.cancelReason === WO.CANCEL_REASON.SELLER_TIMEOUT) {
+      out.push({ to: 'buyer', key: 'ws_seller_timeout_buyer' }, { to: 'seller', key: 'ws_seller_timeout_seller' });
+    }
+    if (a.cancelReason === WO.CANCEL_REASON.BANK_PAYMENT_TIMEOUT) {
+      out.push({ to: 'buyer', key: 'ws_bank_timeout_buyer' }, { to: 'seller', key: 'ws_bank_timeout_seller' });
+    }
+    // Xaridor tovar puli kutilayotganda bekor qildi — sotuvchi hisob-faktura bergan bo'lishi mumkin.
+    if (isBank && a.cancelledBy === WO.ACTOR.BUYER && bpStatus(b) === WO.BANK_PAYMENT.AWAITING) {
+      out.push({ to: 'seller', key: 'ws_bank_buyer_cancelled_seller' });
+    }
+    // S57: relay zanjiri 48 soatda yig'ilmadi (default `onChainExpired`) — xaridor puli qaytadi.
+    if (a.cancelReason === WO.CANCEL_REASON.COURIER_CHAIN_EXPIRED) {
+      out.push({ to: 'buyer', key: 'ws_chain_expired_buyer' }, { to: 'seller', key: 'ws_chain_expired_seller' });
+    }
+  }
+  // S57: naqd yetkazish — jo'natma ochildi (placed → in_delivery): xaridorga kuryerga to'lanadigan summa.
+  if (!isSelf && WO.isCashDelivery(a) && changedTo(b, a, WO.STATUS.IN_DELIVERY) && b.status === WO.STATUS.PLACED) {
+    out.push({ to: 'buyer', key: 'ws_cash_open_buyer' });
+  }
+  // S57: naqd rad — xaridor eshik oldida to'ladi (hamyon usulida tovar summasi ham qaytgani — alohida, pastda).
+  if (!isSelf && WO.isCashDelivery(a) && changedTo(b, a, WO.STATUS.REFUSED) && (a.cashRefusal || {}).paid === true) {
+    out.push({ to: 'buyer', key: 'ws_cash_refusal_paid_buyer' });
+  }
+  if (!isSelf && WO.isCashDelivery(a) && isWalletMethod(a) && b.refundStatus !== WO.REFUND_STATUS.DONE
+    && a.refundStatus === WO.REFUND_STATUS.DONE && AFTER_REFUSAL.includes(a.status) && a.cashRefusalSettlement) {
+    out.push({ to: 'buyer', key: 'ws_cash_refused_goods_refund_buyer' });
+  }
   if (WO.methodOf(a) === WO.PAYMENT_METHOD.CARD) {
     if (cpStatus(b) !== WO.CARD_PAYMENT.RECEIPT_SUBMITTED && cpStatus(a) === WO.CARD_PAYMENT.RECEIPT_SUBMITTED) {
       out.push({ to: 'seller', key: 'ws_card_receipt' });
@@ -38,12 +113,50 @@ function transitionNotifications(before, after) {
       out.push({ to: 'buyer', key: 'ws_card_confirmed' });
     }
   }
+  const isWallet = WO.methodOf(a) === WO.PAYMENT_METHOD.WALLET;
+  // Hamyon + bank: yetkazish/qaytish haqini xaridor (yoki mas'ul kuryer) to'laydi — kuryer xabarlari umumiy.
+  const buyerPaysDelivery = WO.deliveryPaidByBuyer(a);
   if (changedTo(b, a, WO.STATUS.REFUSED)) {
-    out.push({ to: 'buyer', key: 'ws_refused_buyer' }, { to: 'seller', key: 'ws_refused_seller' });
+    // Hamyon: xaridorga xabar pul hisoblangach (summalar bilan, pastda); sotuvchi qaytish haqini to'lamaydi.
+    // Bank (ega, 2026-11-14): tovar puli ilovadan tashqarida — ilova unga aralashmaydi, «pul qaytarish»
+    // matni YO'Q: xaridorga faqat mavjud umumiy holat xabari (sababga qarab), sotuvchiga — qaytish
+    // jo'natmasi xabarlari (`ws_returning_seller` / `ws_returned_seller`, pastda, hamma usulda umumiy).
+    // S4 o'z yetkazishi: radni sotuvchining o'zi belgilagan — faqat xaridorga.
+    if (isSelf) out.push({ to: 'buyer', key: isWallet ? 'ws_self_refused_buyer_wallet' : 'ws_self_refused_buyer' });
+    else if (isWallet) out.push({ to: 'seller', key: 'ws_refused_seller_wallet' });
+    else if (isBank) out.push({ to: 'buyer', key: refusedBuyerKey(a) });
+    // S6 yangi karta: sotuvchi qaytish haqini to'lamaydi, AVA ulushi unga qaytadi.
+    else if (WO.isNewCard(a)) out.push({ to: 'buyer', key: refusedBuyerKey(a) }, { to: 'seller', key: 'ws_refused_seller_newcard' });
+    else out.push({ to: 'buyer', key: refusedBuyerKey(a) }, { to: 'seller', key: 'ws_refused_seller' });
+  }
+  if (isWallet && !isSelf && b.refundStatus !== WO.REFUND_STATUS.DONE && a.refundStatus === WO.REFUND_STATUS.DONE
+    && AFTER_REFUSAL.includes(a.status) && a.walletRefusal) {
+    out.push({ to: 'buyer', key: a.walletRefusal.fault === 'courier' ? 'ws_refused_buyer_wallet_courier' : 'ws_refused_buyer_wallet' });
+  }
+  // S6 yangi karta, xaridor aybi: qaytish haqi hamyondan ushlangani (to'liq ushlangan bo'lsa; yetmasa — `ws_return_debt_buyer`).
+  if (WO.isNewCard(a) && b.refundStatus !== WO.REFUND_STATUS.DONE && a.refundStatus === WO.REFUND_STATUS.DONE
+    && AFTER_REFUSAL.includes(a.status) && (a.walletRefusal || {}).fault === 'buyer'
+    && Number.isInteger(a.walletRefusal.returnFeeCharged) && a.walletRefusal.returnFeeCharged > 0) {
+    out.push({ to: 'buyer', key: 'ws_refused_buyer_card_fee' });
+  }
+  if (buyerPaysDelivery && ((b.returnPayment || {}).status !== 'funded') && (a.returnPayment || {}).status === 'funded'
+    && (a.returnPayment || {}).payer === 'courier' && !a.courierReturnDebt) {
+    out.push({ to: 'refusal_courier', key: 'ws_return_fee_courier' });
+  }
+  // Kuryer hamyoni yetmadi (ega, 2026-11-01): qolgani kuryer qarziga yozildi, AVA vaqtincha to'ladi, qaytish darhol.
+  if (buyerPaysDelivery && !b.courierReturnDebt && a.courierReturnDebt) {
+    out.push({ to: 'refusal_courier', key: 'ws_return_courier_debt' }, { to: 'admins', key: 'ws_return_courier_debt_admin' });
   }
   if (changedTo(b, a, WO.STATUS.PAYMENT_DISPUTE)) out.push({ to: 'admins', key: 'ws_dispute_admin' });
   if (!b.returnDebt && a.returnDebt) {
-    out.push({ to: 'seller', key: 'ws_return_debt_seller' }, { to: 'admins', key: 'ws_return_debt_admin' });
+    // Qarzdor: karta — sotuvchi (avvalgidek); hamyon — xaridor yoki mas'ul kuryer (`returnDebt.payer`).
+    const payer = (a.returnDebt || {}).payer;
+    // S57: naqd rad, xaridor to'lamadi — yetkazish + qaytish haqi qarzi (alohida matn).
+    if (payer === 'buyer' && (a.returnDebt || {}).kind === 'cash_refusal') {
+      out.push({ to: 'buyer', key: 'ws_cash_debt_buyer' }, { to: 'admins', key: 'ws_cash_debt_admin' });
+    } else if (payer === 'buyer') out.push({ to: 'buyer', key: 'ws_return_debt_buyer' }, { to: 'admins', key: 'ws_return_debt_admin_buyer' });
+    else if (payer === 'courier') out.push({ to: 'refusal_courier', key: 'ws_return_debt_courier' }, { to: 'admins', key: 'ws_return_debt_admin_courier' });
+    else out.push({ to: 'seller', key: 'ws_return_debt_seller' }, { to: 'admins', key: 'ws_return_debt_admin' });
   }
   if (!((b.returnShipment || {}).shipmentId) && (a.returnShipment || {}).courierId) {
     out.push({ to: 'courier', key: 'ws_return_courier' });
@@ -55,8 +168,23 @@ function transitionNotifications(before, after) {
     if ((a.payment || {}).status === WO.LOST_PAYMENT.REVIEW) {
       out.push({ to: 'buyer', key: 'ws_lost_buyer_review' }, { to: 'seller', key: 'ws_lost_seller' },
         { to: 'admins', key: 'ws_lost_review_admin' });
+    } else if (WO.isNewCard(a)) {
+      // S6 yangi karta: xaridor tovar uchun to'lamagan, yetkazish haqi mas'ul kuryerdan qaytadi (hamyon qoidasi).
+      const l = a.lost || {};
+      const outstanding = Number.isInteger(l.deliveryFeeOutstanding) ? l.deliveryFeeOutstanding : 0;
+      out.push({ to: 'buyer', key: outstanding > 0 ? 'ws_lost_buyer_card_fee_partial' : 'ws_lost_buyer_card_fee' },
+        { to: 'seller', key: 'ws_lost_seller' });
+      if (outstanding > 0 || l.deliveryFeeAnomaly) out.push({ to: 'admins', key: 'ws_lost_fee_admin' });
     } else if (WO.methodOf(a) === WO.PAYMENT_METHOD.CARD) {
       out.push({ to: 'buyer', key: 'ws_lost_buyer_card' }, { to: 'seller', key: 'ws_lost_seller' });
+    } else if (isBank) {
+      // Bank (ega, 2026-11-14): tovar puli ilovadan tashqarida — xaridorga FAQAT yetkazish haqi haqida
+      // (hamyon qoidasi: mas'ul kuryerdan; to'liq / qisman), tovar puli so'zi yo'q.
+      const l = a.lost || {};
+      const outstanding = Number.isInteger(l.deliveryFeeOutstanding) ? l.deliveryFeeOutstanding : 0;
+      const key = outstanding > 0 ? 'ws_bank_lost_buyer_partial' : 'ws_bank_lost_buyer';
+      out.push({ to: 'buyer', key }, { to: 'seller', key: 'ws_lost_seller' });
+      if (outstanding > 0 || l.deliveryFeeAnomaly) out.push({ to: 'admins', key: 'ws_lost_fee_admin' });
     } else {
       // Hamyon: yetkazish haqi ham qaytadi (ega, 2026-10-31). `lost.deliveryFeeRefunded` yo'q (eski server)
       // yoki haq anomaliyasi — eski matn (faqat tovar puli); qoldiq bo'lsa — qisman matn + adminlarga.
@@ -79,22 +207,55 @@ function transitionNotifications(before, after) {
   return out;
 }
 
+/** Qaror muddati — Toshkent vaqtida «dd.MM HH:mm» (Asia/Tashkent, UTC+5); yo'q — bo'sh. */
+function deadlineText(v) {
+  let ms = null;
+  if (v && typeof v.toMillis === 'function') ms = v.toMillis();
+  else if (v instanceof Date) ms = v.getTime();
+  if (ms == null || !Number.isFinite(ms)) return '';
+  const d = new Date(ms + WO.TASHKENT_OFFSET_MS);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(d.getUTCDate())}.${p(d.getUTCMonth() + 1)} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
+}
+
 function paramsOf(o, orderId) {
   const rs = o.returnShipment || {};
   const debt = o.returnDebt || {};
+  const wr = o.walletRefusal || {};
+  const cd = o.courierReturnDebt || {};
   return {
     orderId,
     product: String(o.productTitle || '').slice(0, 60),
     qty: o.qty,
-    amount: Number.isInteger(o.goodsTotal) && Number.isInteger(o.deliveryFee) ? o.goodsTotal + o.deliveryFee : '',
+    // Karta: eshik oldida sotuvchi kartasiga to'lanadigan summa — S6 yangi karta/o'z yetkazishi: FAQAT tovar;
+    // eski karta, hamyon, bank — tovar + yetkazish (avvalgidek).
+    amount: Number.isInteger(o.goodsTotal) && Number.isInteger(o.deliveryFee)
+      ? (WO.methodOf(o) === WO.PAYMENT_METHOD.CARD && WO.deliveryPaidByBuyer(o) ? o.goodsTotal : o.goodsTotal + o.deliveryFee)
+      : '',
+    // Yangi karta yo'qolishi: xaridorga qaytgan yetkazish haqi (mas'ul kuryerdan).
+    feeRefund: Number.isInteger((o.payment || {}).lostFeeRefund) ? o.payment.lostFeeRefund : '',
     tracking: rs.trackingNumber || '',
     ...(Number.isInteger(debt.amount) ? { amount: debt.amount } : {}),
-    // Yo'qolish: xaridorga qaytgan summa (hamyon — goodsTotal + qaytgan yetkazish haqi); `{refund}`,
-    // `{left}` (haq qoldig'i), `{fee}` (yetkazish haqi) faqat lost xabarlarida.
+    // Yo'qolish: xaridorga qaytgan summa (hamyon — goodsTotal + qaytgan yetkazish haqi); hamyon radda — qaytgan tovar summasi.
+    // {left} (haq qoldig'i), {fee} (yetkazish haqi) faqat lost; {returnFee} faqat hamyon rad xabarlarida.
     refund: Number.isInteger((o.payment || {}).lostRefund)
-      ? o.payment.lostRefund + (Number.isInteger(o.payment.lostFeeRefund) ? o.payment.lostFeeRefund : 0) : '',
+      ? o.payment.lostRefund + (Number.isInteger(o.payment.lostFeeRefund) ? o.payment.lostFeeRefund : 0)
+      : (Number.isInteger(wr.goodsRefunded) ? wr.goodsRefunded : ''),
     left: Number.isInteger((o.lost || {}).deliveryFeeOutstanding) ? o.lost.deliveryFeeOutstanding : '',
     fee: Number.isInteger((o.lost || {}).deliveryFee) ? o.lost.deliveryFee : '',
+    returnFee: Number.isInteger(wr.returnFeeCharged) ? wr.returnFeeCharged : '',
+    // Kuryer qarzi (default `courierReturnDebt`): qaytish narxi jami va qarzga yozilgan qism.
+    returnFeeTotal: Number.isInteger(cd.returnFee) ? cd.returnFee : '',
+    courierDebt: Number.isInteger(cd.amount) ? cd.amount : '',
+    deadline: deadlineText(o.acceptDeadlineAt),
+    // Bank o'tkazmasi: tovar puli muddati (qabul + 5 ish kuni), tovar summasi (hisob-faktura), yetkazish haqi.
+    bankDeadline: deadlineText(o.bankPayDeadlineAt),
+    goods: Number.isInteger(o.goodsTotal) ? o.goodsTotal : '',
+    deliveryFee: Number.isInteger(o.deliveryFee) ? o.deliveryFee : '',
+    // S57 naqd: eshik oldidagi jami (rad — yetkazish + qaytish), qarz, qaytgan tovar summasi.
+    cashTotal: Number.isInteger((o.cashRefusal || {}).total) ? o.cashRefusal.total : '',
+    cashDebt: debt.kind === 'cash_refusal' && Number.isInteger(debt.amount) ? debt.amount : '',
+    goodsRefund: Number.isInteger((o.cashRefusalSettlement || {}).goodsRefunded) ? o.cashRefusalSettlement.goodsRefunded : '',
   };
 }
 
@@ -108,7 +269,9 @@ async function deliver(deps, orderId, o, items) {
       else {
         const uid = it.to === 'seller' ? o.sellerId
           : it.to === 'buyer' ? o.buyerId
-            : (o.returnShipment || {}).courierId;
+            // Hamyon rad, kuryer aybi: «етказилмади» ni bosgan (mas'ul) kuryer — default `refusal.by` dan to'lovchi.
+            : it.to === 'refusal_courier' ? (o.refusal || {}).by
+              : (o.returnShipment || {}).courierId;
         r = await notify.notifyUser(deps, { uid, key: it.key, params, orderId });
       }
       res.push({ ...it, ...r });
@@ -129,8 +292,19 @@ async function onWholesaleOrderUpdated(deps, before, after, orderId) {
   const out = {};
   // Xato belgisi bor bo'lsa trigger QAYTA urinmaydi (belgi yozuvi shu triggerni yana
   // chaqiradi — aylanish bo'lmasin); qayta urinish — `wholesaleShipmentReconcile`.
-  if (a.status === WO.STATUS.REFUSED && !((a.returnShipment || {}).shipmentId) && !a.returnShipmentError) {
+  if (a.status === WO.STATUS.REFUSED && !WO.isSelf(a) && !((a.returnShipment || {}).shipmentId) && !a.returnShipmentError) {
     out.return = await ensureWholesaleReturnShipment(deps, orderId);
+  }
+  // Sotuvchi qabul qildi (ega, 2026-11-13) → relay jo'natmasi (idempotent, kalit `wholesale_ship_{orderId}`).
+  // Faqat `pending → accepted` o'tishida; xato belgisi bo'lsa qayta urinish — reconcile (aylanish yo'q).
+  // Bank o'tkazmasi (2026-11-14): darvoza `awaiting → confirmed` («Пул тушди») da ochiladi — shuning uchun
+  // shart «qabul o'tishi» emas, umumiy «`shipmentAllowed` false → true» (hamyon/karta: qabulda; bank: tasdiqda).
+  const b = before || {};
+  if (!WO.shipmentAllowed(b) && WO.shipmentAllowed(a)
+    && a.status === WO.STATUS.PLACED && !((a.shipment || {}).shipmentId) && !a.shipmentError) {
+    // Kechiktirilgan require: wholesale_orders.js shu fayldan `notifySellerDecide`ni oladi (aylana import).
+    // eslint-disable-next-line global-require
+    out.shipment = await require('./wholesale_orders').ensureWholesaleShipment(deps, orderId);
   }
   const items = transitionNotifications(before, a);
   out.notifications = items.length ? await deliver(deps, orderId, a, items) : [];
@@ -144,4 +318,13 @@ async function notifyNewCardOrder(deps, data, orderId) {
   return deliver(deps, orderId, o, [{ to: 'seller', key: 'ws_card_new_order' }]);
 }
 
-module.exports = { transitionNotifications, onWholesaleOrderUpdated, notifyNewCardOrder };
+/** onCreate (ega, 2026-11-13): sotuvchiga «buyurtmani {deadline} gacha qabul qiling» (`ws_seller_decide`). */
+async function notifySellerDecide(deps, data, orderId) {
+  const o = data || {};
+  if (o.status !== WO.STATUS.PLACED || !o.acceptDeadlineAt) return [];
+  return deliver(deps, orderId, o, [{ to: 'seller', key: 'ws_seller_decide' }]);
+}
+
+module.exports = {
+  transitionNotifications, refusedBuyerKey, onWholesaleOrderUpdated, notifyNewCardOrder, notifySellerDecide, deadlineText,
+};

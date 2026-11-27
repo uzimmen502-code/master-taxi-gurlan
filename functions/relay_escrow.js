@@ -53,6 +53,12 @@
  * AVA o'z cho'ntagidan to'lamaydi va qarzni o'zi undirmaydi: kuryer to'laydi, ADMIN
  * `adminRecordLostParcelPayment` bilan yozadi (Dr admin_cash / Cr passenger_credit:{mijoz}, admin_clearing
  * orqali — `cashExchange` naqshi), qarz va incident AYNI tranzaksiyada kamayadi.
+ *
+ * NAQD yetkazish haqi jo'natmasi yo'qolsa (ega CONFIRMED 2026-11-14; tafsilot PROPOSED) — `settleCashLoss`:
+ * eskrou yo'q, RELEASE/UNEARNED yo'q; xaridor naqd to'lamagan (`deliveryPayment.status == 'pending'`) —
+ * hech narsa to'lamaydi/olmaydi; bitta yozuv `relayCashLost:{id}` (`planCashLoss`): G kuryer hamyonidan
+ * egaga (birinchi), oldingi LEG'lar EARNED'i (accrual) hamyon qoldig'idan, yetmagani AVA (`admin_clearing`)
+ * + kuryer qarzi. G qoldig'i — incident `outstanding` (keyin `adminRecordLostParcelPayment`).
  */
 
 const i18n = require('./notif_i18n');
@@ -68,6 +74,55 @@ const LOSS_PENDING = 'loss_pending';
 const LOSS_SETTLED = 'loss_settled';
 
 const escrowAccount = (shipmentId) => `escrow:${shipmentId}`;
+/** Ulgurji buyurtmasi jo'natmasi (`source` 'wholesale…' yoki `wholesaleOrderId`). */
+const isWholesaleShipment = (s) => !!(s || {}).wholesaleOrderId
+  || (typeof (s || {}).source === 'string' && s.source.startsWith('wholesale'));
+
+/**
+ * NAQD yetkazish haqi jo'natmasi (S5): `deliveryPayment.method == 'cash'` — eskrou YO'Q
+ * (demand `core/logistics.js isCashShipment` bilan bir xil manba).
+ */
+const isCashShipment = (s) => ((s || {}).deliveryPayment || {}).method === 'cash';
+/** AVA vaqtincha qoplaydigan hisob — `relay_cash.js` AVA_COVER_ACCOUNT bilan AYNAN bir xil. */
+const AVA_COVER_ACCOUNT = 'admin_clearing';
+/** Naqd yo'qolish yozuvi kaliti (bitta atomar yozuv: G egaga + oldingi LEG'lar accrual'i). */
+const cashLostKey = (shipmentId) => `relayCashLost:${shipmentId}`;
+
+const isSafeNonNeg = (n) => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0;
+
+/**
+ * NAQD YO'QOLISH — sof hisob (Firestore yo'q; ega CONFIRMED 2026-11-14 qoidasi, tafsilot PROPOSED):
+ *   G (tovar qiymati)       — mas'ul kuryer hamyonidan EGAGA (birinchi navbatda), yetmasa qarz (AVA to'lamaydi,
+ *                             `adminRecordLostParcelPayment` bilan undiriladi — eskrou yo'qolishi bilan bir xil);
+ *   E (oldingi LEG'lar haqi) — allaqachon EARNED (Dr platform_accrual) va kuryerlarga to'langan: accrual'ni
+ *                             mas'ul kuryer hamyonining QOLGANI yopadi, yetmagani — AVA (`admin_clearing`) +
+ *                             kuryer qarzi (relay_cash `gap` naqshi);
+ *   Xaridor naqd to'lamagan — hech narsa to'lamaydi va hech narsa olmaydi; AVA ulushi/yig'uvchi haqi yo'q.
+ * Qaytaradi `{ takeGoods, takeEarlier, gap, goodsOutstanding, debt, legs }`; noto'g'ri kirish → Error(code).
+ */
+function planCashLoss({
+  goods, earlier, balance, courierAccount, ownerAccount,
+}) {
+  if (!isSafeNonNeg(goods) || goods <= 0 || !isSafeNonNeg(earlier)) {
+    throw Object.assign(new Error('cash_loss_amounts_invalid'), { reason: 'cash_loss_amounts_invalid' });
+  }
+  if (!courierAccount || !ownerAccount || courierAccount === ownerAccount) {
+    throw Object.assign(new Error('cash_loss_accounts_invalid'), { reason: 'cash_loss_accounts_invalid' });
+  }
+  const avail = isSafeNonNeg(balance) ? balance : 0;
+  const takeGoods = Math.min(goods, avail);
+  const takeEarlier = Math.min(earlier, avail - takeGoods);
+  const gap = earlier - takeEarlier;
+  const goodsOutstanding = goods - takeGoods;
+  const legs = [];
+  if (takeGoods + takeEarlier > 0) legs.push({ account: courierAccount, dr: takeGoods + takeEarlier });
+  if (gap > 0) legs.push({ account: AVA_COVER_ACCOUNT, dr: gap });
+  if (takeGoods > 0) legs.push({ account: ownerAccount, cr: takeGoods });
+  if (earlier > 0) legs.push({ account: ACCRUAL_ACCOUNT, cr: earlier });
+  return {
+    takeGoods, takeEarlier, gap, goodsOutstanding, debt: goodsOutstanding + gap, legs,
+  };
+}
 
 function attachRelayEscrow(exports, deps) {
   const {
@@ -102,6 +157,12 @@ function attachRelayEscrow(exports, deps) {
     if (!pre0.exists) throw err('not-found', 'Jo\'natma topilmadi');
     const ship0 = pre0.data() || {};
     if (ship0.ownerId !== phone) throw err('permission-denied', 'Bu jo\'natma sizniki emas');
+    // Ulgurji buyurtmasi jo'natmasi (egasi = sotuvchi): yetkazish haqini xaridor kvotada
+    // to'lagan, eskrouni `wholesale_orders.js` (wholesaleShipFund) o'tkazadi. Sotuvchi
+    // o'z hamyonidan to'lab, buyurtma zanjirini buzmasin.
+    if (isWholesaleShipment(ship0)) {
+      throw err('permission-denied', 'Bu jo\'natma to\'langan', { reason: 'wholesale_managed' });
+    }
     const me = await resolveCaller(context);
     const amount = Number((ship0.priceSnapshot || {}).customerPrice);
     if (!Number.isInteger(amount) || amount <= 0) throw err('failed-precondition', 'Narx yo\'q', { reason: 'no_price' });
@@ -133,6 +194,7 @@ function attachRelayEscrow(exports, deps) {
           const d = s.exists ? (s.data() || {}) : null;
           if (!d) throw Object.assign(new Error('shipment_missing'), { reason: 'shipment_missing' });
           if (d.ownerId !== me.phone) throw Object.assign(new Error('not_owner'), { reason: 'not_owner' });
+          if (isWholesaleShipment(d)) throw Object.assign(new Error('wholesale_managed'), { reason: 'wholesale_managed' });
           if (d.status !== 'awaiting_payment' || d.paymentStatus !== 'pending') {
             throw Object.assign(new Error('not_payable'), { reason: 'not_payable', status: d.status, paymentStatus: d.paymentStatus });
           }
@@ -204,6 +266,8 @@ function attachRelayEscrow(exports, deps) {
     const ship = shipSnap.data() || {};
     const internal = internalSnap.exists ? (internalSnap.data() || {}) : {};
     const fromStatus = forLoss ? LOSS_PENDING : 'escrow_funded';
+    // Naqd jo'natmada eskrou YO'Q — bo'sh eskrouni "yechish" (manfiy escrow:{id}) hech qachon yozilmasin.
+    if (isCashShipment(ship) && !ship.escrowEntryId) return { skipped: 'cash_no_escrow' };
     if (!forLoss && ship.paymentStatus === 'settled') return { skipped: 'already_settled' };
     if (!forLoss && ship.paymentStatus === 'escrow_frozen') return { skipped: 'frozen' };
     if (ship.paymentStatus !== fromStatus) return { skipped: `payment_${ship.paymentStatus}` };
@@ -269,7 +333,26 @@ function attachRelayEscrow(exports, deps) {
     if (ship.paymentStatus !== 'refund_pending') return { skipped: `payment_${ship.paymentStatus}` };
     const amount = Number(ship.escrowAmount || (ship.priceSnapshot || {}).customerPrice) || 0;
     if (amount <= 0) return { skipped: 'no_amount' };
-    const usersDocId = await customerWalletId(ship);
+    // Ulgurji buyurtmasi jo'natmasi: eskrou xaridorning `escrow:wholesale:{order}` idan
+    // to'ldirilgan (egasi = sotuvchi EMAS to'lagan) — qaytarish O'SHA eskrouga (keyin
+    // buyurtma bekor oqimi xaridorga qaytaradi). Sotuvchi hamyoniga HECH QACHON tushmaydi:
+    // boshqa ulgurji manba (masalan `wholesale_return`) / buyurtma ID'si yo'q — pul
+    // harakatsiz, anomaliya (admin ko'radi; holat `refund_pending` qoladi).
+    let wholesaleOrderId = '';
+    if (isWholesaleShipment(ship)) {
+      wholesaleOrderId = ship.source === 'wholesale' && typeof ship.wholesaleOrderId === 'string'
+        ? ship.wholesaleOrderId : '';
+      if (!wholesaleOrderId) {
+        console.error(JSON.stringify({
+          action: 'relayRefund', shipmentId, result: 'skipped', errorCode: 'WHOLESALE_REFUND_ANOMALY',
+          source: String(ship.source || '').slice(0, 32),
+        }));
+        return { skipped: 'wholesale_anomaly', anomaly: true };
+      }
+    }
+    const creditAccount = wholesaleOrderId
+      ? `escrow:wholesale:${wholesaleOrderId}`
+      : settlementLedger.passengerCreditAccount(await customerWalletId(ship));
     const when = now();
     const res = await settlementLedger.postEntry(db, {
       idempotencyKey: `relayRefund:${shipmentId}`,
@@ -280,11 +363,11 @@ function attachRelayEscrow(exports, deps) {
       postedRole: 'system',
       legs: [
         { account: escrowAccount(shipmentId), dr: amount },
-        { account: settlementLedger.passengerCreditAccount(usersDocId), cr: amount },
+        { account: creditAccount, cr: amount },
       ],
     }, {
-      mirrorBonus: true,
-      walletLedgerType: 'logistics_refund',
+      mirrorBonus: !wholesaleOrderId,
+      walletLedgerType: wholesaleOrderId ? null : 'logistics_refund',
       meta: { shipmentId, trackingNumber: ship.trackingNumber || '' },
       precheck: async (tx) => {
         const s = await tx.get(shipRef);
@@ -379,6 +462,191 @@ function attachRelayEscrow(exports, deps) {
   }
 
   /**
+   * Naqd yo'qolish yakuni (WRITE fazasi, o'qishsiz): holat `loss_settled`, incident (G qoldig'i —
+   * `outstanding`, `adminRecordLostParcelPayment` shu maydon bilan ishlaydi), qarz (G qoldig'i + AVA
+   * qoplagan oldingi LEG'lar haqi — relay_cash `gap` naqshi, AYNI `debt.logistics`), audit (41-band).
+   */
+  function writeCashLossFinalize(tx, o) {
+    const { plan } = o;
+    const entryId = plan.legs.length > 0 ? o.key : null;
+    const cashLoss = {
+      entryId,
+      goodsValue: o.goods,
+      goodsFromCourier: plan.takeGoods,
+      earlier: o.earlier,
+      earlierFromCourier: plan.takeEarlier,
+      avaCovered: plan.gap,
+      courierDebt: plan.debt,
+      buyerCashPaid: 0,
+      buyerOwes: 0,
+    };
+    tx.update(o.shipRef, {
+      paymentStatus: LOSS_SETTLED, lossSettledAt: o.when, lossRefundEntryId: entryId,
+      'deliveryPayment.lossSettlement': { ...cashLoss, at: o.when },
+      updatedAt: o.when,
+    });
+    tx.update(o.incRef, {
+      status: plan.goodsOutstanding > 0 ? 'settled' : 'repaid',
+      refundedNow: plan.takeGoods, outstanding: plan.goodsOutstanding, unearnedToAva: 0,
+      refundEntryId: entryId, deliveryPaymentMethod: 'cash', cashLoss,
+      settledAt: o.when, updatedAt: o.when,
+    });
+    tx.set(o.incRef.collection('events').doc('settled'), {
+      type: 'settled', refunded: plan.takeGoods, outstanding: plan.goodsOutstanding, unearnedToAva: 0,
+      cash: true, earlier: o.earlier, earlierFromCourier: plan.takeEarlier, avaCovered: plan.gap, at: o.when,
+    });
+    if (plan.debt > 0) {
+      tx.set(db.collection(CAPS).doc(o.accountId), {
+        debt: { logistics: admin.firestore.FieldValue.increment(plan.debt) }, updatedAt: o.when,
+      }, { merge: true });
+    }
+    tx.set(db.collection(LOGISTICS_AUDIT).doc(`cash_loss_${o.shipmentId}`), {
+      kind: 'cash_loss_settle', shipmentId: o.shipmentId, legId: o.legId, ...cashLoss,
+      accountId: o.accountId, by: 'system', at: o.when,
+    });
+  }
+
+  /**
+   * NAQD yetkazish haqi jo'natmasi yo'qoldi (`deliveryPayment.method == 'cash'`, eskrou YO'Q).
+   * Shart: xaridor naqd TO'LAMAGAN (`deliveryPayment.status == 'pending'`) — aks holda pul YO'Q (anomaliya).
+   *   a) tugagan LEG'lar EARNED'i (custody triggeri yiqilgan bo'lsa ham) — eskrou yo'li bilan bir xil;
+   *   b) BITTA atomar yozuv `relayCashLost:{id}` (`planCashLoss`): Dr kuryer hamyoni (G + E dan yetganicha) /
+   *      Dr admin_clearing (E qoldig'i) / Cr ega hamyoni (G dan olingani) / Cr platform_accrual (E);
+   *      AYNI tranzaksiyada holat `loss_settled`, incident, qarz, audit. Hamyon balansi tashqarida o'qiladi va
+   *      tranzaksiyada AYNAN shu bo'lishi shart (o'zgarsa qayta hisob, 3 urinish) — manfiyga tushmaydi.
+   * Idempotent: kalit + `loss_pending` precheck (trigger va reconcile bir vaqtda — bitta yozuv).
+   */
+  async function settleCashLoss(o) {
+    const {
+      shipmentId, ship, inc, goods, legId, courier, accountId, shipRef, incRef, providerPool, started,
+    } = o;
+    const dp = ship.deliveryPayment || {};
+    if (ship.escrowEntryId) {
+      lossFail('relayCashLossSettle', shipmentId, 'LOSS_CASH_HAS_ESCROW', { legId });
+      return { skipped: 'cash_has_escrow', anomaly: true };
+    }
+    if (dp.status !== 'pending') {
+      // Xaridor allaqachon naqd to'lagan / rad etgan — bu qoida qamramaydi (admin hal qiladi), pul YO'Q.
+      lossFail('relayCashLossSettle', shipmentId, 'LOSS_CASH_NOT_PENDING', { legId, cashStatus: String(dp.status || '').slice(0, 32) });
+      return { skipped: 'cash_not_pending', anomaly: true };
+    }
+    try {
+      const evs = await db.collection(CUSTODY).where('shipmentId', '==', shipmentId).get();
+      const earnedByLeg = new Map();
+      for (const ev of evs.docs) {
+        const e = ev.data() || {};
+        if (!e.completesLegId) continue;
+        await postEarned({ ...e, shipmentId });
+        earnedByLeg.set(String(e.completesLegId), Number(e.completedLegPayout) || 0);
+      }
+      const earlier = [...earnedByLeg.values()].reduce((s, v) => s + (v > 0 ? v : 0), 0);
+      if (!Number.isSafeInteger(earlier) || earlier > providerPool) {
+        lossFail('relayCashLossSettle', shipmentId, 'LOSS_CASH_EARNED_EXCEEDS_POOL', { legId, providerPool, earlier });
+        return { skipped: 'earned_exceeds_pool', anomaly: true };
+      }
+
+      const key = cashLostKey(shipmentId);
+      if ((await db.collection(settlementLedger.COL_JOURNAL).doc(key).get()).exists) {
+        // Yozuv va holat AYNI tranzaksiyada — yozuv bor-u holat loss_pending bo'lishi mumkin emas.
+        const cur = (await shipRef.get()).data() || {};
+        if (cur.paymentStatus === LOSS_SETTLED) return { skipped: 'already_settled' };
+        lossFail('relayCashLossSettle', shipmentId, 'LOSS_CASH_JOURNAL_WITHOUT_STATE', { legId });
+        return { skipped: 'journal_without_state', anomaly: true };
+      }
+
+      const courierWalletId = await usersDocIdOf(courier.uid);
+      const pcCourier = settlementLedger.passengerCreditAccount(courierWalletId);
+      const pcOwner = settlementLedger.passengerCreditAccount(await customerWalletId(ship));
+      if (pcCourier === pcOwner) {
+        lossFail('relayCashLossSettle', shipmentId, 'LOSS_SAME_ACCOUNT', { legId });
+        return { skipped: 'same_account' };
+      }
+
+      let result = null;
+      for (let attempt = 0; attempt < 3 && !result; attempt += 1) {
+        const balance = await walletBalance(courierWalletId);
+        const plan = planCashLoss({
+          goods, earlier, balance, courierAccount: pcCourier, ownerAccount: pcOwner,
+        });
+        const when = now();
+        const fin = {
+          shipRef, incRef, accountId, goods, earlier, plan, key, when, shipmentId, legId,
+        };
+        if (plan.legs.length === 0) {
+          // Kuryer hamyoni 0, oldingi LEG yo'q — pul yozuvi yo'q: faqat yakun (G to'liq qarz).
+          const flipped = await db.runTransaction(async (tx) => {
+            const s = await tx.get(shipRef);
+            if (!s.exists || (s.data() || {}).paymentStatus !== LOSS_PENDING) return false;
+            writeCashLossFinalize(tx, fin);
+            return true;
+          });
+          result = { plan, flipped };
+          break;
+        }
+        try {
+          const res = await settlementLedger.postEntry(db, {
+            idempotencyKey: key,
+            kind: 'logistics_cash_lost',
+            refType: 'shipment',
+            refId: shipmentId,
+            postedBy: 'system',
+            postedRole: 'system',
+            legs: plan.legs,
+          }, {
+            mirrorBonus: true,
+            walletLedgerType: 'logistics_lost_refund',
+            meta: {
+              shipmentId, legId, courierAccountId: accountId, goodsValue: goods, earlier, cash: true,
+              takeGoods: plan.takeGoods, takeEarlier: plan.takeEarlier, avaCovered: plan.gap, courierDebt: plan.debt,
+            },
+            precheck: lossPrecheck(shipRef, incRef),
+            assert: ({ accounts }) => {
+              const w = accounts.get(pcCourier);
+              const took = plan.takeGoods + plan.takeEarlier;
+              if (took > 0 && (!w || w.prev !== balance)) throw notReason('balance_changed');
+              if (w && w.next < 0) throw notReason('balance_changed');
+            },
+            onCommit: (tx) => writeCashLossFinalize(tx, fin),
+          });
+          result = { plan, flipped: !res.idempotent };
+        } catch (e) {
+          if (!(e && e.reason === 'balance_changed')) throw e;
+        }
+      }
+      if (!result) {
+        lossFail('relayCashLossSettle', shipmentId, 'LOSS_CASH_BALANCE_RACE', { legId });
+        return { skipped: 'balance_race' };
+      }
+
+      const { plan, flipped } = result;
+      console.log(JSON.stringify({
+        action: 'relayCashLossSettle', result: flipped ? 'ok' : 'already', shipmentId, legId, accountId,
+        goodsValue: goods, takeGoods: plan.takeGoods, goodsOutstanding: plan.goodsOutstanding, earlier,
+        takeEarlier: plan.takeEarlier, avaCovered: plan.gap, courierDebt: plan.debt, durationMs: Date.now() - started,
+      }));
+      if (flipped) {
+        const tracking = inc.trackingNumber || ship.trackingNumber || '';
+        const owner = canonicalUid((inc.customer || {}).uid || ship.ownerId);
+        const taken = plan.takeGoods;
+        if (owner) {
+          const k = taken >= goods ? 'lost_customer_full' : (taken > 0 ? 'lost_customer_partial' : 'lost_customer_none');
+          await notifyLoss(owner, k, { tracking, amount: fmt(taken > 0 ? taken : goods), left: fmt(plan.goodsOutstanding) }, 'info');
+        }
+        await notifyLoss(canonicalUid(courier.uid), 'lost_courier', {
+          tracking, taken: fmt(plan.takeGoods + plan.takeEarlier), left: fmt(plan.debt),
+        }, 'warning');
+      }
+      return {
+        settled: true, cash: true, flipped, taken: plan.takeGoods, outstanding: plan.goodsOutstanding,
+        earlier, takeEarlier: plan.takeEarlier, avaCovered: plan.gap, courierDebt: plan.debt, goodsValue: goods,
+      };
+    } catch (e) {
+      if (e && e.reason === 'not_pending') return { skipped: 'not_pending' };
+      throw e;
+    }
+  }
+
+  /**
    * `loss_pending` -> pulni hisoblash -> `loss_settled`. Har qadam idempotent (journal kaliti +
    * holat tekshiruvi); trigger va reconcile bir vaqtda ishlasa ham pul ikkilanmaydi.
    */
@@ -407,6 +675,13 @@ function attachRelayEscrow(exports, deps) {
       return { skipped: 'incident_invalid' };
     }
     const providerPool = Number((internalSnap.exists ? internalSnap.data() : {}).providerPool) || 0;
+
+    // NAQD yetkazish haqi (S5): eskrou yo'q — alohida yo'l (G egaga + oldingi LEG'lar accrual'i).
+    if (isCashShipment(ship)) {
+      return settleCashLoss({
+        shipmentId, ship, inc, goods, legId, courier, accountId, shipRef, incRef, providerPool, started,
+      });
+    }
 
     try {
       // a) Oldingi (tugagan) LEG'lar ijrochilariga haq SAQLANADI: custody triggeri yiqilgan bo'lsa
@@ -891,4 +1166,5 @@ function attachRelayEscrow(exports, deps) {
 
 module.exports = {
   SHIPMENTS, CUSTODY, INCIDENTS, PLATFORM_FEE_ACCOUNT, ACCRUAL_ACCOUNT, escrowAccount, attachRelayEscrow,
+  AVA_COVER_ACCOUNT, cashLostKey, isCashShipment, planCashLoss,
 };

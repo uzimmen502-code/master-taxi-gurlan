@@ -8,14 +8,22 @@
  *                              tarifi bo'yicha yetkazish; `wholesale_quotes/{id}`
  *                              ga MUHRLANADI (15 daqiqa). Pul ushlash — default
  *                              codebase `placeWholesaleOrder` (ledger o'sha yerda).
- *   cancelWholesaleOrder       xaridor:  placed → cancelled. Sotuvchi qabul/rad
- *                              QILMAYDI (ega, 2026-10-31) — zanjir avtomatik.
+ *   cancelWholesaleOrder       xaridor:  placed → cancelled.
  *                              FAQAT holatni + `refundStatus: 'pending'`
  *                              yozadi; pulni qaytarish va qoldiqni tiklash —
  *                              default trigger `onWholesaleOrderStatusChange`.
+ *   acceptWholesaleOrder       sotuvchi (ega, 2026-11-13): qabul — 2 ish kuni ichida;
+ *                              shundan keyingina relay jo'natmasi ochiladi.
+ *   rejectWholesaleOrder       sotuvchi: rad (sabab 3..300) — placed → cancelled,
+ *                              pul/qoldiq xaridor bekor qilgandagi bilan BITTA yo'l.
+ *   runWholesaleSellerDecisionSweep  (har 15 daqiqa) muddat o'tdi → placed → cancelled (system).
  *   setWholesaleOrderSettings  admin: AVA ulushi (bps) — versiya + audit.
- *   onWholesaleOrderCreated    (3-bosqich, trigger) relay jo'natmasi avtomatik
+ *   onWholesaleOrderCreated    (trigger) qaror belgisi `pending` + muddat; ESKI (belgisiz)
+ *                              buyurtmalarda — avvalgidek avtomatik jo'natma
  *   reconcileWholesaleShipments (3-bosqich, har 10 daqiqa) yiqilgan yaratishni qayta urinadi
+ *   Bank o'tkazmasi (`bank_transfer`, ega 2026-11-13/14): kvota muhri (bankHold = yetkazish haqi),
+ *                              qabulda `bankPayment: awaiting` + `bankPayDeadlineAt` (5 ish kuni);
+ *                              «Пул тушди» va muddat sweeper'i — `api/wholesale_bank.js`.
  *
  * NEGA SOZLAMA SHU CODEBASE'DA: ulush birinchi bo'lib KVOTADA (shu yerda)
  * muhrlanadi; admin tekshiruvi (`assertStrictAdmin`) va audit naqshi
@@ -34,13 +42,16 @@ const WO = require('../core/wholesale_orders');
 const { packIdsOf, STOCK, MAX_QTY, DEFAULT_PACK } = require('./wholesale_stock');
 const { marketOf } = require('./wholesale_admin');
 const {
-  quoteParcelForPoints, createShipmentInternal, prepareCancelUnpaidShipmentInTx,
+  quoteParcelForPoints, createShipmentInternal, prepareCancelUnpaidShipmentInTx, validatePoint,
+  openCashShipment, closeShipmentMatches,
 } = require('./logistics');
 const { assertStrictAdmin } = require('../analytics/access');
 // 3b: «yetkazilganda karta orqali» (ega, 2026-10-31).
 const { cardAvailability } = require('./wholesale_card');
 const { ensureWholesaleReturnShipment, RETURN_MAX_ATTEMPTS } = require('./wholesale_return');
-const { notifyNewCardOrder } = require('./wholesale_events');
+const { notifySellerDecide } = require('./wholesale_events');
+// S4: o'z yetkazishi kodi (relay hosilasi, `wsself:{orderId}`).
+const { selfDeliveryCodeFor, SECRET_DOC: SELF_SECRET_DOC } = require('./wholesale_self');
 
 const PRODUCTS = 'wholesale_products';
 const SELLERS = 'wholesale_sellers';
@@ -123,11 +134,22 @@ function validDims(raw) {
  * `unitDims` (ilova `WholesaleProduct.effectivePacks` bilan bir xil).
  * @returns {null|{id,label,tiers,moq,unitWeightG,unitDims}}
  */
+/**
+ * Minimal buyurtma (ega, 2026-11-13): sotuvchi yozgan son (`minOrderQty`, ixtiyoriy,
+ * butun 1..MAX_QTY) va eng past narx pog'onasi — qaysi biri KATTA. Noto'g'ri yoki
+ * yo'q qiymat — faqat pog'ona (oldingi xulq). Paritet: lib/.../wholesale_pack.dart `effectiveMoq`.
+ */
+function effectiveMoq(tiers, minOrderQty) {
+  const tierMin = tiers.length ? tiers[0].minQty : 1;
+  const own = isPosInt(minOrderQty) && minOrderQty <= MAX_QTY ? minOrderQty : 0;
+  return Math.max(tierMin, own);
+}
+
 function resolvePack(product, packId) {
   const p = product || {};
   if (!packIdsOf(p).includes(packId)) return null;
   const src = packId === DEFAULT_PACK
-    ? { label: '', priceTiers: p.priceTiers, unitWeightG: p.unitWeightG, unitDims: p.unitDims }
+    ? { label: '', priceTiers: p.priceTiers, unitWeightG: p.unitWeightG, unitDims: p.unitDims, minOrderQty: p.minOrderQty }
     : (p.packs || []).find((x) => x && typeof x.id === 'string' && x.id.trim() === packId);
   if (!src) return null;
   const tiers = cleanTiers(src.priceTiers);
@@ -136,7 +158,7 @@ function resolvePack(product, packId) {
     id: packId,
     label: String(src.label || '').trim().slice(0, 40),
     tiers,
-    moq: tiers.length ? tiers[0].minQty : 1,
+    moq: effectiveMoq(tiers, src.minOrderQty),
     unitWeightG: isPosInt(w) ? w : null,
     unitDims: validDims(src.unitDims),
   };
@@ -170,11 +192,37 @@ function parseQuoteRequest(data) {
   if (!WO.PAYMENT_METHODS.includes(pm)) {
     throw fail('invalid-argument', 'To\'lov usuli noto\'g\'ri', 'payment_method_invalid', { allowed: [...WO.PAYMENT_METHODS] });
   }
+  // Bank o'tkazmasi (ega, 2026-11-14): yetkazish haqini xaridor qanday to'laydi — hozir FAQAT `wallet`
+  // (yo'q/bo'sh = wallet). Naqd kuryerga — keyingi bosqich, hozircha aniq kod bilan rad. Boshqa usullarda
+  // maydon ma'nosiz — berilsa rad (jimgina e'tiborsiz qoldirilmaydi).
+  // S4: yetkazish usuli — yo'q/bo'sh = `ava_courier` (eski ilova), aks holda faqat ma'lum qiymat.
+  const dm = d.deliveryMethod === undefined || d.deliveryMethod === null || d.deliveryMethod === ''
+    ? WO.DELIVERY_METHOD.AVA_COURIER : d.deliveryMethod;
+  if (!WO.DELIVERY_METHODS.includes(dm)) {
+    throw fail('invalid-argument', 'Yetkazish usuli noto\'g\'ri', 'delivery_method_invalid', { allowed: [...WO.DELIVERY_METHODS] });
+  }
+  const rawDpm = d.deliveryPaymentMethod;
+  const dpmEmpty = rawDpm === undefined || rawDpm === null || rawDpm === '';
+  let deliveryPaymentMethod = null;
+  // S57 (ega 2026-11-14, S5): AVA kuryeri bilan HAMMA to'lov usulida (hamyon/karta/bank) yetkazish haqi —
+  // `wallet` (yo'q/bo'sh, eski ilova) yoki `cash` (kuryerga naqd). O'z yetkazishida haq yo'q — maydon rad.
+  if (dm === WO.DELIVERY_METHOD.AVA_COURIER) {
+    deliveryPaymentMethod = dpmEmpty ? WO.DELIVERY_PAYMENT_METHOD.WALLET : rawDpm;
+    if (!WO.DELIVERY_PAYMENT_METHODS.includes(deliveryPaymentMethod)) {
+      throw fail('invalid-argument', 'Yetkazish haqini to\'lash usuli noto\'g\'ri', 'delivery_payment_method_unsupported', {
+        allowed: [...WO.DELIVERY_PAYMENT_METHODS],
+      });
+    }
+  } else if (!dpmEmpty) {
+    throw fail('invalid-argument', 'Bu to\'lov usulida yetkazish to\'lovi alohida tanlanmaydi', 'delivery_payment_method_not_applicable');
+  }
   return {
     productId,
     packId,
     qty,
     paymentMethod: pm,
+    deliveryPaymentMethod,
+    deliveryMethod: dm,
     destination: {
       regionId: dest.regionId, districtId: dest.districtId, lat: dest.lat, lng: dest.lng, addressText,
     },
@@ -220,7 +268,35 @@ async function requireOrdersGate(db, uid) {
   if (!L.isStageAllowed(cfg, uid)) {
     throw fail('unavailable', 'Ulgurji buyurtma hali ishga tushmagan', 'module_internal_only');
   }
-  return { stage: L.stageOf(cfg) };
+  // S57: naqd yetkazish — feature flag (42-band, PROPOSED standart O'CHIQ): faqat aniq `true`.
+  return { stage: L.stageOf(cfg), cashDeliveryEnabled: d.cashDeliveryEnabled === true };
+}
+
+/**
+ * S57 (PROPOSED, ega tasdiqlaydi): xaridorning ochiq Ulgurji qarzi bormi — `returnDebt.payer == 'buyer'`
+ * (hamyon radidagi qaytish haqi qoldig'i yoki naqd raddagi to'lanmagan yetkazish+qaytish haqi). Ikki
+ * tenglik filtri (kompozit indeks shart emas). O'qib bo'lmasa — XAVFSIZ tomon: naqd yopiq (`true`).
+ */
+async function buyerHasOpenDebt(db, buyerId) {
+  try {
+    const q = await db.collection(ORDERS).where('buyerId', '==', buyerId)
+      .where('returnDebt.payer', '==', 'buyer').limit(1).get();
+    return !q.empty;
+  } catch (e) {
+    console.error(JSON.stringify({ module: 'wholesale_orders', action: 'buyerDebtCheck', result: 'failed', errorCode: 'BUYER_DEBT_READ_FAILED' }));
+    return true;
+  }
+}
+
+/**
+ * S57: shu kvotada naqd yetkazish mumkinmi (sof qism + qarz tekshiruvi chaqiruvchida).
+ * @returns {{available: boolean, reason: null|string}}
+ */
+function cashAvailability({ self, enabled, hasDebt }) {
+  if (self) return { available: false, reason: WO.CASH_UNAVAILABLE.SELF_DELIVERY };
+  if (!enabled) return { available: false, reason: WO.CASH_UNAVAILABLE.DISABLED };
+  if (hasDebt) return { available: false, reason: WO.CASH_UNAVAILABLE.BUYER_DEBT };
+  return { available: true, reason: null };
 }
 
 function sellerOrigin(seller) {
@@ -236,6 +312,65 @@ function sellerOrigin(seller) {
   };
 }
 
+/**
+ * Bank o'tkazmasi shu kvota uchun ochiqmi (sof). Ega (2026-11-14): sotuvchi TASDIQLANGAN bo'lsa
+ * (`wholesale_sellers.approvalStatus == 'approved'`, karta usulidagi bilan bir xil manba) — qo'shimcha
+ * shart yo'q (PROPOSED). Yetkazish haqi musbat bo'lishi shart: u xaridor hamyonidan ushlanadi va
+ * relay eskrouga o'tadi (0 so'mli ushlanma/jo'natma yo'q — default `shipFund` ham musbat talab qiladi).
+ * @returns {{available: boolean, reason: null|'seller_not_approved'|'delivery_fee_invalid'}}
+ */
+function bankAvailability(sellerDoc, deliveryFee, { self = false } = {}) {
+  if (!sellerDoc || sellerDoc.approvalStatus !== 'approved') return { available: false, reason: 'seller_not_approved' };
+  // S4 o'z yetkazishi: yetkazish haqi 0 (narx tovar ichida) — hamyondan hech narsa ushlanmaydi.
+  if (!self && !isPosInt(deliveryFee)) return { available: false, reason: 'delivery_fee_invalid' };
+  return { available: true, reason: null };
+}
+
+/**
+ * S4: sotuvchining o'z yetkazishi shu manzilga ochiqmi (sof). Sozlama `wholesale_sellers.selfDelivery`
+ * `{enabled: bool, coverage: district|region|nation, dropoff: district_center|buyer_address}` (sotuvchi yozadi,
+ * Rules shaklni tekshiradi; bu yerda ham qayta tekshiriladi — buzuq sozlama = yopiq).
+ *   district — manzil tumani = sotuvchi tumani (ikkalasi bo'sh emas, viloyat ham bir xil);
+ *   region   — manzil viloyati = sotuvchi viloyati;  nation — istalgan.
+ * `origin`/`destination` — `validatePoint` dan o'tgan (geo ma'lumotnomasida bor) nuqtalar.
+ * @returns {{available: boolean, reason: null|'self_disabled'|'self_settings_invalid'|'out_of_coverage', coverage?, dropoff?}}
+ */
+function selfAvailability(sellerDoc, origin, destination) {
+  const sd = sellerDoc && sellerDoc.selfDelivery && typeof sellerDoc.selfDelivery === 'object' ? sellerDoc.selfDelivery : null;
+  if (!sd || sd.enabled !== true) return { available: false, reason: 'self_disabled' };
+  if (!WO.SELF_COVERAGES.includes(sd.coverage) || !WO.SELF_DROPOFFS.includes(sd.dropoff)) {
+    return { available: false, reason: 'self_settings_invalid' };
+  }
+  const o = origin || {};
+  const t = destination || {};
+  let inside = true;
+  if (sd.coverage === 'region') inside = !!o.regionId && o.regionId === t.regionId;
+  if (sd.coverage === 'district') {
+    inside = !!o.regionId && o.regionId === t.regionId && !!o.districtId && o.districtId === t.districtId;
+  }
+  if (!inside) return { available: false, reason: 'out_of_coverage', coverage: sd.coverage, dropoff: sd.dropoff };
+  return {
+    available: true, reason: null, coverage: sd.coverage, dropoff: sd.dropoff,
+  };
+}
+
+/**
+ * Xaridor qachon qancha to'laydi (sof, ilova ko'rsatadi). S6: yetkazish haqi HAMMA usulda xaridordan.
+ *   wallet — hozir hamyondan: tovar + yetkazish;
+ *   card   — hozir hamyondan: yetkazish haqi; eshik oldida sotuvchi kartasiga: FAQAT tovar summasi;
+ *   bank   — hozir hamyondan: yetkazish haqi; bank orqali (hisob-faktura): tovar summasi.
+ * O'z yetkazishida yetkazish haqi 0.
+ */
+function payPlanOf(paymentMethod, goodsTotal, deliveryFee, deliveryPaymentMethod) {
+  // S57: naqd — yetkazish haqi hamyondan EMAS, eshik oldida kuryerga (`cashToCourier`).
+  const cash = deliveryPaymentMethod === WO.DELIVERY_PAYMENT_METHOD.CASH;
+  const fee = cash ? 0 : deliveryFee;
+  const extra = cash ? { cashToCourier: deliveryFee } : {};
+  if (paymentMethod === WO.PAYMENT_METHOD.CARD) return { walletNow: fee, atDoorToSellerCard: goodsTotal, bankTransfer: 0, ...extra };
+  if (paymentMethod === WO.PAYMENT_METHOD.BANK) return { walletNow: fee, atDoorToSellerCard: 0, bankTransfer: goodsTotal, ...extra };
+  return { walletNow: goodsTotal + fee, atDoorToSellerCard: 0, bankTransfer: 0, ...extra };
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // KVOTA
 // ═══════════════════════════════════════════════════════════════════════
@@ -249,7 +384,7 @@ function makeQuoteWholesaleOrder(deps) {
     if (!buyerId) throw fail('unauthenticated', 'Telefon bilan kirish talab qilinadi');
     const req = parseQuoteRequest(data);
     try {
-      await requireOrdersGate(db, buyerId);
+      const gate = await requireOrdersGate(db, buyerId);
       const now = nowFn ? nowFn() : new Date();
 
       const pSnap = await db.collection(PRODUCTS).doc(req.productId).get();
@@ -293,14 +428,17 @@ function makeQuoteWholesaleOrder(deps) {
         throw fail('invalid-argument', 'Buyurtma summasi juda katta', 'amount_too_large', { max: MAX_GOODS_TOTAL });
       }
 
-      if (!pack.unitWeightG) {
+      const isSelfReq = req.deliveryMethod === WO.DELIVERY_METHOD.SELF;
+      // Kuryer (relay) uchun vazn SHART; o'z yetkazishida — kerak emas (narx tovar ichida).
+      if (!isSelfReq && !pack.unitWeightG) {
         throw fail('failed-precondition', 'Sotuvchi qadoq vaznini kiritmagan', 'no_shipping_data');
       }
-      const weightG = pack.unitWeightG * req.qty;
-      if (!Number.isSafeInteger(weightG)) throw fail('invalid-argument', 'Vazn juda katta', 'over_weight');
+      const weightG = pack.unitWeightG ? pack.unitWeightG * req.qty : null;
+      if (weightG !== null && !Number.isSafeInteger(weightG)) throw fail('invalid-argument', 'Vazn juda katta', 'over_weight');
 
       const sSnap = await db.collection(SELLERS).doc(sellerId).get();
-      const originRaw = sSnap.exists ? sellerOrigin(sSnap.data()) : null;
+      const sellerDoc = sSnap.exists ? (sSnap.data() || {}) : null;
+      const originRaw = sellerDoc ? sellerOrigin(sellerDoc) : null;
       if (!originRaw) throw fail('failed-precondition', 'Sotuvchi jo\'natish manzilini kiritmagan', 'seller_location_missing');
 
       const fee = await readFeeSettings(db);
@@ -308,13 +446,30 @@ function makeQuoteWholesaleOrder(deps) {
       // PROPOSED (hujjat §2): o'lcham faqat 1 dona bo'lsa ma'lum — ko'p donada
       // umumiy quti o'lchami noma'lum, pullik vazn = haqiqiy vazn.
       const dims = req.qty === 1 ? pack.unitDims : null;
-      const parcel = {
-        actualWeightG: weightG,
-        ...(dims ? { lengthCm: dims.l, widthCm: dims.w, heightCm: dims.h } : {}),
-        declaredValue: goodsTotal,
-      };
-      const rq = await quoteParcelForPoints(db, originRaw, req.destination, parcel, { dimsOptional: true });
-      const deliveryFee = rq.quote.customerPrice;
+      let rq = null;
+      let origin;
+      let destination;
+      if (isSelfReq) {
+        // O'z yetkazishi: relay tarifi chaqirilmaydi; nuqtalar geo ma'lumotnomasi bo'yicha tekshiriladi (o'qish).
+        origin = await validatePoint(db, originRaw, 'origin');
+        destination = await validatePoint(db, req.destination, 'destination');
+      } else {
+        const parcel = {
+          actualWeightG: weightG,
+          ...(dims ? { lengthCm: dims.l, widthCm: dims.w, heightCm: dims.h } : {}),
+          declaredValue: goodsTotal,
+        };
+        rq = await quoteParcelForPoints(db, originRaw, req.destination, parcel, { dimsOptional: true });
+        origin = rq.origin;
+        destination = rq.destination;
+      }
+      const self = selfAvailability(sellerDoc, origin, destination);
+      if (isSelfReq && !self.available) {
+        throw fail('failed-precondition', 'Sotuvchi bu manzilga o\'zi yetkazmaydi', 'self_delivery_unavailable', {
+          selfUnavailableReason: self.reason,
+        });
+      }
+      const deliveryFee = isSelfReq ? 0 : rq.quote.customerPrice;
       if (!isInt(deliveryFee) || deliveryFee < 0) {
         throw fail('failed-precondition', 'Yetkazish narxi hisoblanmadi', 'delivery_price_invalid');
       }
@@ -323,15 +478,40 @@ function makeQuoteWholesaleOrder(deps) {
       const avaFee = avaFeeOf(goodsTotal, fee.avaFeeBps);
       const expiresAt = new Date(now.getTime() + QUOTE_TTL_MS);
 
-      // 3b: «yetkazilganda karta orqali» — sotuvchi hamyonidan ushlanadigan summa
-      // (kuryer haqi + AVA ulushi). Mavjudligi har kvotada hisoblanadi (ilova tanlov ko'rsatadi).
-      const cardHold = deliveryFee + avaFee;
-      const card = await cardAvailability(db, { sellerId, buyerId, sellerHold: cardHold });
+      // S6 (ega, 2026-11-13): karta — yetkazish haqi XARIDOR hamyonidan; sotuvchi hamyonidan FAQAT AVA ulushi
+      // (avtomatik yig'iladi). O'z yetkazishi karta — sotuvchidan ham hech narsa ushlanmaydi (AVA ulushi hisobotda).
+      const sellerFeeHold = isSelfReq ? 0 : avaFee;
+      const card = await cardAvailability(db, { sellerId, buyerId, sellerHold: sellerFeeHold });
       if (req.paymentMethod === WO.PAYMENT_METHOD.CARD && !card.available) {
         throw fail('failed-precondition', 'Bu buyurtmani karta orqali to\'lab bo\'lmaydi', 'card_unavailable', {
           cardUnavailableReason: card.reason,
         });
       }
+      // Bank o'tkazmasi (ega, 2026-11-14): xaridor hamyonidan FAQAT yetkazish haqi ushlanadi
+      // (`bankHold`, default `placeWholesaleOrder` tranzaksiyada balansni tekshiradi). O'z yetkazishida — 0.
+      const bank = bankAvailability(sellerDoc, deliveryFee, { self: isSelfReq });
+      if (req.paymentMethod === WO.PAYMENT_METHOD.BANK && !bank.available) {
+        throw fail('failed-precondition', 'Bu buyurtmani bank o\'tkazmasi orqali to\'lab bo\'lmaydi', 'bank_transfer_unavailable', {
+          bankUnavailableReason: bank.reason,
+        });
+      }
+      const isCardReq = req.paymentMethod === WO.PAYMENT_METHOD.CARD;
+      const isBankReq = req.paymentMethod === WO.PAYMENT_METHOD.BANK;
+      // S57: naqd yetkazish (kuryerga). Qarz tekshiruvi faqat darvoza ochiq va kuryer bo'lsa (ortiqcha o'qish yo'q).
+      const cashGateOpen = gate.cashDeliveryEnabled === true && !isSelfReq;
+      const cash = cashAvailability({
+        self: isSelfReq,
+        enabled: gate.cashDeliveryEnabled === true,
+        hasDebt: cashGateOpen ? await buyerHasOpenDebt(db, buyerId) : false,
+      });
+      const isCashReq = req.deliveryPaymentMethod === WO.DELIVERY_PAYMENT_METHOD.CASH;
+      if (isCashReq && !cash.available) {
+        throw fail('failed-precondition', 'Yetkazish haqini naqd to\'lab bo\'lmaydi', 'cash_delivery_unavailable', {
+          cashUnavailableReason: cash.reason,
+        });
+      }
+      // Hamyondan ushlanadigan yetkazish haqi: naqdda 0 (eshik oldida kuryerga).
+      const walletDeliveryHold = isSelfReq || isCashReq ? 0 : deliveryFee;
 
       const ref = db.collection(QUOTES).doc();
       const quoteDoc = {
@@ -347,7 +527,7 @@ function makeQuoteWholesaleOrder(deps) {
         deliveryFee,
         total,
         currency: 'UZS',
-        delivery: {
+        delivery: isSelfReq ? null : {
           tariffVersion: rq.quote.tariffVersion,
           zone: rq.quote.zone,
           actualWeightG: weightG,
@@ -361,10 +541,17 @@ function makeQuoteWholesaleOrder(deps) {
         sellerPayout: goodsTotal - avaFee,
         pricing: { rule: 'pack_tiers', tiers: pack.tiers, moq: pack.moq },
         stockAtQuote: available,
-        origin: rq.origin,
-        destination: rq.destination,
+        origin,
+        destination,
         paymentMethod: req.paymentMethod,
-        ...(req.paymentMethod === WO.PAYMENT_METHOD.CARD ? { cardHold } : {}),
+        deliveryMethod: req.deliveryMethod,
+        ...(isSelfReq ? { selfDelivery: { coverage: self.coverage, dropoff: self.dropoff } } : {}),
+        // S6: yangi karta belgisi (default `placeWholesaleOrder` shunga qarab ikki ushlanma qiladi).
+        ...(isCardReq && !isSelfReq ? { deliveryPaidBy: WO.DELIVERY_PAID_BY.BUYER, sellerFeeHold } : {}),
+        ...(isBankReq && !isSelfReq
+          ? { bankHold: walletDeliveryHold, deliveryPaymentMethod: req.deliveryPaymentMethod } : {}),
+        // S57: naqd — muhrda (default `placeWholesaleOrder` yetkazish haqini hamyondan USHLAMAYDI).
+        ...(isCashReq && !isBankReq ? { deliveryPaymentMethod: WO.DELIVERY_PAYMENT_METHOD.CASH } : {}),
         createdAt: now,
         expiresAt,
         used: false,
@@ -373,9 +560,14 @@ function makeQuoteWholesaleOrder(deps) {
 
       log('quote', {
         result: 'ok', quoteId: ref.id, productId: req.productId, packId: pack.id, qty: req.qty,
-        goodsTotal, deliveryFee, tariffVersion: rq.quote.tariffVersion, paymentMethod: req.paymentMethod,
-        cardAvailable: card.available, durationMs: Date.now() - started,
+        goodsTotal, deliveryFee, tariffVersion: rq ? rq.quote.tariffVersion : null, paymentMethod: req.paymentMethod,
+        deliveryMethod: req.deliveryMethod, selfAvailable: self.available,
+        cardAvailable: card.available, bankAvailable: bank.available,
+        deliveryPaymentMethod: req.deliveryPaymentMethod, cashAvailable: cash.available, durationMs: Date.now() - started,
       });
+      // Ilova uchun: shu buyurtmada mavjud yetkazish usullari. Kuryer — relay narxi hisoblangan bo'lsa (yoki o'z
+      // yetkazishi so'rovida — qadoq vazni bor bo'lsa; narx alohida kvotada hisoblanadi).
+      const deliveryMethods = { ava_courier: isSelfReq ? !!pack.unitWeightG : true, self: self.available };
       return {
         quoteId: ref.id,
         productId: req.productId,
@@ -390,8 +582,23 @@ function makeQuoteWholesaleOrder(deps) {
         currency: 'UZS',
         expiresAtMs: expiresAt.getTime(),
         paymentMethod: req.paymentMethod,
-        paymentMethods: { wallet: true, card_on_delivery: card.available },
+        paymentMethods: { wallet: true, card_on_delivery: card.available, bank_transfer: bank.available },
         cardUnavailableReason: card.reason,
+        bankUnavailableReason: bank.reason,
+        deliveryMethod: req.deliveryMethod,
+        deliveryMethods,
+        selfUnavailableReason: self.reason,
+        ...(self.available ? { selfDelivery: { coverage: self.coverage, dropoff: self.dropoff } } : {}),
+        // S6: kim qachon qancha to'laydi (karta: hozir hamyondan — yetkazish haqi; eshik oldida — FAQAT tovar).
+        payPlan: payPlanOf(req.paymentMethod, goodsTotal, deliveryFee, req.deliveryPaymentMethod),
+        // S57: yetkazish haqini to'lash usullari (kuryer buyurtmasida): hamyon / naqd kuryerga.
+        deliveryPaymentMethods: { wallet: !isSelfReq, cash: cash.available },
+        cashUnavailableReason: cash.reason,
+        ...(!isSelfReq ? { deliveryPaymentMethod: req.deliveryPaymentMethod } : {}),
+        ...(isCashReq ? { cashToCourier: deliveryFee } : {}),
+        // Bank o'tkazmasi: xaridor hamyonidan ushlanadigan summa (faqat yetkazish haqi; naqdda 0).
+        ...(isBankReq && !isSelfReq ? { walletHold: walletDeliveryHold } : {}),
+        ...(isCardReq ? { walletHold: walletDeliveryHold } : {}),
       };
     } catch (e) {
       log('quote', {
@@ -406,6 +613,50 @@ function makeQuoteWholesaleOrder(deps) {
 // ═══════════════════════════════════════════════════════════════════════
 // BEKOR — faqat holat (pul — default trigger)
 // ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * placed → cancelled — YAGONA yozuv yo'li (xaridor bekor qilishi, sotuvchi radi, qaror muddati
+ * o'tishi). Pul va qoldiq BU YERDA YO'Q: faqat `refundStatus: 'pending'` — default codebase
+ * `onWholesaleOrderStatusChange` (`refundOrder`) to'lovchiga qaytaradi va qoldiqni tiklaydi.
+ *
+ * Ikki faza (Firestore: tranzaksiyada hamma o'qish yozuvdan oldin): bu funksiya O'QIYDI
+ * (jo'natma bo'lsa) va yozuvchi funksiyani qaytaradi; chaqiruvchi o'z o'qishlarini tugatgach
+ * uni chaqiradi. `extraPatch` — sabab maydonlari (`cancelReason`, `sellerDecision`, ...).
+ */
+async function prepareCancelInTx(tx, db, ref, o, {
+  actor, actorId, reason, extraPatch, historyMeta, event,
+}) {
+  const from = String(o.status || '');
+  const to = WO.STATUS.CANCELLED;
+  WO.assertTransition(actor, from, to);
+  // 3-bosqich: yetkazish hali TO'LANMAGAN jo'natma ochilgan bo'lsa — u ham bekor
+  // (LEG kuryerga chiqmasin). O'QISH — yozuvdan oldin. To'langan bo'lsa buyurtma
+  // allaqachon `in_delivery` (xaridor/sotuvchi bekor qila olmaydi — yuqoridagi tekshiruv).
+  const shipmentId = String((o.shipment || {}).shipmentId || '');
+  const cancelShipment = shipmentId ? await prepareCancelUnpaidShipmentInTx(tx, db, shipmentId) : null;
+  return function write(now) {
+    const seq = (isInt(o.historySeq) ? o.historySeq : 0) + 1;
+    const patch = {
+      status: to,
+      statusUpdatedAt: now,
+      updatedAt: now,
+      historySeq: seq,
+      refundStatus: WO.REFUND_STATUS.PENDING,
+      cancelledAt: now,
+      cancelledBy: actor,
+      ...(extraPatch || {}),
+    };
+    tx.update(ref, patch);
+    const meta = { ...(historyMeta || {}), ...(cancelShipment ? { shipmentCancelled: shipmentId } : {}) };
+    tx.set(ref.collection(HISTORY).doc(String(seq)), {
+      seq, from, to, actor, actorId: actorId || null, reason: reason || '', at: now,
+      ...(event ? { event } : {}),
+      ...(Object.keys(meta).length ? { meta } : {}),
+    });
+    if (cancelShipment) cancelShipment(now, `wholesale_${actor}`);
+    return { from, seq };
+  };
+}
 
 function makeOrderTransition({ db, now: nowFn }, { actor, to, action }) {
   return async function transition(data, context) {
@@ -423,7 +674,7 @@ function makeOrderTransition({ db, now: nowFn }, { actor, to, action }) {
         const snap = await tx.get(ref);
         if (!snap.exists) throw fail('not-found', 'Buyurtma topilmadi', 'order_not_found');
         const o = snap.data() || {};
-        // Faqat xaridor (sotuvchi buyurtmaga aralashmaydi, ega 2026-10-31).
+        // Faqat xaridor (sotuvchi radi — alohida `rejectWholesaleOrder`, o'z shartlari bilan).
         if (!sameUser(o.buyerId, callerId)) {
           throw fail('permission-denied', 'Bu buyurtma sizniki emas', 'not_order_party');
         }
@@ -431,29 +682,23 @@ function makeOrderTransition({ db, now: nowFn }, { actor, to, action }) {
         // 21-band: takror chaqiruv (tarmoq qayta urinishi) — xato emas, ikkinchi yozuv yo'q.
         if (from === to) return { idempotent: true, from };
         WO.assertTransition(actor, from, to);
-        // 3-bosqich: yetkazish hali TO'LANMAGAN jo'natma ochilgan bo'lsa — u ham bekor
-        // (LEG kuryerga chiqmasin). O'QISH — yozuvdan oldin. To'langan bo'lsa buyurtma
-        // allaqachon `in_delivery` (xaridor bekor qila olmaydi — yuqoridagi tekshiruv).
-        const shipmentId = to === WO.STATUS.CANCELLED ? String((o.shipment || {}).shipmentId || '') : '';
-        const cancelShipment = shipmentId ? await prepareCancelUnpaidShipmentInTx(tx, db, shipmentId) : null;
-        const seq = (isInt(o.historySeq) ? o.historySeq : 0) + 1;
-        const patch = {
-          status: to,
-          statusUpdatedAt: now,
-          updatedAt: now,
-          historySeq: seq,
-        };
-        if (WO.needsRefund(to)) patch.refundStatus = WO.REFUND_STATUS.PENDING;
-        if (to === WO.STATUS.CANCELLED) {
-          patch.cancelledAt = now;
-          patch.cancelledBy = actor;
+        // Bank o'tkazmasi (PROPOSED, 2026-11-14): xaridor sotuvchi «Пул тушди» bosguncha bekor qila oladi;
+        // tasdiqdan keyin — yo'q (tovar puli sotuvchiga tushgan, ilova uni qaytarmaydi). Kutilayotgan
+        // to'lov belgisi `cancelled` bo'ladi (sweeper uni endi ko'rmaydi).
+        let extraPatch;
+        if (WO.methodOf(o) === WO.PAYMENT_METHOD.BANK) {
+          const bps = (o.bankPayment || {}).status;
+          if (bps === WO.BANK_PAYMENT.CONFIRMED) {
+            throw fail('failed-precondition', 'Sotuvchi to\'lovni tasdiqlagan — buyurtmani bekor qilib bo\'lmaydi', 'bank_payment_confirmed');
+          }
+          if (bps === WO.BANK_PAYMENT.AWAITING) {
+            extraPatch = { 'bankPayment.status': WO.BANK_PAYMENT.CANCELLED, 'bankPayment.cancelledAt': now };
+          }
         }
-        tx.update(ref, patch);
-        tx.set(ref.collection(HISTORY).doc(String(seq)), {
-          seq, from, to, actor, actorId: callerId, reason, at: now,
-          ...(cancelShipment ? { meta: { shipmentCancelled: shipmentId } } : {}),
+        const write = await prepareCancelInTx(tx, db, ref, o, {
+          actor, actorId: callerId, reason, extraPatch,
         });
-        if (cancelShipment) cancelShipment(now, `wholesale_${actor}`);
+        write(now);
         return { idempotent: false, from };
       });
       log(action, {
@@ -476,11 +721,286 @@ function makeCancelWholesaleOrder(deps) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// 3-BOSQICH: buyurtma berilishi bilan relay jo'natmasi AVTOMATIK
+// SOTUVCHI QABULI / RADI (ega, 2026-11-13)
 // ═══════════════════════════════════════════════════════════════════════
 //
-// Sotuvchi qabul/rad QILMAYDI (ega, 2026-10-31). `wholesale_orders` onCreate
-// (`placed`) → `createShipmentInternal` (egasi/jo'natuvchi = sotuvchi, LEG-1 olish
+// onCreate → `sellerDecision: 'pending'` + `acceptDeadlineAt` (2 ish kuni, core `acceptDeadlineFor`).
+// Qabul → `accepted` + `acceptedAt`; jo'natmani demand onUpdate triggeri ochadi
+// (`wholesale_events.onWholesaleOrderUpdated` → `ensureWholesaleShipment`, kalit
+// `wholesale_ship_{orderId}`), yiqilsa — `wholesaleShipmentReconcile`.
+// Rad / muddat → placed → cancelled (`prepareCancelInTx` — xaridor bekor qilishi bilan bitta yo'l).
+// ESKI buyurtma (`sellerDecision` yo'q) — qaror callable'lari `seller_decision_not_required` bilan rad.
+
+const SELLER_DECISION_SWEEP_LIMIT = 200;
+
+/**
+ * Qaror callable'lari uchun umumiy shart tekshiruvi (tranzaksiya ichida, o'qilgan `o` ustida).
+ * @returns {null|{idempotent: true}} — idempotent bo'lsa obyekt, davom etish mumkin bo'lsa null.
+ */
+function checkSellerDecisionState(o, nowMs, want) {
+  const dec = o.sellerDecision;
+  if (dec === undefined || dec === null) {
+    throw fail('failed-precondition', 'Bu buyurtma sotuvchi qarorini talab qilmaydi', 'seller_decision_not_required');
+  }
+  if (dec === want) return { idempotent: true };
+  if (dec === WO.SELLER_DECISION.ACCEPTED) {
+    throw fail('failed-precondition', 'Buyurtma allaqachon qabul qilingan', 'seller_already_accepted');
+  }
+  if (dec === WO.SELLER_DECISION.REJECTED) {
+    throw fail('failed-precondition', 'Buyurtma allaqachon rad etilgan', 'seller_already_rejected');
+  }
+  if (dec === WO.SELLER_DECISION.TIMEOUT) {
+    throw fail('failed-precondition', 'Qaror muddati o\'tgan', 'accept_deadline_passed');
+  }
+  if (dec !== WO.SELLER_DECISION.PENDING) {
+    throw fail('failed-precondition', 'Buyurtma holati mos emas', 'seller_decision_state', { sellerDecision: String(dec) });
+  }
+  if (o.status !== WO.STATUS.PLACED) {
+    throw fail('failed-precondition', 'Buyurtma endi faol emas', 'order_not_placed', { status: o.status || null });
+  }
+  const deadline = msOf(o.acceptDeadlineAt);
+  // Muddat yo'q/buzilgan — qaror qabul qilinmaydi (jimgina «cheksiz» emas, 53-band).
+  if (deadline == null) throw fail('failed-precondition', 'Qaror muddati aniqlanmagan', 'accept_deadline_missing');
+  if (nowMs > deadline) throw fail('failed-precondition', 'Qaror muddati o\'tgan', 'accept_deadline_passed');
+  return null;
+}
+
+function requireOrderIdArg(data) {
+  const orderId = String((data || {}).orderId || '').trim();
+  if (!ID_RE.test(orderId)) throw fail('invalid-argument', 'Buyurtma tanlanmagan', 'order_required');
+  return orderId;
+}
+
+/**
+ * `acceptWholesaleOrder({orderId})` — faqat buyurtma sotuvchisi (`order.sellerId`, kanon telefon).
+ * Shart: `placed` + `sellerDecision == pending` + `now <= acceptDeadlineAt`. Takror — idempotent
+ * (ikkinchi yozuv yo'q). Raddan / muddatdan keyin — `failed-precondition` (aniq kod).
+ */
+function makeAcceptWholesaleOrder(deps) {
+  const { db, now: nowFn } = deps;
+  return async function acceptWholesaleOrder(data, context) {
+    const started = Date.now();
+    const callerId = callerIdFrom(context);
+    if (!callerId) throw fail('unauthenticated', 'Telefon bilan kirish talab qilinadi');
+    const orderId = requireOrderIdArg(data);
+    const ref = db.collection(ORDERS).doc(orderId);
+    try {
+      const now = nowFn ? nowFn() : new Date();
+      const out = await db.runTransaction(async (tx) => {
+        const s = await tx.get(ref);
+        if (!s.exists) throw fail('not-found', 'Buyurtma topilmadi', 'order_not_found');
+        const o = s.data() || {};
+        if (!sameUser(o.sellerId, callerId)) throw fail('permission-denied', 'Bu buyurtma sizniki emas', 'not_order_party');
+        const idem = checkSellerDecisionState(o, now.getTime(), WO.SELLER_DECISION.ACCEPTED);
+        if (idem) return idem;
+        const seq = (isInt(o.historySeq) ? o.historySeq : 0) + 1;
+        // Bank o'tkazmasi (ega, 2026-11-14): qabul bilan AYNI tranzaksiyada tovar puli kutilishi
+        // boshlanadi — muddat = qabul + 5 ish kuni. Jo'natma `confirmed` gacha OCHILMAYDI.
+        const isBank = WO.methodOf(o) === WO.PAYMENT_METHOD.BANK;
+        const bankDeadline = isBank ? new Date(WO.bankPayDeadlineFor(now.getTime())) : null;
+        tx.update(ref, {
+          sellerDecision: WO.SELLER_DECISION.ACCEPTED,
+          sellerDecisionAt: now,
+          acceptedAt: now,
+          acceptedBy: callerId,
+          historySeq: seq,
+          updatedAt: now,
+          ...(isBank ? {
+            bankPayment: {
+              status: WO.BANK_PAYMENT.AWAITING, awaitingSince: now, confirmedAt: null, confirmedBy: null,
+            },
+            bankPayDeadlineAt: bankDeadline,
+          } : {}),
+        });
+        tx.set(ref.collection(HISTORY).doc(String(seq)), {
+          seq, from: o.status, to: o.status, event: 'seller_accepted', actor: WO.ACTOR.SELLER, actorId: callerId,
+          reason: '',
+          meta: {
+            acceptDeadlineAt: o.acceptDeadlineAt || null,
+            ...(isBank ? { bankPayDeadlineAt: bankDeadline, bankPayBusinessDays: WO.BANK_PAY_BUSINESS_DAYS } : {}),
+          },
+          at: now,
+        });
+        return { idempotent: false, bankPayDeadlineAt: bankDeadline };
+      });
+      log('acceptOrder', { result: out.idempotent ? 'already' : 'ok', orderId, durationMs: Date.now() - started });
+      return {
+        ok: true,
+        orderId,
+        status: WO.STATUS.PLACED,
+        sellerDecision: WO.SELLER_DECISION.ACCEPTED,
+        idempotent: out.idempotent,
+        ...(out.bankPayDeadlineAt ? { bankPayDeadlineMs: out.bankPayDeadlineAt.getTime() } : {}),
+      };
+    } catch (e) {
+      log('acceptOrder', {
+        result: 'denied', orderId, errorCode: (e.details && e.details.reason) || e.code || 'UNKNOWN', durationMs: Date.now() - started,
+      });
+      throw e;
+    }
+  };
+}
+
+/**
+ * `rejectWholesaleOrder({orderId, reason})` — faqat sotuvchi; sabab 3..300 belgi (majburiy).
+ * placed → cancelled (`cancelledBy: 'seller'`, `cancelReason: 'seller_rejected'`,
+ * `sellerRejectReason`, `refundStatus: 'pending'`) — pul/qoldiq xaridor bekor qilgandagi
+ * default trigger orqali. Takror — idempotent; qabuldan keyin — `seller_already_accepted`.
+ */
+function makeRejectWholesaleOrder(deps) {
+  const { db, now: nowFn } = deps;
+  return async function rejectWholesaleOrder(data, context) {
+    const started = Date.now();
+    const callerId = callerIdFrom(context);
+    if (!callerId) throw fail('unauthenticated', 'Telefon bilan kirish talab qilinadi');
+    const orderId = requireOrderIdArg(data);
+    const raw = (data || {}).reason;
+    const reason = typeof raw === 'string' ? raw.trim() : '';
+    if (reason.length < WO.REJECT_REASON_MIN || reason.length > WO.REJECT_REASON_MAX) {
+      throw fail('invalid-argument', `Rad sababini yozing (${WO.REJECT_REASON_MIN}–${WO.REJECT_REASON_MAX} belgi)`, 'reason_invalid', {
+        min: WO.REJECT_REASON_MIN, max: WO.REJECT_REASON_MAX,
+      });
+    }
+    const ref = db.collection(ORDERS).doc(orderId);
+    try {
+      const now = nowFn ? nowFn() : new Date();
+      const out = await db.runTransaction(async (tx) => {
+        const s = await tx.get(ref);
+        if (!s.exists) throw fail('not-found', 'Buyurtma topilmadi', 'order_not_found');
+        const o = s.data() || {};
+        if (!sameUser(o.sellerId, callerId)) throw fail('permission-denied', 'Bu buyurtma sizniki emas', 'not_order_party');
+        const idem = checkSellerDecisionState(o, now.getTime(), WO.SELLER_DECISION.REJECTED);
+        if (idem) return idem;
+        const write = await prepareCancelInTx(tx, db, ref, o, {
+          actor: WO.ACTOR.SELLER,
+          actorId: callerId,
+          reason,
+          event: 'seller_rejected',
+          extraPatch: {
+            cancelReason: WO.CANCEL_REASON.SELLER_REJECTED,
+            sellerRejectReason: reason,
+            sellerDecision: WO.SELLER_DECISION.REJECTED,
+            sellerDecisionAt: now,
+          },
+        });
+        write(now);
+        return { idempotent: false };
+      });
+      // Log — sabab matnisiz (erkin matnda shaxsiy ma'lumot bo'lishi mumkin, 24/40-band).
+      log('rejectOrder', { result: out.idempotent ? 'already' : 'ok', orderId, durationMs: Date.now() - started });
+      return {
+        ok: true, orderId, status: WO.STATUS.CANCELLED, sellerDecision: WO.SELLER_DECISION.REJECTED, idempotent: out.idempotent,
+      };
+    } catch (e) {
+      log('rejectOrder', {
+        result: 'denied', orderId, errorCode: (e.details && e.details.reason) || e.code || 'UNKNOWN', durationMs: Date.now() - started,
+      });
+      throw e;
+    }
+  };
+}
+
+/**
+ * onCreate: yangi buyurtmaga qaror belgisi — `sellerDecision: 'pending'` + `acceptDeadlineAt`
+ * (asos — `order.createdAt`, yo'q bo'lsa trigger vaqti) + history `seller_decision_requested`.
+ * Idempotent (tranzaksiya): belgi bor / jo'natma bor / holat placed emas — hech narsa yozilmaydi.
+ * @returns {{marked: boolean, acceptDeadlineAt?: Date, skipped?: string}}
+ */
+async function markSellerDecisionPending(deps, orderId) {
+  const { db, now: nowFn } = deps;
+  const ref = db.collection(ORDERS).doc(orderId);
+  const now = nowFn ? nowFn() : new Date();
+  return db.runTransaction(async (tx) => {
+    const s = await tx.get(ref);
+    if (!s.exists) return { marked: false, skipped: 'order_missing' };
+    const o = s.data() || {};
+    if (o.sellerDecision !== undefined && o.sellerDecision !== null) {
+      return { marked: false, skipped: 'already_marked', acceptDeadlineAt: o.acceptDeadlineAt || null };
+    }
+    if (o.status !== WO.STATUS.PLACED) return { marked: false, skipped: `status_${o.status || 'none'}` };
+    if ((o.shipment || {}).shipmentId) return { marked: false, skipped: 'already_linked' };
+    const baseMs = msOf(o.createdAt) || now.getTime();
+    const deadline = new Date(WO.acceptDeadlineFor(baseMs));
+    const seq = (isInt(o.historySeq) ? o.historySeq : 0) + 1;
+    tx.update(ref, {
+      sellerDecision: WO.SELLER_DECISION.PENDING,
+      acceptDeadlineAt: deadline,
+      historySeq: seq,
+      updatedAt: now,
+    });
+    tx.set(ref.collection(HISTORY).doc(String(seq)), {
+      seq, from: o.status, to: o.status, event: 'seller_decision_requested', actor: WO.ACTOR.SYSTEM, actorId: null,
+      reason: '', meta: { acceptDeadlineAt: deadline, businessDays: WO.ACCEPT_BUSINESS_DAYS }, at: now,
+    });
+    return { marked: true, acceptDeadlineAt: deadline };
+  });
+}
+
+/**
+ * Sweeper (har 15 daqiqa): `status == placed` + `sellerDecision == pending` +
+ * `acceptDeadlineAt <= now` (kompozit indeks: status, sellerDecision, acceptDeadlineAt) →
+ * har buyurtma alohida tranzaksiyada qayta tekshiriladi va placed → cancelled (system,
+ * `seller_timeout`). Bekor qilingan buyurtma so'rovdan chiqadi — AYNAN BIR MARTA.
+ */
+async function runWholesaleSellerDecisionSweep(deps, { limit = SELLER_DECISION_SWEEP_LIMIT } = {}) {
+  const { db, now: nowFn } = deps;
+  const started = Date.now();
+  const now = nowFn ? nowFn() : new Date();
+  const out = { checked: 0, cancelled: 0, skipped: 0, failed: 0 };
+  const snap = await db.collection(ORDERS)
+    .where('status', '==', WO.STATUS.PLACED)
+    .where('sellerDecision', '==', WO.SELLER_DECISION.PENDING)
+    .where('acceptDeadlineAt', '<=', now)
+    .limit(limit)
+    .get();
+  for (const d of snap.docs) {
+    out.checked += 1;
+    try {
+      const r = await db.runTransaction(async (tx) => {
+        const s = await tx.get(d.ref);
+        if (!s.exists) return { skipped: true };
+        const o = s.data() || {};
+        const deadline = msOf(o.acceptDeadlineAt);
+        if (o.status !== WO.STATUS.PLACED || o.sellerDecision !== WO.SELLER_DECISION.PENDING
+          || deadline == null || deadline > now.getTime()) {
+          return { skipped: true };
+        }
+        const write = await prepareCancelInTx(tx, db, d.ref, o, {
+          actor: WO.ACTOR.SYSTEM,
+          actorId: null,
+          reason: WO.CANCEL_REASON.SELLER_TIMEOUT,
+          event: 'seller_timeout',
+          historyMeta: { acceptDeadlineAt: o.acceptDeadlineAt || null },
+          extraPatch: {
+            cancelReason: WO.CANCEL_REASON.SELLER_TIMEOUT,
+            sellerDecision: WO.SELLER_DECISION.TIMEOUT,
+            sellerDecisionAt: now,
+          },
+        });
+        write(now);
+        return { skipped: false };
+      });
+      if (r.skipped) out.skipped += 1;
+      else out.cancelled += 1;
+    } catch (e) {
+      out.failed += 1;
+      console.error(JSON.stringify({
+        module: 'wholesale_orders', action: 'sellerDecisionSweep', result: 'failed', orderId: d.id,
+        errorCode: 'SELLER_DECISION_SWEEP_FAILED', message: String((e && e.message) || e).slice(0, 200),
+      }));
+    }
+  }
+  log('sellerDecisionSweep', { result: 'ok', ...out, durationMs: Date.now() - started });
+  return out;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 3-BOSQICH: relay jo'natmasi (sotuvchi qabulidan keyin; eski buyurtmada — avtomatik)
+// ═══════════════════════════════════════════════════════════════════════
+//
+// Ega, 2026-11-13: yangi buyurtmada jo'natma FAQAT `sellerDecision == accepted` dan keyin
+// (`WO.shipmentAllowed`; chaqiruvchilar: onUpdate triggeri, reconcile). Belgisiz ESKI buyurtma —
+// avvalgidek: `placed` → `createShipmentInternal` (egasi/jo'natuvchi = sotuvchi, LEG-1 olish
 // kontakti = sotuvchi; qabul qiluvchi = xaridor, `recipientId`), narx — kvotada
 // MUHRLANGAN (`order.delivery`, qayta hisoblanmaydi). Keyin tranzaksiyada
 // `order.shipment = {shipmentId, orderId, trackingNumber, createdAt}`; HOLAT
@@ -555,7 +1075,69 @@ function shipmentInputFromOrder(orderId, o, recipientName) {
     pricedAt: o.createdAt || null,
     source: 'wholesale',
     extra: { wholesaleOrderId: orderId },
+    // S57: naqd — relay jo'natmasi `deliveryPayment {method: cash}` bilan (eskrou YO'Q, oxirgi kuryer oladi).
+    // Hamyon usuli — maydon berilmaydi (relay standarti `escrow`, bugungi kirish shakli AYNAN).
+    ...(WO.isCashDelivery(o) ? { deliveryPaymentMethod: 'cash' } : {}),
   };
+}
+
+/**
+ * S57: NAQD buyurtma jo'natmasini ochish — eskrou buyurtmada default SHIP_FUND qiladigan PAYT va VAZIFA:
+ * 1) relay `openCashShipment` (awaiting_payment/pending → ready/cash_on_delivery + LEG(lar) ochiladi;
+ *    idempotent); 2) TRANZAKSIYADA buyurtma placed → in_delivery (system, `cash_shipment_opened`) +
+ *    `cashDelivery {status: opened, shipmentId, amount, openedAt}`. Pul yozuvi YO'Q (yetkazish haqi eskrouga
+ *    TUSHMAYDI — ega shartnomasi 2). Orada buyurtma bekor qilingan bo'lsa — ochilgan naqd jo'natma ham bekor
+ *    (custody boshlanmagan — `prepareCancelUnpaidShipmentInTx`). Yiqilsa — reconcile qayta chaqiradi.
+ */
+async function openWholesaleCashShipment(deps, orderId) {
+  const { db, now: nowFn } = deps;
+  const ref = db.collection(ORDERS).doc(orderId);
+  const s0 = await ref.get();
+  if (!s0.exists) return { skipped: 'order_missing' };
+  const o0 = s0.data() || {};
+  if (!WO.isCashDelivery(o0)) return { skipped: 'not_cash' };
+  const shipmentId = String((o0.shipment || {}).shipmentId || '');
+  if (!shipmentId) return { skipped: 'no_shipment' };
+  if (WO.cashDeliveryOpened(o0)) return { skipped: 'already_opened', shipmentId };
+  if (o0.status !== WO.STATUS.PLACED) return { skipped: `status_${o0.status || 'none'}` };
+  const opened = await openCashShipment(deps, shipmentId);
+  const now = nowFn ? nowFn() : new Date();
+  const out = await db.runTransaction(async (tx) => {
+    const s = await tx.get(ref);
+    const o = s.data() || {};
+    if (WO.cashDeliveryOpened(o)) return { already: true };
+    if (String((o.shipment || {}).shipmentId || '') !== shipmentId) return { skipped: 'shipment_changed' };
+    if (o.status !== WO.STATUS.PLACED) {
+      // Xaridor/sotuvchi orada bekor qildi — ochilgan naqd jo'natma ham bekor (pul yo'q).
+      const cancel = await prepareCancelUnpaidShipmentInTx(tx, db, shipmentId);
+      if (cancel) cancel(now, 'wholesale_order_cancelled');
+      return { cancelledShipment: !!cancel, status: o.status };
+    }
+    WO.assertTransition(WO.ACTOR.SYSTEM, o.status, WO.STATUS.IN_DELIVERY);
+    const seq = (isInt(o.historySeq) ? o.historySeq : 0) + 1;
+    tx.update(ref, {
+      status: WO.STATUS.IN_DELIVERY,
+      statusUpdatedAt: now,
+      updatedAt: now,
+      historySeq: seq,
+      cashDelivery: {
+        status: 'opened', shipmentId, amount: o.deliveryFee, currency: 'UZS', openedAt: now,
+      },
+    });
+    tx.set(ref.collection(HISTORY).doc(String(seq)), {
+      seq, from: WO.STATUS.PLACED, to: WO.STATUS.IN_DELIVERY, event: 'cash_shipment_opened', actor: WO.ACTOR.SYSTEM, actorId: null,
+      reason: '', meta: { shipmentId, amount: o.deliveryFee, deliveryPaymentMethod: WO.DELIVERY_PAYMENT_METHOD.CASH }, at: now,
+    });
+    return { opened: true };
+  });
+  if (out.cancelledShipment) {
+    try { await closeShipmentMatches(db, shipmentId, now); } catch (e) { /* LEG allaqachon cancelled — olib bo'lmaydi */ }
+  }
+  log('openCashShipment', {
+    result: out.opened ? 'ok' : (out.already ? 'already' : (out.skipped || 'cancelled')), orderId, shipmentId,
+    shipmentOpened: opened.opened, cancelledShipment: !!out.cancelledShipment,
+  });
+  return { ...out, shipmentId };
 }
 
 /**
@@ -572,6 +1154,10 @@ async function ensureWholesaleShipment(deps, orderId) {
   const o0 = snap.data() || {};
   if (o0.shipment && o0.shipment.shipmentId) return { skipped: 'already_linked', shipmentId: o0.shipment.shipmentId };
   if (o0.status !== WO.STATUS.PLACED) return { skipped: `status_${o0.status || 'none'}` };
+  // Sotuvchi qabuli (ega, 2026-11-13): yangi buyurtmada jo'natma FAQAT qabuldan keyin.
+  // Maydon yo'q (eski buyurtma) — avvalgidek. Qabul qaytarib olinmaydi, shuning uchun
+  // tranzaksiya ichida qayta tekshirish shart emas (holat o'zgarsa — pastda bekor).
+  if (!WO.shipmentAllowed(o0)) return { skipped: `seller_decision_${o0.sellerDecision}` };
   try {
     const name = await buyerDisplayName(db, o0);
     const r = await createShipmentInternal(deps, shipmentInputFromOrder(orderId, o0, name));
@@ -601,9 +1187,29 @@ async function ensureWholesaleShipment(deps, orderId) {
     });
     log('ensureShipment', {
       result: out.already ? 'already' : 'ok', orderId, shipmentId: out.shipmentId,
-      duplicateShipment: r.duplicate, cancelled: !!out.cancelled, durationMs: Date.now() - started,
+      duplicateShipment: r.duplicate, cancelled: !!out.cancelled, legCount: r.legCount || 1,
+      chainMode: r.chainMode || null, deliveryPaymentMethod: r.deliveryPaymentMethod || null, durationMs: Date.now() - started,
     });
-    return { linked: !out.already, shipmentId: out.shipmentId, trackingNumber: r.trackingNumber, cancelled: !!out.cancelled };
+    // S57: naqd — eskrou SHIP_FUND o'rniga jo'natmani ochish (xato bo'lsa reconcile qayta uradi).
+    let cashOpen = null;
+    if (!out.cancelled && WO.isCashDelivery(o0)) {
+      try {
+        cashOpen = await openWholesaleCashShipment(deps, orderId);
+      } catch (e) {
+        console.error(JSON.stringify({
+          module: 'wholesale_orders', action: 'openCashShipment', result: 'failed', orderId, errorCode: 'WHOLESALE_CASH_OPEN_FAILED',
+          reason: String((e && e.details && e.details.reason) || (e && e.code) || 'UNKNOWN').slice(0, 64),
+        }));
+        cashOpen = { failed: true };
+      }
+    }
+    return {
+      linked: !out.already,
+      shipmentId: out.shipmentId,
+      trackingNumber: r.trackingNumber,
+      cancelled: !!out.cancelled,
+      ...(cashOpen ? { cashOpen } : {}),
+    };
   } catch (e) {
     const code = String((e && e.details && e.details.reason) || (e && e.code) || 'UNKNOWN').slice(0, 64);
     const now = nowFn ? nowFn() : new Date();
@@ -631,18 +1237,31 @@ async function ensureWholesaleShipment(deps, orderId) {
   }
 }
 
-/** Trigger: `wholesale_orders/{id}` onCreate. 3b: karta buyurtmasi — sotuvchiga xabar. */
+/**
+ * Trigger: `wholesale_orders/{id}` onCreate.
+ * Ega qarori (2026-11-13): jo'natma DARHOL OCHILMAYDI — qaror belgisi (`pending` + muddat)
+ * yoziladi va sotuvchiga «qabul qiling» xabari (`ws_seller_decide`) boradi. Karta buyurtmasi
+ * haqidagi `ws_card_new_order` — qabuldan keyin (`wholesale_events.transitionNotifications`).
+ * Yangi yaratilgan har buyurtma — yangi qoida bo'yicha (eski yo'l faqat belgisiz eski hujjatlar uchun).
+ */
 async function onWholesaleOrderCreated(deps, data, orderId) {
   if ((data || {}).status !== WO.STATUS.PLACED) return { skipped: 'not_placed' };
-  const r = await ensureWholesaleShipment(deps, orderId);
-  try {
-    await notifyNewCardOrder(deps, data, orderId);
-  } catch (e) {
-    console.error(JSON.stringify({
-      module: 'wholesale_orders', action: 'notifyNewCardOrder', result: 'failed', orderId, errorCode: 'NOTIFY_FAILED',
-    }));
+  // Belgi yiqilsa — xato yuqoriga (index.js log). Jo'natma OCHILMAYDI; reconcile belgisiz
+  // buyurtmani ESKI deb hisoblaydi (hujjatlashtirilgan xavf — hisobotda).
+  const m = await markSellerDecisionPending(deps, orderId);
+  if (m.marked) {
+    try {
+      await notifySellerDecide(deps, { ...data, acceptDeadlineAt: m.acceptDeadlineAt }, orderId);
+    } catch (e) {
+      console.error(JSON.stringify({
+        module: 'wholesale_orders', action: 'notifySellerDecide', result: 'failed', orderId, errorCode: 'NOTIFY_FAILED',
+      }));
+    }
+    log('markSellerDecision', { result: 'ok', orderId, acceptDeadlineMs: m.acceptDeadlineAt.getTime() });
+    return { marked: true, acceptDeadlineAt: m.acceptDeadlineAt };
   }
-  return r;
+  // Takror trigger (belgi bor), holat o'zgargan yoki hujjat yo'q — hech narsa qilinmaydi.
+  return { skipped: m.skipped };
 }
 
 /**
@@ -653,29 +1272,72 @@ async function reconcileWholesaleShipments(deps, { limit = SHIPMENT_RECONCILE_LI
   const { db, now: nowFn } = deps;
   const nowMs = (nowFn ? nowFn() : new Date()).getTime();
   const out = {
-    checked: 0, linked: 0, failed: 0, final: 0, young: 0,
+    checked: 0, linked: 0, failed: 0, final: 0, young: 0, awaitingSeller: 0,
   };
-  const snap = await db.collection(ORDERS)
+  // Sotuvchi qabuli (ega, 2026-11-13): A) qabul qilingan, jo'natmasi yo'q (faqat tenglik
+  // filtrlari — kompozit indeks kerak emas); B) belgisiz ESKI buyurtmalar (avvalgi so'rov) —
+  // qaror kutayotgan (`pending`) va boshqa belgililar o'tkaziladi (darvoza `shipmentAllowed`).
+  // Bank o'tkazmasi (2026-11-14): qabul qilingan, lekin tovar puli kutilayotgan (`awaiting`, 5 ish
+  // kunigacha) bank buyurtmalari umumiy «accepted» so'rovini TO'LDIRIB qo'ymasin — har usul alohida
+  // so'rov (hammasi tenglik filtri, kompozit indeks kerak emas): hamyon, karta, bank-TASDIQLANGAN.
+  const acceptedBase = db.collection(ORDERS)
+    .where('status', '==', WO.STATUS.PLACED).where('shipment', '==', null)
+    .where('sellerDecision', '==', WO.SELLER_DECISION.ACCEPTED);
+  const acceptedSnaps = await Promise.all([
+    acceptedBase.where('paymentMethod', '==', WO.PAYMENT_METHOD.WALLET).limit(limit).get(),
+    acceptedBase.where('paymentMethod', '==', WO.PAYMENT_METHOD.CARD).limit(limit).get(),
+    acceptedBase.where('bankPayment.status', '==', WO.BANK_PAYMENT.CONFIRMED).limit(limit).get(),
+  ]);
+  const legacy = await db.collection(ORDERS)
     .where('status', '==', WO.STATUS.PLACED).where('shipment', '==', null).limit(limit).get();
-  for (const d of snap.docs) {
+  const seen = new Set();
+  for (const d of [...acceptedSnaps.flatMap((s) => s.docs), ...legacy.docs]) {
+    if (seen.has(d.id)) continue;
+    seen.add(d.id);
     const o = d.data() || {};
+    if (!WO.shipmentAllowed(o)) { out.awaitingSeller += 1; continue; }
     const err = o.shipmentError || null;
     if (err && (err.final === true || (isInt(err.attempts) && err.attempts >= SHIPMENT_MAX_ATTEMPTS))) {
       out.final += 1;
       continue;
     }
-    const at = msOf(o.createdAt) || 0;
+    // Qabul qilingan buyurtmada yosh — qabul paytidan (onUpdate triggeri hali ishlayotgan bo'lishi mumkin).
+    const at = Math.max(msOf(o.createdAt) || 0, msOf(o.acceptedAt) || 0);
     if (nowMs - at < minAgeMs) { out.young += 1; continue; } // trigger hali ishlayotgan bo'lishi mumkin
     out.checked += 1;
     const r = await ensureWholesaleShipment(deps, d.id);
     if (r.linked) out.linked += 1;
     else if (r.failed) out.failed += 1;
   }
+  // S57: NAQD buyurtma — jo'natma bog'langan, lekin ochilmagan (open yiqilgan). Ikki tenglik filtri
+  // (kompozit indeks shart emas); o'qish ≈ haqiqatan qotganlar (odatda 0).
+  out.cashOpenChecked = 0; out.cashOpened = 0; out.cashOpenFailed = 0;
+  const cashPlaced = await db.collection(ORDERS)
+    .where('status', '==', WO.STATUS.PLACED).where('deliveryPaymentMethod', '==', WO.DELIVERY_PAYMENT_METHOD.CASH)
+    .limit(limit).get();
+  for (const d of cashPlaced.docs) {
+    const o = d.data() || {};
+    const sh = o.shipment || null;
+    if (!sh || !sh.shipmentId || WO.cashDeliveryOpened(o)) continue;
+    if (nowMs - (msOf(sh.createdAt) || msOf(o.updatedAt) || 0) < minAgeMs) continue;
+    out.cashOpenChecked += 1;
+    try {
+      const r = await openWholesaleCashShipment(deps, d.id);
+      if (r && r.opened) out.cashOpened += 1;
+    } catch (e) {
+      out.cashOpenFailed += 1;
+      console.error(JSON.stringify({
+        module: 'wholesale_orders', action: 'reconcileCashOpen', result: 'failed', orderId: d.id, errorCode: 'WHOLESALE_CASH_OPEN_FAILED',
+        reason: String((e && e.details && e.details.reason) || (e && e.code) || 'UNKNOWN').slice(0, 64),
+      }));
+    }
+  }
   // 3b: rad etilgan karta buyurtmalarining QAYTISH jo'natmasi (trigger yiqilgan / xato belgisi bor).
   out.returnChecked = 0; out.returnLinked = 0; out.returnFailed = 0; out.returnFinal = 0;
   const refused = await db.collection(ORDERS).where('status', '==', WO.STATUS.REFUSED).limit(limit).get();
   for (const d of refused.docs) {
     const o = d.data() || {};
+    if (WO.isSelf(o)) continue; // S4: o'z yetkazishi — qaytish jo'natmasi yo'q
     if ((o.returnShipment || {}).shipmentId) continue;
     const err = o.returnShipmentError || null;
     if (err && (err.final === true || (isInt(err.attempts) && err.attempts >= RETURN_MAX_ATTEMPTS))) {
@@ -718,6 +1380,19 @@ function makeGetWholesaleDeliveryCode(deps) {
       if (WO.methodOf(o) === WO.PAYMENT_METHOD.CARD
         && (o.cardPayment || {}).status !== WO.CARD_PAYMENT.CONFIRMED) {
         throw fail('failed-precondition', 'Sotuvchi to\'lovni hali tasdiqlamagan', 'card_payment_unconfirmed');
+      }
+      // S4: o'z yetkazishi — jo'natma yo'q; kod buyurtma siridan (`private/self_delivery`), relay bilan AYNI hosila.
+      if (WO.isSelf(o)) {
+        if (o.status !== WO.STATUS.IN_DELIVERY || (o.selfDelivery || {}).status !== WO.SELF_STATUS.IN_DELIVERY) {
+          throw fail('failed-precondition', 'Yetkazish hali boshlanmagan', 'self_delivery_not_started');
+        }
+        const sec = await db.collection(ORDERS).doc(orderId).collection('private').doc(SELF_SECRET_DOC).get();
+        const secret = sec.exists ? (sec.data() || {}).secret : null;
+        if (!secret) throw fail('failed-precondition', 'Yetkazish kodi tayyor emas', 'code_not_ready');
+        log('getDeliveryCode', { result: 'ok', orderId, deliveryMethod: WO.DELIVERY_METHOD.SELF });
+        return {
+          orderId, shipmentId: null, trackingNumber: '', deliveryMethod: WO.DELIVERY_METHOD.SELF, deliveryCode: selfDeliveryCodeFor(orderId, secret),
+        };
       }
       const shipmentId = String((o.shipment || {}).shipmentId || '');
       if (!shipmentId) throw fail('failed-precondition', 'Yetkazish hali ochilmagan', 'shipment_not_ready');
@@ -814,15 +1489,27 @@ module.exports = {
   resolvePack,
   avaFeeOf,
   parseQuoteRequest,
+  bankAvailability,
+  selfAvailability,
+  payPlanOf,
+  prepareCancelInTx,
   readFeeSettings,
   requireOrdersGate,
   makeQuoteWholesaleOrder,
   makeCancelWholesaleOrder,
+  makeAcceptWholesaleOrder,
+  makeRejectWholesaleOrder,
+  markSellerDecisionPending,
+  runWholesaleSellerDecisionSweep,
+  SELLER_DECISION_SWEEP_LIMIT,
   makeSetWholesaleOrderSettings,
   SHIPMENT_MAX_ATTEMPTS,
   SHIPMENT_RECONCILE_MIN_AGE_MS,
   shipmentInputFromOrder,
   ensureWholesaleShipment,
+  openWholesaleCashShipment,
+  buyerHasOpenDebt,
+  cashAvailability,
   onWholesaleOrderCreated,
   reconcileWholesaleShipments,
   makeGetWholesaleDeliveryCode,

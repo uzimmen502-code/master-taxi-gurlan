@@ -146,6 +146,24 @@ async function main() {
     await assertFails(adm.doc('platform_products/new9').set({ name: 'x', price: 1, smImageSrc: 'https://x' }));
   });
 
+  await check('R9b ҳамкор/намуна майдонлари (эга 2026-11-28) — админ клиенти ҳам ёзолмайди; ҳамкор маълумоти (private/partner) — фақат админ; буюртма partner_lines — мижоз ўқимайди', async () => {
+    for (const f of ['smSample', 'smPartnerKey', 'smPartnerStatus', 'smModeration', 'smModerationReason']) {
+      await assertFails(adm.doc('platform_products/sm1').update({ [f]: f === 'smSample' ? true : 'x' }));
+      await assertFails(adm.doc('platform_products/new8').set({ name: 'x', price: 1, [f]: 'x' }));
+    }
+    await testEnv.withSecurityRulesDisabled(async (c) => {
+      await c.firestore().doc('platform_products/sm1/private/partner').set({ sellerId: '998900000001', partnerKey: 'k' });
+      await c.firestore().doc('orders/o_sm1').set({ type: 'platform', subtype: 'supermarket', userPhone: USER, phone: USER });
+      await c.firestore().doc('orders/o_sm1/private/partner_lines').set({ lines: [{ sellerId: '998900000001' }] });
+    });
+    await assertFails(user.doc('platform_products/sm1/private/partner').get());
+    await assertFails(anon.doc('platform_products/sm1/private/partner').get());
+    await assertSucceeds(adm.doc('platform_products/sm1/private/partner').get());
+    await assertFails(user.doc('orders/o_sm1/private/partner_lines').get());
+    await assertSucceeds(adm.doc('orders/o_sm1/private/partner_lines').get());
+    await assertFails(adm.doc('orders/o_sm1/private/partner_lines').set({ lines: [] }));
+  });
+
   await check('R10 supermarket_stats — фақат админ ўқийди, ҳеч ким (админ ҳам) ёзмайди', async () => {
     await testEnv.withSecurityRulesDisabled(async (c) => { await c.firestore().doc('supermarket_stats/2026-11-20').set({ orders: 1 }); });
     await assertSucceeds(adm.doc('supermarket_stats/2026-11-20').get());

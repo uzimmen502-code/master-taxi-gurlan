@@ -125,6 +125,9 @@ const MSG = Object.freeze({
   DISTRICT_REQUIRED: ['Етказиш ҳудудини танланг.', 'Yetkaziş hududini tanlang.', 'Выберите район доставки.'],
   SLOT_UNAVAILABLE: ['Бу вақт оралиғи банд ёки ўтиб кетди. Бошқасини танланг.', "Bu vaqt oralığı band yoki ötib ketdi. Boşqasini tanlang.", 'Этот интервал недоступен. Выберите другой.'],
   PRODUCT_NOT_FOUND: ['Маҳсулот топилмади.', 'Mahsulot topilmadi.', 'Товар не найден.'],
+  SAMPLE_NOT_FOR_SALE: ['Бу маҳсулот намуна — сотилмайди.', 'Bu mahsulot namuna — sotilmaydi.', 'Это образец — не продаётся.'],
+  OFFER_NOT_OWNED: ['Бу таклиф сизники эмас.', 'Bu taklif sizniki emas.', 'Это предложение не ваше.'],
+  PARTNER_NOT_APPROVED: ['Фақат тасдиқланган Улгуржи сотувчиси супермаркетга маҳсулот чиқара олади.', 'Faqat tasdiqlangan Ulgurji sotuvçisi supermarketga mahsulot çiqara oladi.', 'Выставлять товары в супермаркет может только одобренный оптовый продавец.'],
   PRODUCT_UNAVAILABLE: ['Маҳсулот ҳозир сотувда йўқ.', "Mahsulot hozir sotuvda yöq.", 'Товар сейчас недоступен.'],
   OUT_OF_STOCK: ['Маҳсулот етарли эмас.', 'Mahsulot yetarli emas.', 'Недостаточно товара.'],
   QTY_STEP_INVALID: ['Миқдор нотўғри.', "Miqdor notöğri.", 'Неверное количество.'],
@@ -283,6 +286,35 @@ function availableSlots(settings, nowMs) {
     today: slots.filter((sl) => today.minutes <= sl.startMin - cutoff).map((sl) => view(sl, today.dateKey)),
     tomorrow: slots.map((sl) => view(sl, tomorrow.dateKey)),
   };
+}
+
+// ══════════════════════ ҲАМКОР МОДЕЛИ (эга 2026-11-28, а-вариант) ══════════════════════
+// AVA'нинг ўз маҳсулоти ЙЎҚ: ҳар таклиф ҲАМКОР (тасдиқланган Улгуржи сотувчиси) ники; харидор «AVA Супермаркет»ни кўради.
+// Оммавий ҳужжатда фақат шаффоф калит smPartnerKey (телефон эмас, 40-банд); ҳақиқий сотувчи — private/partner.
+// Ҳамкорга тўлов КЕЙИНГА қолдирилган: буюртмада orders/{id}/private/partner_lines (кейинги ҳисобот учун), ҳамён ўтказмаси ЙЎҚ.
+const PARTNER_PREFIX = 'ps_';
+const PARTNER_SKU_RE = /^[A-Za-z0-9_-]{1,40}$/;
+const MODERATION = Object.freeze(['pending', 'approved', 'rejected']);
+/** Сотувчи ID → шаффоф калит (соф, детерминистик; 16 hex). */
+function partnerKeyOf(sellerId) {
+  return require('crypto').createHash('sha256').update(`sm_partner|${String(sellerId)}`).digest('hex').slice(0, 16);
+}
+/** Ҳамкор таклифи ID: ps_{калит}_{sku} (соф); нотўғри — ''. */
+function partnerProductId(sellerId, sku) {
+  const s = String(sku || '').trim();
+  if (!PARTNER_SKU_RE.test(s)) return '';
+  const id = `${PARTNER_PREFIX}${partnerKeyOf(sellerId)}_${s}`;
+  return PRODUCT_ID_RE.test(id) ? id : '';
+}
+/** Харидорга кўринадиган ҳолат (соф): модерация тасдиқланмаса — hidden. */
+function effectiveSmStatus(moderation, partnerStatus) {
+  return moderation === 'approved' && SM_STATUSES.includes(partnerStatus) ? partnerStatus : 'hidden';
+}
+/** Ҳамкор ёзуви учун модерация (соф): янги — auto бўйича; рад этилгани қайта ёзилса — pending; бошқаси — ўзгармайди. */
+function nextModeration(cur, autoApprove) {
+  if (!cur || !MODERATION.includes(cur)) return autoApprove ? 'approved' : 'pending';
+  if (cur === 'rejected') return autoApprove ? 'approved' : 'pending';
+  return cur;
 }
 
 /** Таксономиядан олиб ташланаётган гуруҳ id'лари (соф; эга 2026-11-28 «Тоифалар ва гуруҳлар» таҳрирловчиси). */
@@ -583,11 +615,14 @@ function offerSearchTokens({ name, variety, quality, packLabel, group, category 
  */
 function priceSupermarketOrder({ items, products, feeBp, weighHoldPercent }) {
   const lines = [];
+  const partnerLines = [];
   const stockOps = [];
   for (let i = 0; i < items.length; i += 1) {
     const { productId, qMilli } = items[i];
     const d = products[productId];
     if (!d) return { ok: false, code: 'PRODUCT_NOT_FOUND', details: { productId } };
+    // Эга 2026-11-28: эски «AVA» маҳсулотлари — харидорга кўринадиган НАМУНА, сотилмайди.
+    if (d.smSample === true) return { ok: false, code: 'SAMPLE_NOT_FOR_SALE', details: { productId } };
     if (!d.smGroupId || d.smStatus === 'hidden' || (d.smStatus !== 'active' && d.smStatus !== 'out_of_stock')) {
       return { ok: false, code: 'PRODUCT_UNAVAILABLE', details: { productId } };
     }
@@ -621,9 +656,11 @@ function priceSupermarketOrder({ items, products, feeBp, weighHoldPercent }) {
     if (typeof d.packLabel === 'string' && d.packLabel) line.packLabel = d.packLabel;
     lines.push(line);
     stockOps.push({ productId, newStockMilli: available - qMilli });
+    // Ҳамкор қатори (ички, мижозга кўрсатилмайди): калит + ҳамкор нархи — кейинги ҳисоб-китоб учун.
+    if (typeof d.smPartnerKey === 'string' && d.smPartnerKey) partnerLines.push({ productId, partnerKey: d.smPartnerKey, partnerPrice: price, qty: line.qty, total });
   }
   const c = computeCharge(lines, feeBp);
-  return { ok: true, lines, goods: c.goods, extras: c.extras, fee: c.fee, hold: c.target, stockOps };
+  return { ok: true, lines, goods: c.goods, extras: c.extras, fee: c.fee, hold: c.target, stockOps, partnerLines };
 }
 
 /**
@@ -1055,11 +1092,20 @@ function attachSupermarket(exportsObj, deps) {
    * Таклифни ёзиш — ЯГОНА йўл (callable ва Excel импорт): таксономия текшируви, searchTokens, нарх/харид аудити.
    * imp: {batchId, imageSrc} — импортдан; эски (smGroupId'сиз) ҳужжатга импорт ёзмайди (SKU_NOT_SUPERMARKET).
    */
-  async function upsertOfferTx(t, { productId, offer, cost, actor, imp }) {
+  async function upsertOfferTx(t, { productId, offer, cost, actor, imp, partner, autoApprove }) {
     const ref = db.collection(PRODUCTS).doc(productId);
     const costRef = ref.collection('private').doc('cost');
+    const partnerRef = ref.collection('private').doc('partner');
     const taxRef = db.collection(TAXONOMY_DOC[0]).doc(TAXONOMY_DOC[1]);
     const [taxSnap, snap, costSnap] = await Promise.all([t.get(taxRef), t.get(ref), t.get(costRef)]);
+    // Ҳамкор (эга 2026-11-28): фақат ЎЗ таклифи (калит + ID префикси); намунага ва бошқанинг таклифига — рад.
+    if (partner) {
+      const curP = snap.exists ? (snap.data() || {}) : null;
+      const prefix = `${PARTNER_PREFIX}${partner.key}_`;
+      if (!productId.startsWith(prefix) || (curP && (curP.smPartnerKey !== partner.key || curP.smSample === true))) {
+        throw fail('permission-denied', 'OFFER_NOT_OWNED', { productId });
+      }
+    }
     if (!taxSnap.exists) throw fail('failed-precondition', 'TAXONOMY_MISSING');
     const found = findGroup(taxSnap.data() || {}, offer.smGroupId);
     if (!found) throw fail('invalid-argument', 'GROUP_UNKNOWN', { groupId: offer.smGroupId });
@@ -1103,6 +1149,17 @@ function attachSupermarket(exportsObj, deps) {
       patch.smImageSrc = imp.imageSrc || '';
       patch.smImportBatchId = imp.batchId;
     }
+    if (partner) {
+      const moderation = nextModeration(cur && cur.smModeration, autoApprove === true);
+      Object.assign(patch, {
+        smPartnerKey: partner.key, smPartnerStatus: offer.smStatus, smModeration: moderation,
+        smStatus: effectiveSmStatus(moderation, offer.smStatus),
+      });
+      if (cur && cur.smModeration === 'rejected') patch.smModerationReason = '';
+    } else if (cur && cur.smPartnerKey) {
+      // Админ ҳамкор таклифини таҳрирлади (тўлиқ назорат): ҳолат — админники, ҳамкор белгиси сақланади.
+      patch.smPartnerStatus = offer.smStatus;
+    }
     const prevCost = costSnap.exists ? (costSnap.data() || {}) : null;
     const costChanged = !!cost && (!prevCost || prevCost.purchasePrice !== cost.purchasePrice || prevCost.supplier !== cost.supplier);
     // Импорт: ҳеч нарса ўзгармаган қатор — ёзилмайди (қайта юклаш идемпотент, аудит шовқини йўқ).
@@ -1116,7 +1173,8 @@ function attachSupermarket(exportsObj, deps) {
       Object.assign(patch, { active: false, showInMarket: false, featuredOnHome: false, sortOrder: 0, createdAt: ts() });
     }
     t.set(ref, patch, { merge: true });
-    const src = imp ? { source: 'import', batchId: imp.batchId } : {};
+    if (partner && !cur) t.set(partnerRef, { partnerKey: partner.key, sellerId: partner.id, companyName: partner.companyName || '', createdAt: ts() });
+    const src = { ...(imp ? { source: 'import', batchId: imp.batchId } : {}), ...(partner ? { partnerKey: partner.key } : {}) };
     if (priceChanged) {
       t.set(db.collection(ADMIN_AUDIT).doc(), {
         kind: 'supermarket_offer_price', actor, target: `${PRODUCTS}/${productId}`,
@@ -1259,6 +1317,14 @@ function attachSupermarket(exportsObj, deps) {
         const snaps = await Promise.all(refs.map((r) => t.get(r)));
         const products = {};
         snaps.forEach((s, i) => { products[parsed.items[i].productId] = s.exists ? (s.data() || {}) : null; });
+        // Ҳамкор таклифлари: ички сотувчи ID (private/partner) — фақат ёзув учун (ўқиш ёзишдан олдин).
+        const partnerSellers = {};
+        const pRefs = parsed.items.filter((it) => products[it.productId] && products[it.productId].smPartnerKey)
+          .map((it) => refs[parsed.items.indexOf(it)].collection('private').doc('partner'));
+        for (const ps of await Promise.all(pRefs.map((r) => t.get(r)))) {
+          const x = ps.exists ? (ps.data() || {}) : {};
+          if (x.partnerKey && x.sellerId) partnerSellers[x.partnerKey] = x.sellerId;
+        }
         const userSnap = await t.get(userRef);
         const priced = priceSupermarketOrder({ items: parsed.items, products, feeBp, weighHoldPercent });
         if (!priced.ok) throw fail('failed-precondition', priced.code, priced.details);
@@ -1358,6 +1424,13 @@ function attachSupermarket(exportsObj, deps) {
         t.set(orderRef, order);
         // Курьер тўлови нусхаси (эга 2026-11-26) — ИЧКИ харажат (14-банд): мижоз ўқийдиган буюртма ҳужжатида эмас,
         // orders/{id}/private/courier_payout (фақат админ ўқийди, ёзиш фақат CF). Пул тизимда ЮРМАЙДИ.
+        if (priced.partnerLines.length) {
+          // Ҳамкор тўлови КЕЙИНГА қолдирилган (эга 2026-11-28): фақат ёзув — ҳамён/пул ўтказмаси ЙЎҚ.
+          t.set(orderRef.collection('private').doc('partner_lines'), {
+            orderId: orderRef.id, lines: priced.partnerLines.map((l) => ({ ...l, sellerId: partnerSellers[l.partnerKey] || null })),
+            payoutStatus: 'postponed', createdAt: ts(),
+          });
+        }
         t.set(orderRef.collection('private').doc('courier_payout'), {
           ...courierPayoutSnapshot((settings || {}).courierPayout, priced.fee, (settings || {}).version), orderId: orderRef.id, createdAt: ts(),
         });
@@ -1839,7 +1912,126 @@ function attachSupermarket(exportsObj, deps) {
     });
 
   // Ички API (Excel импорт модули учун — таклиф ёзиш йўли ягона бўлсин, 7-банд).
-  return { upsertOfferTx, requireAdmin, fail, runWeeklyReminders };
+  // ── Ҳамкорлар (эга 2026-11-28) ──
+  const SELLERS = 'wholesale_sellers';
+  /** Тасдиқланган Улгуржи сотувчиси (мавжуд identity, 12 ёки эски 9 хонали ҳужжат) → {id, key, companyName}. */
+  async function requirePartner(context) {
+    const uid = callerUidOrThrow(context);
+    for (const id of [uid, uid.slice(3)]) {
+      const snap = await db.collection(SELLERS).doc(id).get();
+      if (!snap.exists) continue;
+      const x = snap.data() || {};
+      if (x.approvalStatus !== 'approved') break;
+      return { id, key: partnerKeyOf(id), companyName: String(x.companyName || '').trim().slice(0, 120) };
+    }
+    throw fail('permission-denied', 'PARTNER_NOT_APPROVED');
+  }
+  async function partnerAutoApprove() {
+    const s = await db.collection(APP_SETTINGS_DOC[0]).doc(APP_SETTINGS_DOC[1]).get();
+    return ((s.data() || {}).supermarketPartnerAutoApprove) === true;
+  }
+
+  /** Ҳамкор ўз таклифини яратади/таҳрирлайди: { sku, offer } (харид нархи/таъминотчи йўқ). */
+  exportsObj.partnerUpsertSupermarketOffer = functions.https.onCall(async (data, context) => {
+    const partner = await requirePartner(context);
+    const productId = partnerProductId(partner.id, data && data.sku);
+    if (!productId) throw fail('invalid-argument', 'OFFER_INVALID', { errors: ['SKU_INVALID sku'] });
+    const offer = trimDeep(data && data.offer);
+    const v = validateOffer(offer);
+    if (!v.ok) throw fail('invalid-argument', 'OFFER_INVALID', { errors: v.errors });
+    const autoApprove = await partnerAutoApprove();
+    let out;
+    try {
+      out = await db.runTransaction((t) => upsertOfferTx(t, { productId, offer, cost: null, actor: partner.id, partner, autoApprove }));
+    } catch (e) {
+      rethrow(e, 'partnerUpsertSupermarketOffer', { partnerKey: partner.key, productId });
+    }
+    log({ action: 'partnerUpsertSupermarketOffer', result: 'ok', partnerKey: partner.key, productId, ...out });
+    return { ok: true, productId, ...out };
+  });
+
+  /** Ҳамкорнинг ўз таклифлари (модерация ҳолати билан). */
+  exportsObj.partnerListSupermarketOffers = functions.https.onCall(async (data, context) => {
+    const partner = await requirePartner(context);
+    const snap = await db.collection(PRODUCTS).where('smPartnerKey', '==', partner.key).limit(1000).get();
+    const prefix = `${PARTNER_PREFIX}${partner.key}_`;
+    return {
+      ok: true,
+      partnerKey: partner.key,
+      offers: snap.docs.map((d) => {
+        const x = d.data() || {};
+        return {
+          productId: d.id, sku: d.id.startsWith(prefix) ? d.id.slice(prefix.length) : d.id, name: x.name || '', price: x.price || 0,
+          stock: x.stock == null ? null : x.stock, unit: x.unit || '', qtyStep: x.qtyStep || null, weighed: x.weighed === true,
+          smGroupId: x.smGroupId || '', smVariety: x.smVariety || null, smQuality: x.smQuality || null, packLabel: x.packLabel || '',
+          packQty: x.packQty == null ? null : x.packQty, packUnit: x.packUnit || null, imageUrl: x.imageUrl || '',
+          smStatus: x.smStatus || 'hidden', smPartnerStatus: x.smPartnerStatus || x.smStatus || 'hidden', smModeration: x.smModeration || 'pending',
+          smModerationReason: x.smModerationReason || '',
+        };
+      }),
+    };
+  });
+
+  /** Админ модерацияси: { productId, decision:'approve'|'reject', reason }. */
+  exportsObj.adminModerateSupermarketOffer = functions.https.onCall(async (data, context) => {
+    const actor = await requireAdmin(context);
+    const productId = String((data && data.productId) || '');
+    const decision = String((data && data.decision) || '');
+    const reason = String((data && data.reason) || '').trim().slice(0, LIMITS.reason);
+    if (!PRODUCT_ID_RE.test(productId) || !['approve', 'reject'].includes(decision)) throw fail('invalid-argument', 'INVALID_REQUEST');
+    if (decision === 'reject' && reason.length < 3) throw fail('invalid-argument', 'INVALID_REQUEST', { field: 'reason' });
+    const ref = db.collection(PRODUCTS).doc(productId);
+    const out = await db.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      if (!snap.exists || !(snap.data() || {}).smPartnerKey) throw fail('not-found', 'PRODUCT_NOT_FOUND', { productId });
+      const x = snap.data();
+      const moderation = decision === 'approve' ? 'approved' : 'rejected';
+      const smStatus = effectiveSmStatus(moderation, x.smPartnerStatus || 'active');
+      t.update(ref, { smModeration: moderation, smModerationReason: decision === 'reject' ? reason : '', smStatus, smModeratedAt: ts(), smModeratedBy: actor, updatedAt: ts() });
+      t.set(db.collection(ADMIN_AUDIT).doc(), { kind: 'supermarket_offer_moderation', actor, target: `${PRODUCTS}/${productId}`, decision, reason, at: ts() });
+      return { moderation, smStatus };
+    });
+    log({ action: 'adminModerateSupermarketOffer', result: 'ok', userId: actor, productId, ...out });
+    return { ok: true, ...out };
+  });
+
+  /** Ҳамкор таклифлари автоматик тасдиқланадими (settings/app.supermarketPartnerAutoApprove; сукут — қўлда). */
+  exportsObj.adminSetSupermarketPartnerAutoApprove = functions.https.onCall(async (data, context) => {
+    const actor = await requireAdmin(context);
+    const enabled = data && data.enabled === true;
+    await db.collection(APP_SETTINGS_DOC[0]).doc(APP_SETTINGS_DOC[1]).set({ supermarketPartnerAutoApprove: enabled }, { merge: true });
+    await db.collection(ADMIN_AUDIT).add({ kind: 'supermarket_partner_auto_approve', actor, enabled, at: ts() });
+    return { ok: true, enabled };
+  });
+
+  /**
+   * Намуна белгиси (эга 2026-11-28): эски «AVA» таклифлари харидорга «Намуна» бўлиб кўринади, СОТИЛМАЙДИ.
+   * { productIds[≤200], sample } — фақат супермаркет таклифи ва ҳамкорники ЭМАС. Аудит.
+   */
+  exportsObj.adminSetSupermarketSample = functions.https.onCall(async (data, context) => {
+    const actor = await requireAdmin(context);
+    const ids = Array.isArray(data && data.productIds) ? data.productIds.map(String) : [];
+    const sample = data && data.sample === true;
+    if (!ids.length || ids.length > 200 || !ids.every((x) => PRODUCT_ID_RE.test(x))) throw fail('invalid-argument', 'INVALID_REQUEST');
+    const res = { updated: 0, skipped: [] };
+    for (const id of [...new Set(ids)]) {
+      const ref = db.collection(PRODUCTS).doc(id);
+      const r = await db.runTransaction(async (t) => {
+        const s = await t.get(ref);
+        const x = s.exists ? (s.data() || {}) : null;
+        if (!x || !x.smGroupId || x.smPartnerKey) return 'skip';
+        if ((x.smSample === true) === sample) return 'same';
+        t.update(ref, { smSample: sample, updatedAt: ts() });
+        t.set(db.collection(ADMIN_AUDIT).doc(), { kind: 'supermarket_offer_sample', actor, target: `${PRODUCTS}/${id}`, sample, at: ts() });
+        return 'ok';
+      });
+      if (r === 'ok') res.updated += 1; else if (r === 'skip') res.skipped.push(id);
+    }
+    log({ action: 'adminSetSupermarketSample', result: 'ok', userId: actor, sample, ...res, skipped: res.skipped.length });
+    return { ok: true, ...res };
+  });
+
+  return { upsertOfferTx, requireAdmin, requirePartner, partnerAutoApprove, fail, runWeeklyReminders };
 }
 
 /** Тизим ўзи «тугади» қилган (stock 0) — admin қўлда қўйган эмас. */
@@ -1868,7 +2060,8 @@ module.exports = {
   attachSupermarket,
   // тоза (тестлар)
   toMilli, fromMilli, lineTotalOf, holdExtraOf, feeBpOf, feeOf, feeConfigFromApp, computeCharge,
-  tashkentParts, availableSlots, gateFromModuleStatus, supermarketGate, removedGroupIds, validateSupermarketTaxonomy, validateSupermarketSettings,
+  tashkentParts, availableSlots, gateFromModuleStatus, supermarketGate, removedGroupIds,
+  partnerKeyOf, partnerProductId, effectiveSmStatus, nextModeration, PARTNER_PREFIX, MODERATION, validateSupermarketTaxonomy, validateSupermarketSettings,
   validateOffer, validateCost, findGroup, offerSearchTokens, priceSupermarketOrder, applyWeights, adjustment,
   buildTaxonomyVersionDocs, isCancelled, trimDeep, messagesOf,
   // 2-босқич

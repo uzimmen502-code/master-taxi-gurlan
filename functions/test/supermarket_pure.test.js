@@ -245,6 +245,26 @@ check('P17 хато хабарлари ва ҳамён изоҳлари — ҳа
   assert.deepStrictEqual(sm.messagesOf('NOPE'), sm.messagesOf('INTERNAL'));
 });
 
+check('P11b ҳамкор модели (эга 2026-11-28): калит шаффоф/детерминистик, ID префикси, ҳолат модерация бўйича, қайта модерация; намуна нишони', () => {
+  const k = sm.partnerKeyOf('998901234567');
+  assert.strictEqual(k, sm.partnerKeyOf('998901234567'));
+  assert.ok(/^[0-9a-f]{16}$/.test(k) && !k.includes('901234567'));
+  assert.notStrictEqual(k, sm.partnerKeyOf('998901234568'));
+  assert.strictEqual(sm.partnerProductId('998901234567', 'kart-1'), `ps_${k}_kart-1`);
+  for (const bad of ['', 'a b', 'x'.repeat(41), 'a/b']) assert.strictEqual(sm.partnerProductId('998901234567', bad), '', bad);
+  assert.deepStrictEqual(['pending', 'rejected', 'approved'].map((m) => sm.effectiveSmStatus(m, 'active')), ['hidden', 'hidden', 'active']);
+  assert.strictEqual(sm.effectiveSmStatus('approved', 'out_of_stock'), 'out_of_stock');
+  assert.strictEqual(sm.effectiveSmStatus('approved', 'weird'), 'hidden');
+  assert.deepStrictEqual([sm.nextModeration(null, false), sm.nextModeration(null, true), sm.nextModeration('rejected', false), sm.nextModeration('approved', false), sm.nextModeration('pending', true)], ['pending', 'approved', 'pending', 'approved', 'pending']);
+  const r = sm.priceSupermarketOrder({ items: [{ productId: 's1', qMilli: 1000 }], products: { s1: { smSample: true, smGroupId: 'g', smStatus: 'active', price: 100, stock: 5 } }, feeBp: 1100, weighHoldPercent: 10 });
+  assert.deepStrictEqual([r.ok, r.code], [false, 'SAMPLE_NOT_FOR_SALE']);
+  const ok = sm.priceSupermarketOrder({ items: [{ productId: 'p1', qMilli: 2000 }], products: { p1: { smPartnerKey: k, smGroupId: 'g', smStatus: 'active', price: 100, stock: 5 } }, feeBp: 1100, weighHoldPercent: 10 });
+  assert.deepStrictEqual(ok.partnerLines, [{ productId: 'p1', partnerKey: k, partnerPrice: 100, qty: 2, total: 200 }]);
+  assert.strictEqual(JSON.stringify(ok.lines).includes(k), false, 'мижоз қаторида ҳамкор калити йўқ');
+  const { isSampleTarget } = require('../tools/mark_supermarket_samples');
+  assert.deepStrictEqual([isSampleTarget({ smGroupId: 'g' }), isSampleTarget({ smGroupId: 'g', smPartnerKey: k }), isSampleTarget({}), isSampleTarget({ smGroupId: 'g', smSample: true }), isSampleTarget({ smGroupId: 'g', smSample: true }, true)], [true, false, false, false, true]);
+});
+
 const passed = results.filter(Boolean).length;
 console.log(`\n${passed}/${results.length} passed`);
 process.exit(passed === results.length ? 0 : 1);

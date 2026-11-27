@@ -284,20 +284,30 @@ function attachSupermarketImport(exportsObj, deps) {
     return buf;
   }
 
-  async function analyse(buf) {
+  /** partner — {id, key} (эга 2026-11-28: ҳамкор импорти) ёки null (админ). Ҳамкор SKU'си ps_{калит}_{sku} га, харид нархи эътиборсиз. */
+  async function analyse(buf, partner = null) {
     const parsed = await X.parseXlsx(buf);
     if (!parsed.ok) return { fileError: parsed.code, rows: [] };
     const taxSnap = await db.collection(sm.TAXONOMY_DOC[0]).doc(sm.TAXONOMY_DOC[1]).get();
     if (!taxSnap.exists) return { fileError: 'TAXONOMY_MISSING', rows: [] };
     const v = validateSheet(parsed.sheet, taxSnap.data() || {});
     if (v.fileError) return v;
-    const withSku = v.rows.filter((r) => r.sku && sm.PRODUCT_ID_RE.test(r.sku) && !r.errors.includes('SKU_DUPLICATE'));
-    const snaps = withSku.length ? await db.getAll(...withSku.map((r) => db.collection('platform_products').doc(r.sku))) : [];
+    for (const r of v.rows) {
+      r.productId = r.sku;
+      if (partner) {
+        r.cost = null;
+        r.productId = sm.partnerProductId(partner.id, r.sku);
+        if (!r.productId && !r.errors.includes('SKU_INVALID')) r.errors.push('SKU_INVALID');
+      }
+    }
+    const withSku = v.rows.filter((r) => r.productId && sm.PRODUCT_ID_RE.test(r.productId) && !r.errors.includes('SKU_DUPLICATE'));
+    const snaps = withSku.length ? await db.getAll(...withSku.map((r) => db.collection('platform_products').doc(r.productId))) : [];
     const existing = new Map();
     snaps.forEach((s, i) => existing.set(withSku[i].row, s.exists ? (s.data() || {}) : null));
     for (const r of v.rows) {
       const e = existing.get(r.row);
       if (e && !e.smGroupId) r.errors.push('SKU_NOT_SUPERMARKET');
+      if (partner && e && (e.smPartnerKey !== partner.key || e.smSample === true)) r.errors.push('SKU_NOT_OWNED');
       r.action = e ? 'update' : 'create';
     }
     return { rows: v.rows };
@@ -317,9 +327,25 @@ function attachSupermarketImport(exportsObj, deps) {
     return { fileName: 'ava_supermarket_offers.xlsx', base64: (await buildTemplate()).toString('base64') };
   });
 
-  exportsObj.adminSupermarketImportPreview = functions.runWith({ timeoutSeconds: 120, memory: '1GB' }).https.onCall(async (data, context) => {
+  exportsObj.adminSupermarketImportPreview = functions.runWith({ timeoutSeconds: 120, memory: '1GB' }).https.onCall(async (data, context) =>
+    previewFor(await requireAdmin(context), null, data));
+
+  /** Ҳамкор (тасдиқланган Улгуржи сотувчиси) — ўз таклифлари учун ўша импорт (эга 2026-11-28). */
+  exportsObj.partnerSupermarketImportTemplate = functions.https.onCall(async (data, context) => {
+    await smApi.requirePartner(context);
+    return { fileName: 'ava_supermarket_partner.xlsx', base64: (await buildTemplate()).toString('base64') };
+  });
+  exportsObj.partnerSupermarketImportPreview = functions.runWith({ timeoutSeconds: 120, memory: '1GB' }).https.onCall(async (data, context) => {
+    const partner = await smApi.requirePartner(context);
+    return previewFor(partner.id, partner, data);
+  });
+  exportsObj.partnerSupermarketImportConfirm = functions.runWith({ timeoutSeconds: 540, memory: '1GB' }).https.onCall(async (data, context) => {
+    const partner = await smApi.requirePartner(context);
+    return confirmFor(partner.id, partner, data);
+  });
+
+  async function previewFor(actor, partner, data) {
     const started = now();
-    const actor = await requireAdmin(context);
     const d = data || {};
     const clientRequestId = String(d.clientRequestId || '').trim();
     if (!REQ_RE.test(clientRequestId)) throw fail('invalid-argument', 'REQUEST_ID_INVALID');
@@ -331,23 +357,24 @@ function attachSupermarketImport(exportsObj, deps) {
     const buf = decodeFile(d.fileBase64);
     const fileName = String(d.fileName || 'import.xlsx').slice(0, 120);
     const fileSha256 = crypto.createHash('sha256').update(buf).digest('hex');
-    const a = await analyse(buf);
+    const a = await analyse(buf, partner);
     if (a.fileError) {
-      await batchRef.set({ actor, fileName, fileSha256, fileBytes: buf.length, clientRequestId, status: 'rejected', fileError: a.fileError, missing: a.missing || [], createdAt: ts() });
+      await batchRef.set({ actor, ...(partner ? { partnerKey: partner.key } : {}), fileName, fileSha256, fileBytes: buf.length, clientRequestId, status: 'rejected', fileError: a.fileError, missing: a.missing || [], createdAt: ts() });
       log({ action: 'preview', userId: actor, batchId, result: a.fileError, duration: now() - started });
       throw fail('invalid-argument', a.fileError, { missing: a.missing || [] });
     }
     const storagePath = `${BATCHES}/${batchId}.xlsx`;
     await store.saveFile(storagePath, buf, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     const preview = { counts: countsOf(a.rows), rows: a.rows.map(compactRow) };
-    await batchRef.set({ actor, fileName, fileSha256, fileBytes: buf.length, storagePath, clientRequestId, status: 'previewed', preview, createdAt: ts(), createdAtMs: now() });
-    log({ action: 'preview', userId: actor, batchId, result: 'ok', counts: preview.counts, duration: now() - started });
+    await batchRef.set({ actor, ...(partner ? { partnerKey: partner.key } : {}), fileName, fileSha256, fileBytes: buf.length, storagePath, clientRequestId, status: 'previewed', preview, createdAt: ts(), createdAtMs: now() });
+    log({ action: 'preview', userId: partner ? partner.key : actor, batchId, result: 'ok', counts: preview.counts, duration: now() - started });
     return { batchId, duplicate: false, ...preview };
-  });
+  }
 
   /** Битта қатор: расм (керак бўлса) → upsertOfferTx (ягона ёзиш йўли). */
   async function writeRow(r, ctx) {
-    const ref = db.collection('platform_products').doc(r.sku);
+    const pid = r.productId || r.sku;
+    const ref = db.collection('platform_products').doc(pid);
     const pre = await ref.get();
     const cur = pre.exists ? (pre.data() || {}) : null;
     if (cur && !cur.smGroupId) return { status: 'error', codes: ['SKU_NOT_SUPERMARKET'] };
@@ -360,7 +387,7 @@ function attachSupermarketImport(exportsObj, deps) {
       } else {
         try {
           const jpeg = await processImage(r.imageSource);
-          newUrl = await store.saveImage(`${IMAGE_PREFIX}${R.imageObjectName(r.sku, r.imageSource)}`, jpeg);
+          newUrl = await store.saveImage(`${IMAGE_PREFIX}${R.imageObjectName(pid, r.imageSource)}`, jpeg);
         } catch (e) {
           return { status: 'error', codes: [e && e.code && /^IMAGE_/.test(e.code) ? e.code : 'IMAGE_FETCH_FAILED'] };
         }
@@ -370,19 +397,24 @@ function attachSupermarketImport(exportsObj, deps) {
     }
     let res;
     try {
-      res = await db.runTransaction((t) => smApi.upsertOfferTx(t, { productId: r.sku, offer, cost: r.cost, actor: ctx.actor, imp: { batchId: ctx.batchId, imageSrc } }));
+      res = await db.runTransaction((t) => smApi.upsertOfferTx(t, {
+        productId: pid, offer, cost: ctx.partner ? null : r.cost, actor: ctx.actor, imp: { batchId: ctx.batchId, imageSrc },
+        partner: ctx.partner || undefined, autoApprove: ctx.autoApprove,
+      }));
     } catch (e) {
       return { status: 'error', codes: [(e && e.details && e.details.code) || 'WRITE_FAILED'] };
     }
     if (newUrl && cur && cur.imageUrl && cur.imageUrl !== newUrl) {
-      try { await store.deleteByUrl(cur.imageUrl, `${IMAGE_PREFIX}${r.sku}_`); } catch (_) { /* best-effort */ }
+      try { await store.deleteByUrl(cur.imageUrl, `${IMAGE_PREFIX}${pid}_`); } catch (_) { /* best-effort */ }
     }
     return { status: res.unchanged ? 'unchanged' : (res.created ? 'created' : 'updated'), priceChanged: res.priceChanged };
   }
 
-  exportsObj.adminSupermarketImportConfirm = functions.runWith({ timeoutSeconds: 540, memory: '1GB' }).https.onCall(async (data, context) => {
+  exportsObj.adminSupermarketImportConfirm = functions.runWith({ timeoutSeconds: 540, memory: '1GB' }).https.onCall(async (data, context) =>
+    confirmFor(await requireAdmin(context), null, data));
+
+  async function confirmFor(actor, partner, data) {
     const started = now();
-    const actor = await requireAdmin(context);
     const batchId = String((data || {}).batchId || '');
     if (!BATCH_RE.test(batchId)) throw fail('invalid-argument', 'BATCH_NOT_FOUND');
     const batchRef = db.collection(BATCHES).doc(batchId);
@@ -390,6 +422,8 @@ function attachSupermarketImport(exportsObj, deps) {
       const s = await t.get(batchRef);
       if (!s.exists) throw fail('not-found', 'BATCH_NOT_FOUND');
       const b = s.data() || {};
+      // Ҳамкор — фақат ЎЗ партияси; админ — ҳамкор партиясини тасдиқламайди (ёзув эгаси аралашмасин).
+      if ((b.partnerKey || null) !== (partner ? partner.key : null)) throw fail('not-found', 'BATCH_NOT_FOUND');
       if (b.status === 'done') return { done: true, b };
       if (!['previewed', 'partial', 'processing'].includes(b.status)) throw fail('failed-precondition', 'BATCH_NOT_FOUND');
       if (b.status === 'previewed' && now() - Number(b.createdAtMs || 0) > R.LIMITS.batchTtlMs) throw fail('failed-precondition', 'BATCH_EXPIRED');
@@ -403,7 +437,7 @@ function attachSupermarketImport(exportsObj, deps) {
     try {
       const buf = await store.readFile(b.storagePath);
       if (crypto.createHash('sha256').update(buf).digest('hex') !== b.fileSha256) throw fail('failed-precondition', 'FILE_CHANGED');
-      const a = await analyse(buf);
+      const a = await analyse(buf, partner);
       if (a.fileError) throw fail('invalid-argument', a.fileError);
       rows = a.rows;
     } catch (e) {
@@ -414,7 +448,7 @@ function attachSupermarketImport(exportsObj, deps) {
     for (const r of rows) if (r.errors.length) rowStatus[r.row] = { status: 'error', codes: r.errors };
     const todo = rows.filter((r) => !r.errors.length && !(rowStatus[r.row] && TERMINAL.has(rowStatus[r.row].status)));
     const deadline = started + CONFIRM_BUDGET_MS;
-    const ctx = { batchId, actor };
+    const ctx = { batchId, actor, partner, autoApprove: partner ? await smApi.partnerAutoApprove() : undefined };
     await pool(todo, ROW_CONCURRENCY, async (r) => {
       if (now() > deadline) return;
       try {
@@ -439,9 +473,9 @@ function attachSupermarketImport(exportsObj, deps) {
         kind: 'supermarket_import', actor, target: `${BATCHES}/${batchId}`, counts, fileSha256: b.fileSha256, at: ts(),
       });
     }
-    log({ action: 'confirm', batchId, userId: actor, result: status, counts, duration: now() - started });
+    log({ action: 'confirm', batchId, userId: partner ? partner.key : actor, result: status, counts, duration: now() - started });
     return { batchId, status, duplicate: false, ...result };
-  });
+  }
 }
 
 module.exports = {

@@ -1830,9 +1830,9 @@ service cloud.firestore {
       // `private/secrets` — pickupCode: фақат ресторан / бизнес сотувчиси (курьерга оғзаки
       // айтади) ва админ; мижоз ва курьер ўқимайди.
       // `private/courier_payout` — супермаркет курьер тўлови нусхаси + «тўланди» белгиси (ИЧКИ харажат, 14-банд):
-      // фақат админ ўқийди; ёзиш фақат CF.
+      // фақат админ ўқийди; ёзиш фақат CF. private/partner_lines — ҳамкор қаторлари (эга 2026-11-28) — фақат админ.
       match /private/{doc} {
-        allow read: if isAdmin() || (doc != 'courier_payout' && ((
+        allow read: if isAdmin() || (doc != 'courier_payout' && doc != 'partner_lines' && ((
             isAuth()
             && restaurantOrderParent().get('restaurantId', '') != ''
             && isRestaurantMember(restaurantOrderParent().get('restaurantId', ''))
@@ -1929,7 +1929,9 @@ service cloud.firestore {
     function smServerFields() {
       return ['smGroupId', 'smCategoryId', 'smVariety', 'smQuality', 'packLabel', 'packQty', 'packUnit', 'qtyStep',
               'weighed', 'stock', 'smStatus', 'smAutoOutOfStock', 'priceUpdatedAt', 'searchTokens',
-              'smImageSrc', 'smImportBatchId'];
+              'smImageSrc', 'smImportBatchId',
+              // Эга 2026-11-28: ҳамкор модели ва намуна — фақат CF.
+              'smSample', 'smPartnerKey', 'smPartnerStatus', 'smModeration', 'smModerationReason', 'smModeratedAt', 'smModeratedBy'];
     }
     match /platform_products/{id} {
       allow read: if true;

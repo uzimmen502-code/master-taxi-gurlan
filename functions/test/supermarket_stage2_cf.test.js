@@ -18,6 +18,7 @@ const functions = require('firebase-functions');
 const ExcelJS = require('exceljs');
 const { attachSupermarket } = require('../supermarket');
 const SI = require('../supermarket_import');
+const SM = require('../supermarket');
 const { USER_SUBCOLLECTIONS } = require('../account_deletion');
 const TAX2 = require('../tools/data/supermarket_taxonomy_v2.json');
 const SETTINGS = require('../tools/data/supermarket_settings_v1.json');
@@ -345,6 +346,26 @@ async function main() {
     await expectCode(icall('adminSupermarketImportPreview', { fileBase64: Buffer.from('hello').toString('base64'), clientRequestId: 'imp-e-000001' }, ADMIN), 'FILE_NOT_XLSX');
   });
 
+  await check('I9 ҳамкор импорти (эга 2026-11-28): фақат тасдиқланган Улгуржи сотувчиси; SKU ўз калитига (ps_…), харид нархи эътиборсиз, модерация pending → hidden; бегона партия/SKU — рад', async () => {
+    const PA = '998913000011';
+    await db.doc(`wholesale_sellers/${PA}`).set({ approvalStatus: 'approved', companyName: 'Ферма', districtId: 'gurlan' });
+    const rowsP = [
+      { sku: 'p-onion-1', groupId: 'onion', price: 4100, stock: 30, purchasePrice: 999, supplier: 'x' },
+      { sku: 'potato_local_1', groupId: 'potato', price: 1, stock: 1 },
+    ];
+    const fileBase64 = await xlsxB64(rowsP);
+    await assert.rejects(icall('partnerSupermarketImportPreview', { fileBase64, clientRequestId: 'pimp-000001' }, USER), (e) => e.details && e.details.code === 'PARTNER_NOT_APPROVED');
+    const pv = await icall('partnerSupermarketImportPreview', { fileName: 'p.xlsx', fileBase64, clientRequestId: 'pimp-000001' }, PA);
+    assert.deepStrictEqual([pv.counts.create, pv.counts.errors], [2, 0], 'potato_local_1 — бошқа (ps_) ID, админникига тегмайди');
+    await assert.rejects(icall('adminSupermarketImportConfirm', { batchId: pv.batchId }, ADMIN), (e) => e.code === 'not-found');
+    const c = await icall('partnerSupermarketImportConfirm', { batchId: pv.batchId }, PA);
+    assert.deepStrictEqual([c.status, c.counts.created], ['done', 2]);
+    const key = SM.partnerKeyOf(PA);
+    const d = await get(`platform_products/ps_${key}_p-onion-1`);
+    assert.deepStrictEqual([d.smPartnerKey, d.smModeration, d.smStatus, d.smPartnerStatus, d.price], [key, 'pending', 'hidden', 'active', 4100]);
+    assert.strictEqual((await db.doc(`platform_products/ps_${key}_p-onion-1/private/cost`).get()).exists, false, 'ҳамкор харид нархи ёзилмайди');
+    assert.strictEqual((await get('platform_products/potato_local_1')).price, 5000, 'админ таклифи ўзгармади');
+  });
   const passed = results.filter(Boolean).length;
   console.log(`\n${passed}/${results.length} passed`);
   process.exit(passed === results.length ? 0 : 1);

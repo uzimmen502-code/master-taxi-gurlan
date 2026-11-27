@@ -331,6 +331,61 @@ async function main() {
     assert.strictEqual(r2.changed, true);
   });
 
+  await check('C15 ҳамкор модели (эга 2026-11-28): тасдиқланган Улгуржи сотувчиси ўз таклифини яратади (модерация → hidden), админ тасдиқлайди → сотувда; бегона — рад; буюртмада private/partner_lines (тўловсиз); намуна сотилмайди', async () => {
+    const P1 = '998913000001';
+    const P2 = '998913000002';
+    await db.doc(`wholesale_sellers/${P1}`).set({ approvalStatus: 'approved', companyName: 'Деҳқон ММ', districtId: 'gurlan' });
+    await db.doc(`wholesale_sellers/${P2}`).set({ approvalStatus: 'pending', companyName: 'X' });
+    await db.doc(`users/${P1}`).set({ role: 'user', districtId: 'gurlan' });
+    const offer = { smGroupId: 'potato', smVariety: variety('red', 'Қизил', 'Qizil', 'Красный'), stock: 50, smStatus: 'active', price: 6000 };
+    await expectCode(call('partnerUpsertSupermarketOffer', { sku: 'kart-1', offer }, P2), 'PARTNER_NOT_APPROVED');
+    await expectCode(call('partnerUpsertSupermarketOffer', { sku: 'bad sku!', offer }, P1), 'OFFER_INVALID');
+    const r = await call('partnerUpsertSupermarketOffer', { sku: 'kart-1', offer }, P1);
+    const pid = r.productId;
+    assert.ok(pid.startsWith('ps_') && !pid.includes(P1), 'ID ичида телефон йўқ');
+    let d = await get(`platform_products/${pid}`);
+    assert.deepStrictEqual([d.smModeration, d.smStatus, d.smPartnerStatus, d.active, d.smPartnerKey.length], ['pending', 'hidden', 'active', false, 16]);
+    assert.strictEqual(JSON.stringify(d).includes(P1), false, 'оммавий ҳужжатда сотувчи телефони йўқ');
+    assert.deepStrictEqual((await get(`platform_products/${pid}/private/partner`)).sellerId, P1);
+    await expectCode(call('placeSupermarketOrder', order('req-pt-000001', [{ productId: pid, qty: 1 }]), USER), 'PRODUCT_UNAVAILABLE');
+    const list = await call('partnerListSupermarketOffers', {}, P1);
+    assert.deepStrictEqual([list.offers.length, list.offers[0].sku, list.offers[0].smModeration], [1, 'kart-1', 'pending']);
+    await assert.rejects(call('adminModerateSupermarketOffer', { productId: pid, decision: 'approve' }, USER), (e) => e.code === 'permission-denied');
+    await expectCode(call('adminModerateSupermarketOffer', { productId: pid, decision: 'reject', reason: 'x' }, ADMIN), 'INVALID_REQUEST');
+    await call('adminModerateSupermarketOffer', { productId: pid, decision: 'reject', reason: 'Расм йўқ' }, ADMIN);
+    d = await get(`platform_products/${pid}`);
+    assert.deepStrictEqual([d.smModeration, d.smStatus, d.smModerationReason], ['rejected', 'hidden', 'Расм йўқ']);
+    await call('partnerUpsertSupermarketOffer', { sku: 'kart-1', offer: { ...offer, price: 6500 } }, P1); // қайта ёзиш — яна навбатга
+    d = await get(`platform_products/${pid}`);
+    assert.deepStrictEqual([d.smModeration, d.smModerationReason, d.price], ['pending', '', 6500]);
+    await call('adminModerateSupermarketOffer', { productId: pid, decision: 'approve' }, ADMIN);
+    assert.strictEqual((await get(`platform_products/${pid}`)).smStatus, 'active');
+    // Бошқа ҳамкор/админ ID'си — рад.
+    await db.doc(`wholesale_sellers/${P2}`).update({ approvalStatus: 'approved' });
+    const r3 = await call('partnerUpsertSupermarketOffer', { sku: 'kart-1', offer }, P2); // ўша SKU — P2 нинг ЎЗ калити билан бошқа ҳужжат
+    assert.notStrictEqual(r3.productId, pid);
+    assert.strictEqual((await get(`platform_products/${pid}`)).price, 6500, 'P1 таклифи ўзгармади');
+    // Буюртма: ҳамкор қаторлари фақат private'да, тўлов ЙЎҚ.
+    await db.doc('users/912000001').update({ bonusBalance: 500000 });
+    const o = await call('placeSupermarketOrder', order('req-pt-000002', [{ productId: pid, qty: 2 }, { productId: 'potato_1', qty: 1 }]), USER);
+    const od = await get(`orders/${o.orderId}`);
+    assert.strictEqual(JSON.stringify(od).includes(P1), false, 'мижоз буюртмасида сотувчи йўқ');
+    const pl = await get(`orders/${o.orderId}/private/partner_lines`);
+    assert.deepStrictEqual([pl.payoutStatus, pl.lines.length, pl.lines[0].productId, pl.lines[0].sellerId, pl.lines[0].partnerPrice, pl.lines[0].qty, pl.lines[0].total], ['postponed', 1, pid, P1, 6500, 2, 13000]);
+    assert.strictEqual((await get(`users/${P1}`)).bonusBalance, undefined, 'ҳамкорга пул ўтказилмади');
+    // Автоматик тасдиқ ёқилса — дарҳол сотувда.
+    await call('adminSetSupermarketPartnerAutoApprove', { enabled: true }, ADMIN);
+    const r2 = await call('partnerUpsertSupermarketOffer', { sku: 'kart-2', offer }, P1);
+    assert.deepStrictEqual([(await get(`platform_products/${r2.productId}`)).smModeration, (await get(`platform_products/${r2.productId}`)).smStatus], ['approved', 'active']);
+    await call('adminSetSupermarketPartnerAutoApprove', { enabled: false }, ADMIN);
+    // Намуна: сотилмайди; ҳамкор таклифини намуна қилиб бўлмайди.
+    const smp = await call('adminSetSupermarketSample', { productIds: ['potato_1', pid], sample: true }, ADMIN);
+    assert.deepStrictEqual([smp.updated, smp.skipped], [1, [pid]]);
+    await expectCode(call('placeSupermarketOrder', order('req-pt-000003', [{ productId: 'potato_1', qty: 1 }]), USER), 'SAMPLE_NOT_FOR_SALE');
+    await call('adminSetSupermarketSample', { productIds: ['potato_1'], sample: false }, ADMIN);
+    assert.strictEqual((await get('platform_products/potato_1')).smSample, false);
+  });
+
   const passed = results.filter(Boolean).length;
   console.log(`\n${passed}/${results.length} passed`);
   process.exit(passed === results.length ? 0 : 1);

@@ -72,6 +72,9 @@ String walletLedgerTitle(WalletLedgerEntry e, WalletTr tr) {
       return tr('wlt_l_admin_adjust');
     case 'birthday_bonus':
       return tr('wlt_l_birthday');
+    // «Автомобил суғуртаси» агент бекор қилди (functions/car_insurance.js, эга 2026-11-28).
+    case 'insurance_cancel_refund':
+      return tr('wlt_l_insurance_cancel_refund');
     default:
       if (module.isNotEmpty) return module;
       return e.type.isEmpty ? tr('wlt_l_operation') : e.type;
@@ -139,6 +142,8 @@ String _moduleLabel(String module, WalletTr tr) {
     case 'taxi-core':
     case 'taxi':
       return tr('wlt_m_taxi');
+    case 'insurance':
+      return tr('wlt_m_insurance');
     default:
       return module;
   }

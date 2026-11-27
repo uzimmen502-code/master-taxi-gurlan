@@ -8,6 +8,7 @@ import '../core/service_config_holder.dart';
 import '../core/utils/formatters.dart';
 import '../features/home/home_module_gate.dart';
 import '../features/business_orders/courier/business_nearby_orders_screen.dart';
+import '../features/car_insurance/widgets/car_insurance_home_section.dart' show openCarInsuranceWith;
 import '../features/business_orders/screens/business_order_screen.dart';
 import '../features/business_orders/screens/seller_business_orders_screen.dart';
 import '../features/chat/screens/chat_screen.dart';
@@ -125,6 +126,14 @@ class PushNavigation {
   /// кетадиган навбат хабари (`screen: 'news'`) бунга кирмайди.
   @visibleForTesting
   static bool opensWallet(String screen) => screen == 'wallet';
+
+  /// Суғурта push'и (`screen: car_insurance`, `type: insurance_*`) мижоз экранини очадими. `insurance_agent_new` — йўқ.
+  @visibleForTesting
+  static bool carInsurancePushOpensScreen(Map<String, String> data) {
+    final type = (data['type'] ?? '').trim();
+    if (type == 'insurance_agent_new') return false;
+    return (data['screen'] ?? '').trim() == 'car_insurance' || type.startsWith('insurance_');
+  }
 
   /// Улгуржи буюртма push'и бўлса — `orderId` (Firestore ID шакли), акс ҳолда `null`.
   @visibleForTesting
@@ -246,6 +255,17 @@ class PushNavigation {
     if (family == 'supermarket') {
       if (_moduleOpen(nav, 'supermarket')) await openSupermarketWith(nav);
       return;
+    }
+
+    // «Автомобил суғуртаси» (эга 2026-11-28, functions/car_insurance.js `notify`): эслатма D-4/D-3, тўланди, полис
+    // берилди, бекор, бонус, мой → суғурта экрани. Агентга «янги ариза» — Хабарлар (агент админ панелда ишлайди).
+    if (carInsurancePushOpensScreen(data)) {
+      final prefs = await SharedPreferences.getInstance();
+      final phone = canonicalPhoneId(prefs.getString('user_phone') ?? '');
+      if (phone.isNotEmpty && nav.mounted) {
+        await openCarInsuranceWith(nav, phone);
+        return;
+      }
     }
 
     if (type == 'device_transfer_request' || screen == 'device_transfer') {

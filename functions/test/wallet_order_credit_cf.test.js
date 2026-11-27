@@ -51,8 +51,10 @@ async function reset() {
     'wallet_idempotency', ledger.COL_JOURNAL, ledger.COL_ACCOUNTS].map(wipe));
   // «Овқат» модули олиб ташланди (2026-10-11) — ҳамён текширувлари энди
   // улгуржи буюртмасида; етказиш фоизи 0, жами = маҳсулот нархи.
+  // T-3 (эга 2026-11-28): нарх версиясини сервер танлайди (доим поғонали). Ҳамён текширувлари
+  // поғонага боғлиқ бўлмасин — «янги» маҳсулот (createdAt кесишдан кейин, поғонасиз) = ягона нарх.
   await db.collection('platform_products').doc('plov')
-      .set({ name: 'Plov', price: PLOV_PRICE, unit: 'porsiya' });
+      .set({ name: 'Plov', price: PLOV_PRICE, unit: 'porsiya', createdAt: new Date('2026-11-01T00:00:00Z') });
   await db.collection('settings').doc('app').set({ platformDeliveryFeePercent: 0 });
   await db.collection('users').doc(BUYER).set({ role: 'user', phone: BUYER, bonusBalance: 50000 });
   await db.collection('users').doc(VICTIM).set({ role: 'user', phone: VICTIM, bonusBalance: 200000 });

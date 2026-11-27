@@ -28,10 +28,19 @@
  *   2 — pog'onali (1.0.33+ ilova yuboradi).
  * Minimal versiya darvozasi (`config/app_version`) eski ilovalarni
  * yangilatgach, 1-versiya yo'li olib tashlanadi.
+ *
+ * T-3 (takrorlanishlar auditi 2026-11-28, ega 2026-11-28; 18-qoida «klientga ishonma»):
+ * buyurtma narxining versiyasini SERVER hal qiladi — `SERVER_PRICING_VERSION`. Klient yuborgan
+ * `pricingVersion` e'tiborsiz (o'zgartirilgan klient 1–9 dona +5 % yoki admin pog'onasini
+ * chetlab o'tolmaydi). Pog'onasi bor tovarda pog'ona DOIM qo'llanadi. Eski ilova so'rovi rad
+ * etilmaydi (maydon shunchaki e'tiborsiz). `unitPriceForQty` ning 3-argumenti paritet vektorlari
+ * (Dart `price_tier.dart`) uchun saqlanadi; server buyurtma yo'li uni faqat shu konstanta bilan chaqiradi.
  */
 
 const PRICING_VERSION_LEGACY = 1;
 const PRICING_VERSION_TIERED = 2;
+/** T-3: server buyurtma/oldindan hisob yo'li ishlatadigan YAGONA versiya. */
+const SERVER_PRICING_VERSION = PRICING_VERSION_TIERED;
 
 /**
  * Hisoblangan (+5% / −5%) pog'onalar FAQAT ESKI tovarlarga (ega qarori,
@@ -130,6 +139,7 @@ function unitPriceForQty(product, qty, pricingVersion) {
 module.exports = {
   PRICING_VERSION_LEGACY,
   PRICING_VERSION_TIERED,
+  SERVER_PRICING_VERSION,
   MID_MIN_QTY,
   HIGH_MIN_QTY,
   LOW_MARKUP_PCT,

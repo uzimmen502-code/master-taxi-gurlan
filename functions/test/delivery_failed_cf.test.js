@@ -94,7 +94,8 @@ async function reset() {
   await db.collection('users').doc(C2).set({ role: 'user', phone: C2, bonusBalance: 500000 });
   await seedCourier(A);
   await seedCourier(B);
-  await db.collection('platform_products').doc('plov').set({ name: 'Plov', price: PRICE, unit: 'porsiya', totalStock: 100, soldToday: 0 });
+  // T-3 (эга 2026-11-28): нарх версиясини сервер танлайди (доим поғонали) — «янги» поғонасиз маҳсулот = ягона нарх.
+  await db.collection('platform_products').doc('plov').set({ name: 'Plov', price: PRICE, unit: 'porsiya', totalStock: 100, soldToday: 0, createdAt: new Date('2026-11-01T00:00:00Z') });
   await db.collection('settings').doc('app').set({ platformDeliveryFeePercent: FEE_PCT });
 }
 

@@ -3119,12 +3119,21 @@ function resolvePaymentMethod(lines) {
 /**
  * Платформа дўкони: нарх `platform_products` дан (клиент нархи эътиборсиз).
  *
- * `pricingVersion` 2 (1.0.33+ илова) — улгуржи поғоналари
- * (`platform_pricing.js`, эга қарори 2026-10-06): базадаги нарх 10–50
- * дона, 1–9 +5%, 50+ −5%. Версиясиз (эски илова) — эски ягона `price`,
- * чунки эски илова фойдаланувчига шу нархни кўрсатади.
+ * Улгуржи поғоналари (`platform_pricing.js`, эга қарори 2026-10-06): базадаги
+ * нарх 10–50 дона, 1–9 +5%, 50+ −5% (ёки админ поғоналари).
+ * T-3 (эга 2026-11-28): нарх версиясини СЕРВЕР танлайди
+ * (`platformPricing.SERVER_PRICING_VERSION`); клиент `pricingVersion` эътиборсиз —
+ * фақат диагностика логи. Натижада `pricingVersion` қайтади (буюртмага ёзилади).
  */
-async function repricePlatformOrderFromCatalog(itemsIn, pricingVersion) {
+async function repricePlatformOrderFromCatalog(itemsIn, clientPricingVersion) {
+  const pricingVersion = platformPricing.SERVER_PRICING_VERSION;
+  if (clientPricingVersion !== undefined && clientPricingVersion !== null
+      && Number(clientPricingVersion) !== pricingVersion) {
+    console.warn(JSON.stringify({
+      action: 'repricePlatformOrder', result: 'overridden', errorCode: 'PRICING_VERSION_CLIENT_IGNORED',
+      clientPricingVersion: String(clientPricingVersion).slice(0, 8), serverPricingVersion: pricingVersion,
+    }));
+  }
   const raw = Array.isArray(itemsIn) ? itemsIn : [];
   if (raw.length < 1 || raw.length > 40) {
     throw new functions.https.HttpsError('invalid-argument', 'items 1..40');
@@ -3209,7 +3218,7 @@ async function repricePlatformOrderFromCatalog(itemsIn, pricingVersion) {
   if (total <= 0) {
     throw new functions.https.HttpsError('invalid-argument', 'invalid order total');
   }
-  return { items, total, decrements };
+  return { items, total, decrements, pricingVersion };
 }
 
 function breadTypeNorm(raw) {
@@ -3529,6 +3538,8 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
   let platformDeliveryFee = null;
   let platformDeliveryFeePercent = null;
   let platformDeliveryFeeVersion = null;
+  // T-3: platform buyurtma narx versiyasi — SERVER tanlaydi (repricePlatformOrderFromCatalog).
+  let platformPricingVersion = null;
   if (orderType === 'bread') {
     const priced = await repriceBreadOrderFromCatalog(orderBase);
     pricedItems = priced.items;
@@ -3543,6 +3554,7 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
     pricedItems = priced.items;
     serverTotal = priced.total;
     catalogDecs = priced.decrements;
+    platformPricingVersion = priced.pricingVersion;
     const appSettings = await db.collection('settings').doc('app').get();
     const fee = platformDeliveryFeeFromSettings(appSettings.data() || {}, serverTotal);
     platformItemsTotal = serverTotal;
@@ -3775,11 +3787,9 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
       }
       // 9-қоида: буюртма қайси нарх қоидаси билан ҳисобланганини сақлайди —
       // қоида кейин ўзгарса, эски буюртма нархи «кўчиб» кетмасин.
+      // T-3 (эга 2026-11-28): версия клиентдан эмас — сервер ҳисоблаган қиймат.
       if (orderType === 'platform') {
-        orderPayload.pricingVersion =
-            Number(orderBase.pricingVersion) >= platformPricing.PRICING_VERSION_TIERED
-              ? platformPricing.PRICING_VERSION_TIERED
-              : platformPricing.PRICING_VERSION_LEGACY;
+        orderPayload.pricingVersion = platformPricingVersion;
       }
     }
     Object.assign(orderPayload, geoReportStamp(userData));

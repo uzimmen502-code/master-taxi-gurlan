@@ -25,9 +25,11 @@ const ADMIN = '998901112233';
 
 function clip(extra = {}) {
   return {
-    videoUrl: 'https://example.com/v.mp4', posterUrl: '', title: 'Non', price: 35000, districtId: 'gurlan',
+    // Jonli rules (HIGH-1, 2026-10-31): video faqat egasining tv_clips/<ownerPhone>/ papkasidan;
+    // createdAt == request.time (2026-11-02).
+    videoUrl: `https://firebasestorage.googleapis.com/v0/b/master-taxi-gurlan.firebasestorage.app/o/tv_clips%2F${OWNER}%2Fv.mp4?alt=media&token=t`, posterUrl: '', title: 'Non', price: 35000, districtId: 'gurlan',
     ownerPhone: OWNER, ownerName: 'Aziz', category: 'product', status: 'pending',
-    socialConsent: false, socialNetworks: [], createdAt: new Date(), ...extra,
+    socialConsent: false, socialNetworks: [], createdAt: serverTimestamp(), ...extra,
   };
 }
 const own = (extra = {}) => clip({

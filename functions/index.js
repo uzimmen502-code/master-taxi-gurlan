@@ -210,8 +210,6 @@ attachAdminStaleTasks(exports, { functions, db, requireCallerRoles });
 // ва админ бўлим рухсатлари (docs/barcha_buyurtmalar_taklifi_uz.md).
 const { attachOrderIndex } = require('./order_index');
 attachOrderIndex(exports, { db, admin });
-// Бизнес буюртмаси (`type: 'business'`) — ягона манба `business_order_states.js` (жонли `business_orders.js` ҳам шуни қайта экспорт қилади).
-const { isBusinessOrder } = require('./business_order_states');
 // Улгуржи бозор ҳудуди (сотувчи манзилидан) ва эски синов товарлари
 // (D-GEO-10/14, 2026-10-11).
 const { attachWholesaleGeo } = require('./wholesale_geo');

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../bread/services/bread_image_storage.dart';
 import '../../splash_ad/splash_ad.dart';
+import '../../splash_ad/splash_ad_prefetcher.dart' show SplashAdPrefetcher;
 import '../services/admin_splash_ads_service.dart';
 import '../utils/web_image_compress.dart';
 
@@ -491,7 +492,9 @@ class _SplashAdEditorState extends State<_SplashAdEditor> {
     setState(() => _busy = true);
     try {
       final ext = (f!.extension ?? 'jpg').toLowerCase();
-      final prepared = await WebImageCompress.prepareForUpload(f.bytes!,
+      // Эга 2026-11-28: клиент кеши 1500 КБ дан каттасини кўрсатмайди — юклашда шу чегарагача сиқилади.
+      final prepared = await WebImageCompress.prepareForUploadMax(f.bytes!,
+          maxBytes: SplashAdPrefetcher.maxImageBytes,
           mimeHint: ext == 'png' ? 'image/png' : ext == 'webp' ? 'image/webp' : 'image/jpeg');
       final url = await BreadImageStorage().uploadPlatformImage(
         docId: 'splash_${widget.id ?? 'new'}',
@@ -500,10 +503,11 @@ class _SplashAdEditorState extends State<_SplashAdEditor> {
         index: 0,
       );
       if (mounted) setState(() => _imageUrl = url);
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(backgroundColor: Colors.red, content: Text('Расм юкланмади. Қайта уриниб кўринг.')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            backgroundColor: Colors.red,
+            content: Text(e is StateError ? e.message : 'Расм юкланмади. Қайта уриниб кўринг.')));
       }
     } finally {
       if (mounted) setState(() => _busy = false);

@@ -5,6 +5,8 @@ import 'dart:typed_data';
 // ignore: avoid_web_libraries_in_flutter, deprecated_member_use
 import 'dart:html' as html;
 
+import 'image_fit_bytes.dart';
+
 /// Browser-side image normalize/compress for admin uploads (ChatGPT / large PNG).
 class WebImageCompress {
   WebImageCompress._();
@@ -79,6 +81,27 @@ class WebImageCompress {
       'Расм ${_mb(input.length)} MB — сиқилгандан кейин ҳам 8 MB дан катта. '
       'Кичикроқ расм танланг.',
     );
+  }
+
+  /// Қатъий ҳажм чегараси билан (масалан splash креативи — клиент кеши 1500 КБ). Сиғмаса — StateError (Кирилл матн).
+  static Future<({Uint8List bytes, String mime})> prepareForUploadMax(
+    Uint8List input, {
+    required int maxBytes,
+    String mimeHint = 'image/jpeg',
+  }) async {
+    if (input.length > maxInputBytes) {
+      throw StateError('Расм жуда катта (${_mb(input.length)} MB). 12 MB дан кичик бўлсин.');
+    }
+    final r = await fitImageToMaxBytes(
+      input,
+      maxBytes: maxBytes,
+      mimeHint: mimeHint,
+      encode: (edge, q) => _canvasJpeg(input, maxEdge: edge, quality: q),
+    );
+    if (r == null) {
+      throw StateError('Расмни ${(maxBytes / 1024).round()} КБ гача сиқиб бўлмади. Кичикроқ расм танланг.');
+    }
+    return r;
   }
 
   static Future<Uint8List?> _canvasJpeg(

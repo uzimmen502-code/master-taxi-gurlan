@@ -198,13 +198,18 @@ HomeLiteCardData? holidayMarketCardFor(
 
 /// Дарвоза бўйича кўринадиган карточкалар — [kHomeMarketEntries] тартибида.
 /// Супермаркет — модул дарвозаси ВА [supermarketAllowed] (сервер рухсати) бирга.
+/// Эга 2026-11-28 «Админ устун бўлсин»: [adminBypass] — супермаркет модули ёпиқ бўлса ҳам (сервер рухсати барибир шарт).
 List<HomeMarketEntry> visibleHomeMarkets(
   bool Function(String moduleId) isVisible, {
   bool supermarketAllowed = false,
+  bool adminBypass = false,
 }) =>
     [
       for (final e in kHomeMarketEntries)
-        if (isVisible(e.moduleId) && (e.moduleId != 'supermarket' || supermarketAllowed)) e,
+        if (e.moduleId == 'supermarket'
+            ? (isVisible(e.moduleId) || adminBypass) && supermarketAllowed
+            : isVisible(e.moduleId))
+          e,
     ];
 
 class HomeMarketsBlock extends StatefulWidget {
@@ -216,7 +221,11 @@ class HomeMarketsBlock extends StatefulWidget {
     this.loadSupermarketAccess,
     this.basketCard,
     this.holidayMarketCard,
+    this.adminBypass = false,
   });
+
+  /// Админ/суперадмин: супермаркет карточкаси модул ёпиқ туманда ҳам (сервер `getSupermarketAccess` ҳам ўтказади).
+  final bool adminBypass;
 
   /// Бозор мақсадли фаол байрам карточкаси (Қурбон ҳайит → Мол бозори; эга 2026-11-28) — саватчадан кейин.
   /// Супермаркет рухсатига БОҒЛИҚ ЭМАС; дарвоза — [holidayMarketCardFor]; `null` — йўқ.
@@ -276,11 +285,11 @@ class _HomeMarketsBlockState extends State<HomeMarketsBlock> {
   Widget build(BuildContext context) {
     final isVisible = widget.isVisible ?? HomeModuleGate.showInGrid;
     // Сервер рухсати фақат модул дарвозадан ўтса сўралади (дарвоза кейинроқ юкланса ҳам — шу build'да).
-    if (!_smRequested && isVisible('supermarket')) {
+    if (!_smRequested && (isVisible('supermarket') || widget.adminBypass)) {
       _smRequested = true;
       _loadSmAccess();
     }
-    final items = visibleHomeMarkets(isVisible, supermarketAllowed: _smAllowed);
+    final items = visibleHomeMarkets(isVisible, supermarketAllowed: _smAllowed, adminBypass: widget.adminBypass);
     final basket = widget.basketCard;
     final occasion = widget.holidayMarketCard;
     if (items.isEmpty && basket == null && occasion == null) return const SizedBox.shrink();

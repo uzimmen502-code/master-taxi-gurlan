@@ -242,7 +242,7 @@ void main() {
       final confirm = src.indexOf('const CustomerConfirmBanner()');
       final order = src.indexOf('_ActiveOrderSlot(onOpen:');
       final ticker = src.indexOf('HomeWalletTickerSlot(');
-      final block = src.indexOf('HomeMarketsBlock(onOpen: _openHomeMarket, basketCard: _basketCard(), holidayMarketCard: _holidayMarketCard())');
+      final block = src.indexOf('HomeMarketsBlock(onOpen: _openHomeMarket, basketCard: _basketCard(), holidayMarketCard: _holidayMarketCard(), adminBypass: _smAdmin)');
       final adMarkets = src.indexOf('_adCarousel(HomeAdPlacement.markets)');
       final adServices = src.indexOf('_adCarousel(HomeAdPlacement.services)');
       final adTransport = src.indexOf('_adCarousel(HomeAdPlacement.transport)');
@@ -350,5 +350,28 @@ void main() {
       }
       expect(File(e.imagePath!).existsSync(), isTrue, reason: e.imagePath);
     }
+  });
+
+  // Эга 2026-11-28 «Админ устун бўлсин».
+  test('visibleHomeMarkets: супермаркет модули ёпиқ — оддий фойдаланувчига йўқ, админга бор (сервер рухсати шарт)', () {
+    bool hidden(String id) => id != 'supermarket';
+    expect(visibleHomeMarkets(hidden, supermarketAllowed: true).any((e) => e.id == 'supermarket'), isFalse);
+    expect(visibleHomeMarkets(hidden, supermarketAllowed: true, adminBypass: true).first.id, 'supermarket');
+    expect(visibleHomeMarkets(hidden, supermarketAllowed: false, adminBypass: true).any((e) => e.id == 'supermarket'), isFalse);
+    expect(visibleHomeMarkets(hidden, adminBypass: true).length, visibleHomeMarkets(hidden).length, reason: 'бошқа бозорларга таъсир йўқ');
+  });
+
+  testWidgets('админ: супермаркет модули ёпиқ — карточка бор (сервер рухсати сўралади)', (t) async {
+    var asked = 0;
+    await t.pumpWidget(MaterialApp(home: Scaffold(body: SingleChildScrollView(child: HomeMarketsBlock(
+      onOpen: (_) {},
+      isVisible: (id) => id != 'supermarket',
+      adminBypass: true,
+      loadSupermarketAccess: () async { asked++; return true; },
+      loadTaxonomy: () async => _taxonomy,
+    )))));
+    await t.pumpAndSettle();
+    expect(asked, 1);
+    expect(find.byKey(const ValueKey('home_lite_card_market_supermarket')), findsOneWidget);
   });
 }

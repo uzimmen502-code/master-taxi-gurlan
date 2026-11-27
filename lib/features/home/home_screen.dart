@@ -1312,12 +1312,15 @@ class _HomeViewState extends State<_HomeView> {
     );
   }
 
+  /// Эга 2026-11-28 «Админ устун бўлсин»: админ/суперадмин супермаркетни модул ёпиқ бўлса ҳам кўради (сервер ҳам).
+  bool get _smAdmin => Provider.of<HomeController>(context, listen: false).isAdminOrSuperadmin;
+
   Future<void> _resolveHolidayCards() async {
     if (_holidayResolving || !mounted) return;
     _holidayResolving = true;
     try {
       final s = await _holidayCards.resolve(
-        smOpenable: ServiceConfigHolder.isOpenable('supermarket'),
+        smOpenable: ServiceConfigHolder.isOpenable('supermarket') || _smAdmin,
         phone: context.read<HomeController>().phone,
       );
       if (mounted && s != _holidayState) setState(() => _holidayState = s);
@@ -1641,7 +1644,7 @@ class _HomeViewState extends State<_HomeView> {
         await _openGated('business_map', const FactoriesScreen());
       // «AVA Супермаркет» (эга 2026-11-20): модул дарвозаси; сервер рухсати карточкани кўрсатишда.
       case 'supermarket':
-        if (!ServiceConfigHolder.isOpenable('supermarket')) {
+        if (!ServiceConfigHolder.isOpenable('supermarket') && !_smAdmin) {
           _showTezKundaSnack();
           return;
         }
@@ -1951,7 +1954,7 @@ class _HomeViewState extends State<_HomeView> {
                             ),
                             // «Бозорлар» (эга 2026-11-20): 11 карточка эга тартибида, ҳар бири ўз дарвозаси билан.
                             // Эга 2026-11-28: саватча карточкаси Супермаркетдан кейин, «Заводлар» Улгуржидан кейин; «Аралаш бозор» карточкаси йўқ.
-                            HomeMarketsBlock(onOpen: _openHomeMarket, basketCard: _basketCard(), holidayMarketCard: _holidayMarketCard()),
+                            HomeMarketsBlock(onOpen: _openHomeMarket, basketCard: _basketCard(), holidayMarketCard: _holidayMarketCard(), adminBypass: _smAdmin),
                             // Реклама каруселлари (эга 2026-11-28): «Бозорлар» / «Эълон ва хизматлар» / «Транспорт» дан кейин.
                             _adCarousel(HomeAdPlacement.markets),
                             // Аралаш маҳсулот тасмаси — «Бозорлар»дан кейин (эга 2026-11-20 қайтарилди; аввалгидек).

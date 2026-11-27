@@ -2522,6 +2522,18 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Splash реклама (эга 2026-11-28): ёзиш ФАҚАТ CF (adminUpsertSplashAd/adminDeleteSplashAd, admin_audit).
+    // Мижоз фақат visible==true (stage on) ни ўқийди; сана/туман — клиентда. Статистика — фақат CF ёзади, админ ўқийди.
+    match /splash_ads/{id} {
+      allow read: if resource.data.visible == true || isAdmin();
+      allow write: if false;
+    }
+    // splash_ad_imp_log — қоида йўқ = ёпиқ (фақат CF).
+    match /splash_ad_stats/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     // Мобил ариза — marshrut/intercity маршрут майдонлари билан.
     function driverRequestGuestPatchKeys() {
       return [

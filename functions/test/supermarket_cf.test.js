@@ -95,6 +95,10 @@ async function main() {
     const hid = await call('getSupermarketAccess', {}, USER);
     assert.deepStrictEqual([hid.allowed, hid.reason, !!hid.messages.uz_Latn], [false, 'MODULE_CLOSED', true]);
     await expectCode(call('placeSupermarketOrder', order('req-hidden-001', [{ productId: 'beef_lean_1', qty: 1 }]), USER), 'MODULE_CLOSED');
+    // «Админ устун бўлсин»: модул ёпиқ — админ барибир ўтади (кейинги қадам тариф).
+    await db.doc(`users/${ADMIN}`).update({ districtId: 'gurlan' });
+    const adm = await call('getSupermarketAccess', {}, ADMIN);
+    assert.deepStrictEqual([adm.reason === 'MODULE_CLOSED', adm.reason], [false, 'TARIFF_NOT_CONFIGURED']);
     await setModules({ supermarket: 'hidden' }, { gurlan: 'enabled', urganch: 'coming_soon' });
     // settings/supermarket ҳали ЙЎҚ — эски «STAGE_OFF» эмас; фақат тариф (fail closed).
     assert.strictEqual((await db.doc('settings/supermarket').get()).exists, false);

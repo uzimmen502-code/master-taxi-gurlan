@@ -703,7 +703,7 @@ function attachHoliday(exportsObj, deps) {
   };
   /** Фойдаланувчи учун кўринадими: супермаркет дарвозаси + байрам босқичи (internal/pilot — админ ва тестерлар). */
   /** smOpen — супермаркет модули фойдаланувчи тумани учун очиқми (эга 2026-11-28: модул созламаси, sm.supermarketGate). */
-  const smOpenFor = async (uid, districtId) => (await sm.supermarketGate(db, { uid, districtId: String(districtId || ''), requireDistrict: false, nowMs: now() })).allowed;
+  const smOpenFor = async (uid, districtId, role) => (await sm.supermarketGate(db, { uid, districtId: String(districtId || ''), requireDistrict: false, nowMs: now(), role })).allowed;
   function occasionVisibleFor(occ, settings, uid, role, smOpen) {
     if (!occ || occ.stage === 'off' || !STAGES.includes(occ.stage)) return false;
     // Бозор мақсадли байрам (Қурбон ҳайит → Мол бозори) супермаркет дарвозасига боғлиқ эмас (эга 2026-11-27).
@@ -786,7 +786,7 @@ function attachHoliday(exportsObj, deps) {
     const role = String((user && user.data.role) || 'user');
     const districtId = String((user && user.data.districtId) || '');
     const today = dateKeyOf(now());
-    const smOpen = (await sm.supermarketGate(db, { uid, districtId, requireDistrict: false, nowMs: now() })).allowed;
+    const smOpen = (await sm.supermarketGate(db, { uid, districtId, requireDistrict: false, nowMs: now(), role })).allowed;
     const occasions = occSnap.docs.map((d) => d.data() || {}).filter((o) => occasionVisibleFor(o, settings, uid, role, smOpen))
       .sort((a, b) => (a.order - b.order) || String(a.id).localeCompare(String(b.id)))
       .map((o) => ({
@@ -822,7 +822,7 @@ function attachHoliday(exportsObj, deps) {
     const basket = bSnap.data();
     const occSnap = await db.collection(OCCASIONS).doc(basket.occasionId).get();
     const role = String((user && user.data.role) || 'user');
-    if (!occSnap.exists || !occasionVisibleFor(occSnap.data(), settings, uid, role, await smOpenFor(uid, (user && user.data.districtId) || ''))) {
+    if (!occSnap.exists || !occasionVisibleFor(occSnap.data(), settings, uid, role, await smOpenFor(uid, (user && user.data.districtId) || '', role))) {
       throw fail('failed-precondition', 'NOT_AVAILABLE');
     }
     if (!taxSnap.exists) throw fail('failed-precondition', 'TAXONOMY_MISSING');
@@ -920,7 +920,7 @@ function attachHoliday(exportsObj, deps) {
         const uid = canonicalUid(x.ownerId);
         const user = await userDoc(uid);
         const role = String((user && user.data.role) || 'user');
-        if (!user || !occasionVisibleFor(occ, settings, uid, role, await smOpenFor(uid, user.data.districtId || ''))) { stat.skipped += 1; continue; }
+        if (!user || !occasionVisibleFor(occ, settings, uid, role, await smOpenFor(uid, user.data.districtId || '', role))) { stat.skipped += 1; continue; }
         const person = await db.collection('relatives').doc(x.ownerId).collection('people').doc(x.personId).get();
         if (!person.exists || !relativeEligible(person.data()) || !mds.includes(mdOfBirth(person.data().birthDate))) { stat.skipped += 1; continue; }
         const logRef = db.collection(REMIND_LOG).doc(`bd_${x.ownerId}_${x.personId}_${target.slice(0, 4)}`);
@@ -966,7 +966,7 @@ function attachHoliday(exportsObj, deps) {
       const params = (u) => ({ holiday: (occ.names || {})[normalizeLang(u.appLang)] || (occ.names || {}).uz_Cyrl || '', days: due.days });
       const sendTo = async (uid, u) => {
         if (u.holidayRemindersOptIn === false) { stat.skipped += 1; return; }
-        if (!occasionVisibleFor(occ, settings, uid, String(u.role || 'user'), await smOpenFor(uid, u.districtId || ''))) { stat.skipped += 1; return; }
+        if (!occasionVisibleFor(occ, settings, uid, String(u.role || 'user'), await smOpenFor(uid, u.districtId || '', String(u.role || 'user')))) { stat.skipped += 1; return; }
         try {
           // Админ матни (масалан Қурбон ҳайит → Мол бозори) ва CTA мақсади бўлса — шу; йўқ бўлса — умумий сават матни.
           const tp = targetPush(occ.target || { type: 'holiday_basket', occasionId: occ.id });
@@ -1044,7 +1044,7 @@ function attachHoliday(exportsObj, deps) {
         const md = u ? mdOfUserBirth(u.birthDate) : null;
         const hit = md ? due[md] : null;
         if (!u || !hit || u.holidayRemindersOptIn === false
-          || !occasionVisibleFor(occ, settings, personKey, String(u.role || 'user'), await smOpenFor(personKey, u.districtId || ''))) { stat.skipped += 1; continue; }
+          || !occasionVisibleFor(occ, settings, personKey, String(u.role || 'user'), await smOpenFor(personKey, u.districtId || '', String(u.role || 'user')))) { stat.skipped += 1; continue; }
         const r = hit.reminder;
         const logRef = db.collection(REMIND_LOG).doc(`self_${personKey}_${hit.date.slice(0, 4)}_d${r.daysBefore}`);
         const claimed = await db.runTransaction(async (t) => {

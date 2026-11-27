@@ -135,6 +135,13 @@ check('P10 дарвоза: enabled — очиқ; hidden/coming_soon/soon — MOD
   assert.strictEqual(sm.gateFromModuleStatus('unknown', { districtId: 'gurlan', requireDistrict: true }).allowed, true);
   assert.ok(sm.messagesOf ? sm.messagesOf('MODULE_CLOSED').uz_Latn : true);
   assert.strictEqual(typeof sm.gateDecision, 'undefined', 'эски stage/testers дарвозаси олиб ташланди');
+  // «Админ устун бўлсин» (эга 2026-11-28): admin/superadmin ёпиқ модулда ҳам; оддий — йўқ; туман шарти қолади.
+  for (const st of ['hidden', 'coming_soon']) {
+    assert.strictEqual(sm.gateFromModuleStatus(st, { districtId: 'gurlan', requireDistrict: true, role: 'admin' }).allowed, true, st);
+    assert.strictEqual(sm.gateFromModuleStatus(st, { districtId: 'gurlan', requireDistrict: true, role: 'superadmin' }).allowed, true, st);
+    assert.strictEqual(sm.gateFromModuleStatus(st, { districtId: 'gurlan', requireDistrict: true, role: 'dispatcher' }).reason, 'MODULE_CLOSED', st);
+  }
+  assert.strictEqual(sm.gateFromModuleStatus('hidden', { districtId: '', requireDistrict: true, role: 'admin' }).reason, 'DISTRICT_REQUIRED');
 });
 
 check('P10b созлама (эга 2026-11-28): stage/testerIds/districtIds/slots/cutoffMin ихтиёрий; юборилса — аввалгидек текширилади', () => {

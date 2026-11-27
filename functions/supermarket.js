@@ -300,20 +300,23 @@ function removedGroupIds(curCategories, nextCategories) {
  * нусхаси `module_gate.js`. settings/supermarket даги эски stage/districtIds/testerIds ЭЪТИБОРСИЗ (бўлса ҳам).
  * Соф қисм: модул ҳолати → қарор; requireDistrict=true бўлса бўш туман рад.
  */
-function gateFromModuleStatus(status, { districtId, requireDistrict } = {}) {
+function gateFromModuleStatus(status, { districtId, requireDistrict, role } = {}) {
   const d = String(districtId || '').trim();
   if (!d && requireDistrict) return { allowed: false, reason: 'DISTRICT_REQUIRED', status: status || 'unknown' };
+  // Эга 2026-11-28: «Админ устун бўлсин» — admin/superadmin модул ёпиқ туманда ҳам ўтади (туман шарти қолади).
+  if (ADMIN_ROLES.includes(String(role || ''))) return { allowed: true, reason: '', status: status || 'admin', admin: true };
   // 'unknown' — module_gate FAIL-OPEN (конфиг йўқ/ўқиш хатоси) — модул дарвозасининг мавжуд қоидаси.
   if (status === 'enabled' || status === 'unknown') return { allowed: true, reason: '', status };
   return { allowed: false, reason: 'MODULE_CLOSED', status: status || 'hidden' };
 }
 
 /** Фойдаланувчи (ва фаол/манзил тумани) учун супермаркет дарвозаси (async, модул созламаси кэши 60 с). */
-async function supermarketGate(db, { uid, districtId, requireDistrict, nowMs }) {
+async function supermarketGate(db, { uid, districtId, requireDistrict, nowMs, role }) {
   const d = String(districtId || '').trim();
   if (!d && requireDistrict) return gateFromModuleStatus('hidden', { districtId: d, requireDistrict });
+  if (ADMIN_ROLES.includes(String(role || ''))) return gateFromModuleStatus('admin', { districtId: d, requireDistrict, role });
   const r = await moduleGate.moduleOpenFor(db, 'supermarket', uid, { activeDistrictId: d, nowMs });
-  return gateFromModuleStatus(r.open ? (r.status === 'enabled' ? 'enabled' : 'unknown') : r.status, { districtId: d, requireDistrict });
+  return gateFromModuleStatus(r.open ? (r.status === 'enabled' ? 'enabled' : 'unknown') : r.status, { districtId: d, requireDistrict, role });
 }
 
 // ══════════════════════ ВАЛИДАТОРЛАР ══════════════════════
@@ -999,7 +1002,7 @@ function attachSupermarket(exportsObj, deps) {
     const { settings, feeConfig, user } = await loadGateContext(uid);
     const reqDistrict = typeof (data && data.districtId) === 'string' ? data.districtId.trim() : '';
     const districtId = reqDistrict || String((user && user.data.districtId) || '').trim();
-    const g = await supermarketGate(db, { uid, districtId, requireDistrict: true, nowMs: now() });
+    const g = await supermarketGate(db, { uid, districtId, requireDistrict: true, nowMs: now(), role: String((user && user.data.role) || 'user') });
     // Эга 2026-11-28: оддий буюртма — имкон қадар тез (вақт оралиғи йўқ). Эски клиент учун settings.slots бўлса — берилади.
     const slots = g.allowed ? availableSlots(settings, now()) : { today: [], tomorrow: [] };
     return {
@@ -1216,7 +1219,7 @@ function attachSupermarket(exportsObj, deps) {
 
     const { settings, feeConfig, user } = await loadGateContext(uid);
     if (!user) throw fail('not-found', 'USER_NOT_FOUND');
-    const gate = await supermarketGate(db, { uid, districtId: address.districtId, requireDistrict: true, nowMs: now() });
+    const gate = await supermarketGate(db, { uid, districtId: address.districtId, requireDistrict: true, nowMs: now(), role: String(user.data.role || 'user') });
     if (!gate.allowed) {
       log({ action: 'placeSupermarketOrder', result: 'refused', errorCode: gate.reason, userTail: uid.slice(-4) });
       throw fail('failed-precondition', gate.reason);
@@ -1752,7 +1755,7 @@ function attachSupermarket(exportsObj, deps) {
       if (!userSnap.exists) { skipped += 1; continue; }
       const u = userSnap.data() || {};
       const uid = canonicalUid(userDocId);
-      if (!(await supermarketGate(db, { uid, districtId: '', requireDistrict: false, nowMs })).allowed) { skipped += 1; continue; }
+      if (!(await supermarketGate(db, { uid, districtId: '', requireDistrict: false, nowMs, role: String(u.role || 'user') })).allowed) { skipped += 1; continue; }
       const m = REMIND_TEXT[normalizeLang(u.appLang)] || REMIND_TEXT.uz_Cyrl;
       try {
         await notifyUserInApp({

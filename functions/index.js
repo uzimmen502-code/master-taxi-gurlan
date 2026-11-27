@@ -184,6 +184,10 @@ attachHoliday(exports, { functions, db, admin, callerPhone, canonicalUid, requir
 // respondRelativeInvite/unlinkRelative, getMyFamilyLinks, adminUpsertFamilyBonusProgram, adminGetFamilyBonusPrograms.
 const { attachFamilyLinks } = require('./family_links');
 attachFamilyLinks(exports, { functions, db, admin, callerPhone, canonicalUid, requireCallerRoles, notifyUserInApp });
+// «Автомобил суғуртаси» (эга 2026-11-28): ариза → админ нарх жадвали (версия) → ҳамён/бонус/мой чегирмаси → агент полис
+// юклайди → муддат профилга; 4/3 кун эслатма; машина рағбати (бонус ёки мой дастури, сервис маркази ҳисоботи). Фақат ЯНГИ функциялар.
+const { attachCarInsurance } = require('./car_insurance');
+attachCarInsurance(exports, { functions, db, admin, callerPhone, canonicalUid, requireCallerRoles, notifyUserInApp });
 // Админ ўчириши (2026-10-19; торайтирилди 2026-10-20): ҳақиқий ўчириш фақат superadmin — support_chat (шахсий маълумот талаби) ва
 // 365 кундан эски resolved risk_event; admin_news — қайтариб олинади, чат — архивга олинади. Ҳаммаси callable, audit билан (§41).
 const { attachAdminDeleteRecord } = require('./admin_delete_record');

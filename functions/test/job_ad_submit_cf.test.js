@@ -16,6 +16,8 @@
  *   J8  лимит "куни" — Тошкент куни (кеча 23:30 Тошкент вақти ҳисобга кирмайди)
  *   J9  хатолар диагностик код билан (`details.code`)
  *   J10 autoApprove ёқилган — `active`
+ *   V1..V7 «Вакансиялар» (эга 2026-11-28): `work` = тузилмали `vacancy` (маош бутун сўм, «Талаблар» шарт,
+ *       иш берувчи ЧАҚИРУВЧИНИКИ, завод белгиси, туман, 30 кун, шошилинч йўқ, эски `priceText`)
  */
 'use strict';
 const assert = require('assert');
@@ -64,7 +66,7 @@ async function wipe(col) {
   await Promise.all(s.docs.map((d) => db.recursiveDelete(d.ref)));
 }
 async function reset() {
-  await Promise.all(['users', 'ads', 'settings', 'geo_districts', 'geo_regions'].map(wipe));
+  await Promise.all(['users', 'ads', 'settings', 'geo_districts', 'geo_regions', 'businesses', 'restaurants', 'tv_shops'].map(wipe));
   // Ҳақиқий ҳужжатлардаги каби: `name` — лотин, `nameUz` — кирилл.
   await db.doc('geo_regions/xorazm').set({ name: 'Xorazm viloyati', nameUz: 'Хоразм вилояти' });
   await db.doc('geo_districts/gurlan').set({
@@ -197,6 +199,101 @@ async function seedAds(phone, n, createdMs) {
     assert.strictEqual(r.status, 'active');
     const d = (await db.doc(`ads/${r.adId}`).get()).data();
     assert.strictEqual(d.moderatedBy, 'auto');
+  });
+
+  // ── «Вакансиялар» (эга 2026-11-28) ─────────────────────────────────────
+  const VAC = (extra = {}) => ({
+    position: 'Тикувчи', salaryFrom: 3000000, salaryTo: 5000000, schedule: 'full_time',
+    experience: '1', requirements: 'Тикув машинасида ишлай олиш, 1 йил тажриба', ...extra,
+  });
+  const work = (vacancy, extra = {}) => ({ type: 'work', text: '', vacancy, requestId: rid(), ...extra });
+
+  await reset();
+  await check('V1 вакансия: title = лавозим, text = талаблар, 30 кун, шошилинч йўқ, эски priceText', async () => {
+    const before = Date.now();
+    const r = await call(work(VAC(), { isUrgent: true, title: 'САХТА' }), A);
+    assert.strictEqual(r.ok, true);
+    const d = (await db.doc(`ads/${r.adId}`).get()).data();
+    assert.strictEqual(d.type, 'work');
+    assert.strictEqual(d.title, 'Тикувчи');
+    assert.strictEqual(d.text, 'Тикув машинасида ишлай олиш, 1 йил тажриба');
+    assert.strictEqual(d.isUrgent, false);
+    assert.strictEqual(d.priceText, '3 000 000 – 5 000 000 сўм');
+    assert.deepStrictEqual(
+      { ...d.vacancy },
+      { v: 1, position: 'Тикувчи', salaryNegotiable: false, salaryFrom: 3000000, salaryTo: 5000000,
+        schedule: 'full_time', experience: '1', requirements: 'Тикув машинасида ишлай олиш, 1 йил тажриба' });
+    const days = (d.expiresAt.toMillis() - before) / 86400000;
+    assert.ok(days > 29.9 && days < 30.1, `30 кун кутилди, ${days}`);
+    assert.strictEqual(d.status, 'pending');
+  });
+
+  await reset();
+  await check('V2 work + vacancy йўқ/бузуқ — диагностик код, эълон ёзилмайди', async () => {
+    await rejectsWith(call({ type: 'work', title: 'Иш бор', text: 'Ишчи керак', requestId: rid() }, A),
+      'VACANCY_REQUIRED', 'invalid-argument');
+    await rejectsWith(call(work(VAC({ requirements: 'қисқа' })), A), 'VACANCY_REQUIREMENTS_INVALID');
+    await rejectsWith(call(work(VAC({ salaryFrom: 2500.5 })), A), 'VACANCY_SALARY_INVALID');
+    await rejectsWith(call(work(VAC({ salaryFrom: 6000000, salaryTo: 5000000 })), A), 'VACANCY_SALARY_INVALID');
+    await rejectsWith(call(work(VAC({ salaryFrom: null, salaryTo: null })), A), 'VACANCY_SALARY_INVALID');
+    await rejectsWith(call(work(VAC({ schedule: 'night' })), A), 'VACANCY_SCHEDULE_INVALID');
+    await rejectsWith(call(work(VAC({ experience: '10' })), A), 'VACANCY_EXPERIENCE_INVALID');
+    await rejectsWith(call(work(VAC({ position: 'ab' })), A), 'VACANCY_POSITION_INVALID');
+    assert.strictEqual((await adsOf(A)).length, 0);
+  });
+
+  await reset();
+  await check('V3 «Келишилади»: from/to сақланмайди; фақат from — «…дан»', async () => {
+    const r = await call(work(VAC({ salaryNegotiable: true })), A);
+    const d = (await db.doc(`ads/${r.adId}`).get()).data();
+    assert.strictEqual(d.vacancy.salaryNegotiable, true);
+    assert.strictEqual(d.vacancy.salaryFrom, undefined);
+    assert.strictEqual(d.priceText, 'Келишилади');
+    const r2 = await call(work(VAC({ salaryTo: null })), A);
+    assert.strictEqual((await db.doc(`ads/${r2.adId}`).get()).data().priceText, '3 000 000 сўмдан');
+  });
+
+  await reset();
+  await check('V4 иш берувчи — ЎЗ заводи: номи серверда, isFactory, employerKey', async () => {
+    await db.doc('businesses/f1').set({ ownerId: A, name: 'Гурлан тўқимачилик', category: 'manufacturing', status: 'active' });
+    const r = await call(work(VAC({ employerKind: 'business', employerId: 'f1', employerName: 'САХТА' })), A);
+    const v = (await db.doc(`ads/${r.adId}`).get()).data().vacancy;
+    assert.strictEqual(v.employerName, 'Гурлан тўқимачилик');
+    assert.strictEqual(v.employerKey, 'business:f1');
+    assert.strictEqual(v.isFactory, true);
+  });
+
+  await reset();
+  await check('V5 бегона / блокланган / йўқ иш берувчи — VACANCY_EMPLOYER_INVALID', async () => {
+    await db.doc('businesses/fB').set({ ownerId: B, name: 'Бошқа', category: 'manufacturing', status: 'active' });
+    await db.doc('businesses/fX').set({ ownerId: A, name: 'Блок', category: 'retail', status: 'blocked' });
+    await db.doc(`tv_shops/${B}`).set({ name: 'B дўкон' });
+    await rejectsWith(call(work(VAC({ employerKind: 'business', employerId: 'fB' })), A), 'VACANCY_EMPLOYER_INVALID');
+    await rejectsWith(call(work(VAC({ employerKind: 'business', employerId: 'fX' })), A), 'VACANCY_EMPLOYER_INVALID');
+    await rejectsWith(call(work(VAC({ employerKind: 'business', employerId: 'nope' })), A), 'VACANCY_EMPLOYER_INVALID');
+    await rejectsWith(call(work(VAC({ employerKind: 'shop', employerId: B })), A), 'VACANCY_EMPLOYER_INVALID');
+    await rejectsWith(call(work(VAC({ employerKind: 'bank', employerId: 'x1' })), A), 'VACANCY_EMPLOYER_INVALID');
+    assert.strictEqual((await adsOf(A)).length, 0);
+  });
+
+  await reset();
+  await check('V6 туман берилса — шу ҳудуд (профил эмас); йўқ туман — VACANCY_DISTRICT_INVALID', async () => {
+    await db.doc('geo_regions/toshkent').set({ name: 'Toshkent', nameUz: 'Тошкент' });
+    await db.doc('geo_districts/chilonzor').set({ name: 'Chilonzor', nameUz: 'Чилонзор', regionId: 'toshkent' });
+    const r = await call(work(VAC({ districtId: 'chilonzor' })), A);
+    const d = (await db.doc(`ads/${r.adId}`).get()).data();
+    assert.strictEqual(d.districtId, 'chilonzor');
+    assert.strictEqual(d.regionId, 'toshkent');
+    assert.strictEqual(d.address, 'Чилонзор, Тошкент');
+    await rejectsWith(call(work(VAC({ districtId: 'nowhere' })), A), 'VACANCY_DISTRICT_INVALID');
+  });
+
+  await reset();
+  await check('V7 ad/service ўзгармаган: vacancy юборилса ҳам ёзилмайди', async () => {
+    const r = await call(payload({ requestId: rid(), vacancy: VAC() }), A);
+    const d = (await db.doc(`ads/${r.adId}`).get()).data();
+    assert.strictEqual(d.vacancy, undefined);
+    assert.strictEqual(d.title, 'Ноутбук сотилади');
   });
 
   const failed = results.filter((x) => !x).length;

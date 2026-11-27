@@ -237,6 +237,14 @@ const { attachBusinessDirectory } = require('./business_directory');
 attachBusinessDirectory(exports, {
   functions, db, admin, callerPhone, canonicalUid, requireCallerRoles,
 });
+// «Ишлаб чиқарувчи завод/фабрикалар» (эга 2026-11-28): завод = `businesses` (manufacturing) объекти; эга ўзи
+// улайди (Улгуржи, видео, вакансия, AVA'га таъминот), «Тасдиқланган ишлаб чиқарувчи» — AUTO/MANUAL + audit.
+const { attachFactories } = require('./factories');
+attachFactories(exports, {
+  functions, db, admin, callerPhone, canonicalUid, requireCallerRoles,
+});
+// «Вакансиялар» (эга 2026-11-28): `submitJobAd` type 'work' нинг `vacancy` шакли.
+const jobVacancy = require('./job_vacancy');
 // Ҳисобни автоматик ўчириш (2026-10-24, ega; docs/hisobni_ochirish_2026-10-24_uz.md). Дарвоза: `settings/account_deletion`
 // { enabled: true } — ҳужжат йўқ ёки enabled≠true бўлса ЁПИҚ (callable'лар ACCOUNT_DELETION_DISABLED беради, режали ижро ҳеч нарса қилмайди).
 const { attachAccountDeletion } = require('./account_deletion');
@@ -8165,8 +8173,40 @@ async function ownerPublicStamp(uid, geo) {
   return { name, area };
 }
 
+/**
+ * Вакансия иш берувчиси (эга 2026-11-28): ЧАҚИРУВЧИНИКИ ва блокланмаган бўлса `{ name, isFactory }`, акс ҳолда
+ * `null`. business — `businesses/{id}.ownerId`; restaurant — `restaurants/{id}.ownerUid`; shop — фақат ўз
+ * `tv_shops/{uid}` (id = чақирувчи телефони). Клиент юборган номга ишонилмайди (18-банд).
+ */
+async function resolveVacancyEmployer(uid, kind, id) {
+  try {
+    if (kind === 'business') {
+      const s = await db.collection('businesses').doc(id).get();
+      const b = s.exists ? (s.data() || {}) : null;
+      if (!b || canonicalUid(String(b.ownerId || '')) !== uid || b.status === 'blocked') return null;
+      return { name: String(b.name || '').trim().slice(0, 80), isFactory: b.category === 'manufacturing' };
+    }
+    if (kind === 'restaurant') {
+      const s = await db.collection('restaurants').doc(id).get();
+      const r = s.exists ? (s.data() || {}) : null;
+      if (!r || canonicalUid(String(r.ownerUid || '')) !== uid) return null;
+      return { name: String(r.name || '').trim().slice(0, 80), isFactory: false };
+    }
+    if (kind === 'shop') {
+      if (canonicalUid(id) !== uid) return null;
+      const s = await db.collection('tv_shops').doc(id).get();
+      const x = s.exists ? (s.data() || {}) : null;
+      if (!x || x.status === 'blocked') return null;
+      return { name: String(x.name || '').trim().slice(0, 80), isFactory: false };
+    }
+  } catch (e) {
+    console.error('resolveVacancyEmployer', e.message || e);
+  }
+  return null;
+}
+
 /** Mijoz: Иш топ эълон (CF-only, auth + телефон + кунлик лимит + idempotency). */
-exports.submitJobAd = functions.https.onCall(async (data, context) => {
+exports.submitJobAd =functions.https.onCall(async (data, context) => {
   const started = Date.now();
   const clientRequestId = String((data && data.requestId) || '').trim();
   const idempotent = JOB_AD_REQUEST_ID_RE.test(clientRequestId);
@@ -8195,16 +8235,27 @@ exports.submitJobAd = functions.https.onCall(async (data, context) => {
   if (!['work', 'service', 'ad'].includes(type)) {
     throw fail('invalid-argument', 'Invalid type', 'JOB_AD_INVALID_TYPE');
   }
-  const text = String((data && data.text) || '').trim();
+  // «Вакансиялар» (эга 2026-11-28): `work` = ФАҚАТ иш берувчининг тузилмали вакансияси (`vacancy` шарт).
+  // Сарлавҳа = лавозим; матн бўш бўлса — «Талаблар»; `priceText` — эски иловалар учун маош ёрлиғи.
+  let vac = null;
+  if (type === 'work') {
+    vac = jobVacancy.normalizeVacancy(data && data.vacancy,
+      (code) => fail('invalid-argument', code, code, { type }));
+  }
+  const rawText = String((data && data.text) || '').trim();
+  const text = vac && rawText.length < 3 ? vac.vacancy.requirements : rawText;
   if (text.length < 3 || text.length > 2000) {
     throw fail('invalid-argument', 'text 3..2000', 'JOB_AD_TEXT_LENGTH', { type });
   }
-  const title = String((data && data.title) || '').trim().slice(0, 120);
+  const title = vac ? vac.vacancy.position : String((data && data.title) || '').trim().slice(0, 120);
   if (title.length < 3 || title.length > 120) {
     throw fail('invalid-argument', 'title 3..120', 'JOB_AD_TITLE_LENGTH', { type });
   }
-  const priceText = String((data && data.priceText) || '').trim().slice(0, 80);
-  const isUrgent = urgentForJobAdType(type, data && data.isUrgent === true);
+  const priceText = vac
+    ? jobVacancy.salaryText(vac.vacancy)
+    : String((data && data.priceText) || '').trim().slice(0, 80);
+  // Вакансия «шошилинч» бўлмайди (2 кунлик муддат 30 кунликни қисқартирмасин).
+  const isUrgent = vac ? false : urgentForJobAdType(type, data && data.isUrgent === true);
 
   // Idempotency: shu `requestId` bilan e'lon allaqachon yaratilgan bo'lsa —
   // YANGISI yaratilmaydi va limitga ham hisoblanmaydi (tarmoq qayta urinishi).
@@ -8254,14 +8305,41 @@ exports.submitJobAd = functions.https.onCall(async (data, context) => {
       'JOB_AD_DAILY_LIMIT', { type, todayCount });
   }
 
-  const days = jobAdExpiryDays(type, isUrgent);
+  const days = vac ? jobVacancy.VACANCY_EXPIRY_DAYS : jobAdExpiryDays(type, isUrgent);
   const expiresAt = admin.firestore.Timestamp.fromDate(
     new Date(Date.now() + days * 24 * 60 * 60 * 1000),
   );
 
+  // Вакансия: иш берувчи (ихтиёрий) — ЧАҚИРУВЧИНИКИ бўлиши шарт, номи серверда олинади (18-банд);
+  // туман (ихтиёрий) — мавжуд `geo_districts` бўлса шу ҳудуд, бўлмаса профил ҳудуди.
+  let vacancyDoc = null;
+  let vacancyGeo = null;
+  if (vac) {
+    vacancyDoc = { ...vac.vacancy };
+    const v = vac.vacancy;
+    if (v.employerKind) {
+      const emp = await resolveVacancyEmployer(uid, v.employerKind, v.employerId);
+      if (!emp) {
+        throw fail('invalid-argument', 'VACANCY_EMPLOYER_INVALID', 'VACANCY_EMPLOYER_INVALID', { type });
+      }
+      vacancyDoc.employerName = emp.name;
+      vacancyDoc.employerKey = jobVacancy.employerKeyOf(v.employerKind, v.employerId);
+      if (emp.isFactory) vacancyDoc.isFactory = true;
+    }
+    if (vac.districtId) {
+      const ds = await db.collection('geo_districts').doc(vac.districtId).get();
+      const dd = ds.exists ? (ds.data() || {}) : null;
+      if (!dd) {
+        throw fail('invalid-argument', 'VACANCY_DISTRICT_INVALID', 'VACANCY_DISTRICT_INVALID', { type });
+      }
+      const regionId = String(dd.regionId || '').trim();
+      vacancyGeo = regionId ? { districtId: vac.districtId, regionId } : { districtId: vac.districtId };
+    }
+  }
+
   const autoApprove = await isJobsAutoApproveEnabled();
   const status = autoApprove ? 'active' : 'pending';
-  const geo = await ownerGeoStamp(uid);
+  const geo = vacancyGeo || await ownerGeoStamp(uid);
   const pub = await ownerPublicStamp(uid, geo);
 
   const doc = {
@@ -8277,6 +8355,7 @@ exports.submitJobAd = functions.https.onCall(async (data, context) => {
     // Hudud serverda aniqlanadi (qarang: ownerGeoStamp).
     ...geo,
     isUrgent,
+    ...(vacancyDoc ? { vacancy: vacancyDoc } : {}),
     status,
     expiresAt,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),

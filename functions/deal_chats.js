@@ -16,7 +16,8 @@
  *
  * Коллекциялар (ҳаммаси client-write ЁПИҚ, фақат шу CF'лар ёзади):
  *   deal_chats/{prefix}{productId}_{buyerUid} — чат (детерминистик ID → қайта очиш идемпотент;
- *     prefix: wholesale — йўқ (эски ID'лар сақланади), ad — `ad-`, shop_item — `si-`, business — `bz-`)
+ *     prefix: wholesale — йўқ (эски ID'лар сақланади), ad — `ad-`, shop_item — `si-`, business — `bz-`,
+ *     vacancy — `vc-` (вакансияга ариза, эга 2026-11-28))
  *     Ихтиёрий контекст (2026-11-03): `businessId` + `sellerName` (объект номи) — `business` чатида ва
  *     `businessId`ли `shop_item` чатида; эски чатларда йўқ (клиент: йўқ → '').
  *
@@ -76,6 +77,19 @@ const SOURCES = Object.freeze({
     // Йўналиш дўкони маҳсулоти (`businessId` бор) — чатга объект номи ҳам ёзилади (эга 2026-11-03:
     // «эгаси қайси бизнес ҳақида эканини кўрсин»). Ном `businesses/{id}`дан, эгаси мос келса.
     businessIdOf: (p) => (typeof p.businessId === 'string' ? p.businessId.trim() : ''),
+  },
+  // «Вакансиялар» (эга 2026-11-28): «Ариза бериш» → иш берувчи билан чат (телефон кўрсатилмайди).
+  // productId = `ads/{id}` (type 'work' + `vacancy`); сотувчи = `authorPhone`; муддати ўтган — ёпиқ.
+  vacancy: {
+    collection: 'ads',
+    prefix: 'vc-',
+    isActive: (p) => p.status === 'active' && p.type === 'work' && !!p.vacancy && typeof p.vacancy === 'object'
+      && !(p.expiresAt && typeof p.expiresAt.toMillis === 'function' && p.expiresAt.toMillis() < Date.now()),
+    seller: (p) => p.authorPhone,
+    title: (p) => (p.vacancy && p.vacancy.position) || p.title,
+    photo: () => '',
+    market: () => 'vacancy',
+    price: () => null,
   },
   // «Менинг бизнесим» объектининг ўзи (каталог таклифисиз — хизмат, умумий савол; эга 2026-11-03).
   // productId = `businesses/{id}`; сотувчи = `ownerId` (админ қўшган эгасиз объект → UID_RE рад этади).

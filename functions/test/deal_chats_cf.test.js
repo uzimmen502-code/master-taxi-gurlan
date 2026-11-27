@@ -370,6 +370,28 @@ async function main() {
     assert.strictEqual(s.ok, true);
   });
 
+  await check('V1 «Ариза бериш» (vacancy, ega 2026-11-28): faqat faol vakansiya; ID vc-, nom = lavozim, telefon yo\'q', async () => {
+    const future = admin.firestore.Timestamp.fromMillis(Date.now() + 86400000);
+    const past = admin.firestore.Timestamp.fromMillis(Date.now() - 1000);
+    const vac = { position: 'Tikuvchi', requirements: 'Tajriba 1 yil, tikuv mashinasi' };
+    await db.collection('ads').doc('vac_ok').set({ type: 'work', status: 'active', authorPhone: SELLER, title: 'Tikuvchi', vacancy: vac, expiresAt: future });
+    await db.collection('ads').doc('vac_old').set({ type: 'work', status: 'active', authorPhone: SELLER, title: 'Eski' });
+    await db.collection('ads').doc('vac_exp').set({ type: 'work', status: 'active', authorPhone: SELLER, vacancy: vac, expiresAt: past });
+    await db.collection('ads').doc('vac_pend').set({ type: 'work', status: 'pending', authorPhone: SELLER, vacancy: vac, expiresAt: future });
+    const r = await call('openDealChat', { productId: 'vac_ok', source: 'vacancy' }, BUYER2);
+    assert.strictEqual(r.chatId, dealChatId('vac_ok', BUYER2, 'vacancy'));
+    assert.ok(r.chatId.startsWith('vc-'));
+    const c = await chatDoc(r.chatId);
+    assert.strictEqual(c.productTitle, 'Tikuvchi');
+    assert.strictEqual(c.market, 'vacancy');
+    assert.strictEqual(c.sellerId, SELLER);
+    assert.ok(!JSON.stringify(c).includes('requirements'));
+    for (const id of ['vac_old', 'vac_exp', 'vac_pend']) {
+      await expectCode(call('openDealChat', { productId: id, source: 'vacancy' }, BUYER2), 'PRODUCT_UNAVAILABLE');
+    }
+    await expectCode(call('openDealChat', { productId: 'vac_ok', source: 'vacancy' }, SELLER), 'OWN_PRODUCT');
+  });
+
   const passed = results.filter(Boolean).length;
   console.log(`\n${passed}/${results.length} passed`);
   process.exit(passed === results.length ? 0 : 1);

@@ -3120,7 +3120,10 @@ service cloud.firestore {
             'text', 'title', 'priceText', 'isUrgent', 'type', 'editedAt'
           ])
           && (!changed.hasAny(['type'])
-              || request.resource.data.get('type', '') in ['work', 'service', 'ad', 'announcement']);
+              || request.resource.data.get('type', '') in ['work', 'service', 'ad', 'announcement'])
+          // Вакансия (эга 2026-11-28, `submitJobAd` `vacancy`): тури ва шошилинчлиги ўзгармайди — `work` дан
+          // чиқса тузилма эълон турига аралашади, шошилинч эса 30 кунлик муддатга зид.
+          && (resource.data.get('vacancy', null) == null || !changed.hasAny(['type', 'isUrgent']));
     }
 
     function adModerationPatchOk() {

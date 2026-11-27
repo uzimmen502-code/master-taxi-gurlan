@@ -4,25 +4,22 @@
 
 import 'dart:convert';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../../core/utils/formatters.dart';
 import '../../supermarket/domain/sm_offer.dart';
 import '../../supermarket/domain/sm_qty.dart';
 import '../../supermarket/domain/sm_taxonomy.dart';
+import '../services/admin_auth_service.dart';
+import '../services/admin_market_service.dart';
 import '../services/admin_supermarket_service.dart';
 import 'supermarket_import_admin_tab.dart';
 import 'supermarket_reports_admin_tab.dart';
 
 export 'supermarket_import_admin_tab.dart';
 export 'supermarket_reports_admin_tab.dart';
-
-const _stageText = <String, String>{
-  'off': 'OFF — ҳеч кимга ёпиқ',
-  'internal': 'INTERNAL — фақат синовчилар',
-  'pilot': 'PILOT — синовчилар + танланган туманлар',
-  'public': 'PUBLIC — ҳамма (танланган туманларда)',
-};
 
 const _statusText = <String, String>{
   'active': 'Сотувда',
@@ -868,28 +865,33 @@ List<({String productId, num actualQty})>? smParseActualQty(Map<String, String> 
 
 // ─── Созламалар ────────────────────────────────────────────────────────────
 
+/// Етказиш ҳақи % (`settings/app.platformDeliveryFeePercent`) — ЯГОНА манба (AVA товари ва супермаркет бир хил):
+/// ўқиш — `settings/app` оқими, ёзиш — мавжуд `AdminMarketService.setPlatformDeliveryFeePercent` (эга 2026-11-28).
+class SmDeliveryFeeSource {
+  const SmDeliveryFeeSource({required this.watch, required this.save});
+  final Stream<num?> Function() watch;
+  final Future<void> Function(double percent) save;
+}
+
+/// Фоиз матни: бутун бўлса «11», бўлмаса «11.5»; йўқ — «—».
+@visibleForTesting
+String smFeePercentText(num? v) => v == null ? '—' : (v == v.roundToDouble() ? '${v.round()}' : '$v');
+
 class SmSettingsAdminTab extends StatefulWidget {
-  const SmSettingsAdminTab({super.key, required this.service});
+  const SmSettingsAdminTab({super.key, required this.service, this.fee});
   final AdminSupermarketService service;
+
+  /// Тест учун; сукут — Firestore `settings/app` + `AdminMarketService` (Provider) + админ телефони.
+  final SmDeliveryFeeSource? fee;
 
   @override
   State<SmSettingsAdminTab> createState() => _SmSettingsAdminTabState();
 }
 
 class _SmSettingsAdminTabState extends State<SmSettingsAdminTab> {
-  String _stage = 'off';
-  final _testers = TextEditingController();
-  /// Танланган туман id'лари (`geo_districts`; эга 2026-11-27 — қўлда ёзиш ўрнига қидирув).
-  List<String> _districtIds = [];
-  List<SmDistrictOption> _districtOptions = const [];
-  final _districtQuery = TextEditingController();
-
-  /// Етказиш вақтлари: ҳар қатор — бошланиш/тугаш «ҲҲ:ДД» (сақланиши — startMin/endMin, аввалгидек).
-  final _slotRows = <(TextEditingController, TextEditingController)>[];
-  List<SmSlotDraft> _loadedSlots = const [];
-  final _cutoff = TextEditingController();
   final _holdPct = TextEditingController();
   final _reason = TextEditingController();
+  final _feePct = TextEditingController();
 
   /// Курьер тўлови: '' — созланмаган, 'percent' | 'fixed'.
   String _cpMode = '';
@@ -898,46 +900,39 @@ class _SmSettingsAdminTabState extends State<SmSettingsAdminTab> {
   /// Юкланган версия — сервер `expectedVersion` (бошқа админ ўзгартирган бўлса — рад, саҳифани янгилаш).
   int _version = 0;
   String? _msg;
+  String? _feeMsg;
   bool _busy = false;
+  bool _feeBusy = false;
   bool _loaded = false;
+  bool _feeSynced = false;
+  late final SmDeliveryFeeSource _fee = widget.fee ?? _defaultFee();
+  late final Stream<num?> _feeStream = _fee.watch();
+
+  SmDeliveryFeeSource _defaultFee() => SmDeliveryFeeSource(
+        watch: () => FirebaseFirestore.instance
+            .collection('settings')
+            .doc('app')
+            .snapshots()
+            .map((s) => s.data()?['platformDeliveryFeePercent'] as num?),
+        save: (pct) async {
+          final phone = context.read<AdminAuthService>().phoneDigits ?? '';
+          if (phone.isEmpty) throw StateError('Admin телефон топилмади — қайта киринг');
+          await context.read<AdminMarketService>().setPlatformDeliveryFeePercent(adminPhone: phone, percent: pct);
+        },
+      );
 
   @override
   void initState() {
     super.initState();
     _load();
-    widget.service.loadDistrictOptions().then((o) {
-      if (mounted) setState(() => _districtOptions = o);
-    });
   }
 
   @override
   void dispose() {
-    _districtQuery.dispose();
-    for (final (a, b) in _slotRows) {
-      a.dispose();
-      b.dispose();
+    for (final c in [_holdPct, _reason, _feePct, _cpValue]) {
+      c.dispose();
     }
     super.dispose();
-  }
-
-  void _setSlotRows(List<SmSlotDraft> slots) {
-    for (final (a, b) in _slotRows) {
-      a.dispose();
-      b.dispose();
-    }
-    _slotRows
-      ..clear()
-      ..addAll([
-        for (final s in slots) (TextEditingController(text: hhmm(s.startMin)), TextEditingController(text: hhmm(s.endMin))),
-      ]);
-    if (_slotRows.isEmpty) _slotRows.add((TextEditingController(), TextEditingController()));
-  }
-
-  String _districtLabel(String id) {
-    for (final o in _districtOptions) {
-      if (o.id == id) return o.label;
-    }
-    return id;
   }
 
   Future<void> _load() async {
@@ -945,13 +940,7 @@ class _SmSettingsAdminTabState extends State<SmSettingsAdminTab> {
       final s = await widget.service.loadSettings();
       if (!mounted) return;
       setState(() {
-        _stage = s.stage;
         _version = s.version;
-        _testers.text = s.testerIds.join('\n');
-        _districtIds = [...s.districtIds];
-        _loadedSlots = s.slots;
-        _setSlotRows(s.slots);
-        _cutoff.text = '${s.cutoffMin}';
         _holdPct.text = '${s.weighHoldPercent}';
         final cp = s.courierPayout;
         _cpMode = cp?.mode ?? '';
@@ -963,11 +952,24 @@ class _SmSettingsAdminTabState extends State<SmSettingsAdminTab> {
     }
   }
 
+  Future<void> _saveFee() async {
+    final pct = double.tryParse(_feePct.text.trim().replaceAll(',', '.'));
+    if (pct == null || pct < 0 || pct > 100) return setState(() => _feeMsg = 'Фоиз 0…100 оралиғида бўлиши керак');
+    setState(() {
+      _feeBusy = true;
+      _feeMsg = null;
+    });
+    try {
+      await _fee.save(pct);
+      if (mounted) setState(() => _feeMsg = 'Етказиш ҳақи: ${smFeePercentText(pct)}% сақланди');
+    } catch (e) {
+      if (mounted) setState(() => _feeMsg = 'Сақлаб бўлмади: $e');
+    } finally {
+      if (mounted) setState(() => _feeBusy = false);
+    }
+  }
+
   Future<void> _save() async {
-    final testers = parseTesterPhones(_testers.text);
-    final bad = invalidTesterPhones(testers);
-    final slots = slotsFromPairs([for (final (a, b) in _slotRows) (a.text, b.text)], keepNames: _loadedSlots);
-    final cutoff = int.tryParse(_cutoff.text.trim().isEmpty ? '0' : _cutoff.text.trim()) ?? -1;
     final hold = int.tryParse(_holdPct.text.trim()) ?? -1;
     final cpVal = int.tryParse(_cpValue.text.trim()) ?? -1;
     final cp = _cpMode == 'percent'
@@ -975,18 +977,8 @@ class _SmSettingsAdminTabState extends State<SmSettingsAdminTab> {
         : _cpMode == 'fixed'
             ? SmCourierPayout.fixed(cpVal)
             : null;
-    final settings = SmSettings(
-      stage: _stage,
-      testerIds: testers,
-      districtIds: List<String>.of(_districtIds),
-      slots: slots.slots,
-      cutoffMin: cutoff,
-      weighHoldPercent: hold,
-      courierPayout: cp,
-    );
+    final settings = SmSettings(weighHoldPercent: hold, courierPayout: cp);
     final errs = [
-      if (bad.isNotEmpty) 'Нотўғри телефон: ${bad.join(', ')}',
-      if (slots.errors.isNotEmpty) 'Нотўғри вақт: ${slots.errors.join(', ')}',
       ...settings.problems(),
       if (_reason.text.trim().length < 3) 'Сабаб ёзинг (audit)',
     ];
@@ -1012,20 +1004,53 @@ class _SmSettingsAdminTabState extends State<SmSettingsAdminTab> {
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
-        const Text('settings/supermarket — ким кўради ва қачон етказилади (қарорни сервер қабул қилади).'),
-        const SizedBox(height: 8),
-        RadioGroup<String>(
-          groupValue: _stage,
-          onChanged: (v) => setState(() => _stage = v ?? _stage),
-          child: Column(children: [
-            for (final s in kSmStages)
-              RadioListTile<String>(key: ValueKey('sm_admin_stage_$s'), value: s, title: Text(_stageText[s]!)),
-          ]),
+        // Эга 2026-11-28: ким кўради — ФАҚАТ «Ҳудудлар ва хизматлар» (модул «supermarket»); вақт оралиқлари йўқ.
+        const Text(
+          'Супермаркет кимга кўринади — «Ҳудудлар ва хизматлар» бўлимида («AVA Супермаркет» модули, туман бўйича). '
+          'Оддий буюртма имкон қадар тез етказилади; совға/байрам саватчасида мижоз фақат санани танлайди.',
+          key: ValueKey('sm_admin_visibility_note'),
+          style: TextStyle(color: Colors.black54),
         ),
-        _area('testers', 'Синовчилар (телефон, ҳар қаторда биттадан)', _testers),
-        _districtsEditor(),
-        _slotsEditor(),
-        _field('cutoff', 'Бугунги вақт бошланишидан неча дақиқа олдин қабул тўхтайди (0..720)', _cutoff),
+        const SizedBox(height: 12),
+        StreamBuilder<num?>(
+          stream: _feeStream,
+          builder: (context, snap) {
+            final live = snap.data;
+            if (!_feeSynced && snap.hasData) {
+              _feeSynced = true;
+              _feePct.text = live == null ? '' : smFeePercentText(live);
+            }
+            return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Expanded(
+                  child: TextField(
+                    key: const ValueKey('sm_admin_fee_pct'),
+                    controller: _feePct,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(labelText: 'Етказиш ҳақи, %', border: OutlineInputBorder()),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  key: const ValueKey('sm_admin_fee_save'),
+                  onPressed: _feeBusy ? null : _saveFee,
+                  child: const Text('Сақлаш'),
+                ),
+              ]),
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  'Ҳозир: ${smFeePercentText(live)}% — AVA товари ва супермаркет учун ягона созлама '
+                  '(settings/app.platformDeliveryFeePercent). Янги буюртмаларга қўлланади.',
+                  key: const ValueKey('sm_admin_fee_live'),
+                  style: const TextStyle(fontSize: 12, color: Colors.black54),
+                ),
+              ),
+              if (_feeMsg != null) Text(_feeMsg!, key: const ValueKey('sm_admin_fee_msg')),
+            ]);
+          },
+        ),
+        const Divider(height: 28),
         _field('hold_pct', 'Тортиладиган маҳсулот учун вақтинча ушлаш, % (0..50; эга қарори — 10)', _holdPct),
         Padding(
           padding: const EdgeInsets.only(top: 8),
@@ -1067,14 +1092,6 @@ class _SmSettingsAdminTabState extends State<SmSettingsAdminTab> {
           ),
         ),
         _field('reason', 'Сабаб (audit)', _reason),
-        const Padding(
-          padding: EdgeInsets.only(top: 8),
-          child: Text(
-            'Етказиш ҳақи — мавжуд AVA товари фоизи (settings/app.platformDeliveryFeePercent, ҳозир 11%); '
-            'бу ерда ўзгартирилмайди.',
-            style: TextStyle(color: Colors.black54),
-          ),
-        ),
         if (_msg != null)
           Padding(padding: const EdgeInsets.only(top: 8), child: Text(_msg!, key: const ValueKey('sm_admin_settings_msg'))),
         const SizedBox(height: 8),
@@ -1087,118 +1104,16 @@ class _SmSettingsAdminTabState extends State<SmSettingsAdminTab> {
     );
   }
 
-  Widget _districtsEditor() {
-    final hits = filterSmDistricts(_districtOptions, _districtQuery.text, exclude: _districtIds.toSet());
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: InputDecorator(
-        decoration: const InputDecoration(labelText: 'Туманлар', border: OutlineInputBorder()),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          if (_districtIds.isEmpty)
-            const Text('Туман танланмаган', style: TextStyle(color: Colors.black54))
-          else
-            Wrap(spacing: 6, runSpacing: 6, children: [
-              for (final id in _districtIds)
-                InputChip(
-                  key: ValueKey('sm_admin_district_chip_$id'),
-                  label: Text(_districtLabel(id)),
-                  deleteIcon: const Icon(Icons.close, size: 18),
-                  onDeleted: () => setState(() => _districtIds.remove(id)),
-                ),
-            ]),
-          const SizedBox(height: 8),
-          TextField(
-            key: const ValueKey('sm_admin_district_search'),
-            controller: _districtQuery,
-            decoration: InputDecoration(
-              isDense: true,
-              prefixIcon: const Icon(Icons.search),
-              hintText: _districtOptions.isEmpty ? 'Туманлар рўйхати юкланмоқда…' : 'Туман номини ёзинг (масалан, Гурлан)',
-            ),
-            onChanged: (_) => setState(() {}),
-          ),
-          for (final o in hits)
-            ListTile(
-              key: ValueKey('sm_admin_district_opt_${o.id}'),
-              dense: true,
-              leading: const Icon(Icons.add_location_alt_outlined),
-              title: Text(o.label),
-              onTap: () => setState(() {
-                _districtIds.add(o.id);
-                _districtQuery.clear();
-              }),
-            ),
-          if (_districtQuery.text.trim().isNotEmpty && hits.isEmpty && _districtOptions.isNotEmpty)
-            const Padding(padding: EdgeInsets.only(top: 6), child: Text('Топилмади', style: TextStyle(color: Colors.black54))),
-        ]),
-      ),
-    );
-  }
-
-  Widget _timeField(String key, String label, TextEditingController c) => TextField(
-        key: ValueKey(key),
-        controller: c,
-        keyboardType: TextInputType.number,
-        inputFormatters: [HhMmInputFormatter()],
-        decoration: InputDecoration(isDense: true, labelText: label, hintText: 'ҲҲ:ДД', border: const OutlineInputBorder()),
-      );
-
-  Widget _slotsEditor() => Padding(
-        padding: const EdgeInsets.only(top: 8),
-        child: InputDecorator(
-          decoration: const InputDecoration(labelText: 'Етказиш вақтлари', border: OutlineInputBorder()),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            for (var i = 0; i < _slotRows.length; i++)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(children: [
-                  Expanded(child: _timeField('sm_admin_slot_start_$i', 'Бошланиш', _slotRows[i].$1)),
-                  const Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('—')),
-                  Expanded(child: _timeField('sm_admin_slot_end_$i', 'Тугаш', _slotRows[i].$2)),
-                  IconButton(
-                    key: ValueKey('sm_admin_slot_remove_$i'),
-                    tooltip: 'Ўчириш',
-                    icon: const Icon(Icons.delete_outline),
-                    onPressed: () => setState(() {
-                      final (a, b) = _slotRows.removeAt(i);
-                      a.dispose();
-                      b.dispose();
-                    }),
-                  ),
-                ]),
-              ),
-            if (_slotRows.length < 12)
-              TextButton.icon(
-                key: const ValueKey('sm_admin_slot_add'),
-                onPressed: () => setState(() => _slotRows.add((TextEditingController(), TextEditingController()))),
-                icon: const Icon(Icons.add),
-                label: const Text('Вақт қўшиш'),
-              ),
-          ]),
-        ),
-      );
-
   Widget _field(String key, String label, TextEditingController c) => Padding(
         padding: const EdgeInsets.only(top: 8),
         child: TextField(
           key: ValueKey('sm_admin_$key'),
           controller: c,
-          decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
-        ),
-      );
-
-  Widget _area(String key, String label, TextEditingController c) => Padding(
-        padding: const EdgeInsets.only(top: 8),
-        child: TextField(
-          key: ValueKey('sm_admin_$key'),
-          controller: c,
-          minLines: 2,
-          maxLines: 6,
+          keyboardType: TextInputType.number,
           decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
         ),
       );
 }
-
 /// Етишмовчилик ойнаси: мавжуд миқдор (0 ≤ x < буюртмадаги) + кўпи билан 3 та ўрнини босувчи.
 class SmShortageAdminDialog extends StatefulWidget {
   const SmShortageAdminDialog({super.key, required this.line, required this.pool});

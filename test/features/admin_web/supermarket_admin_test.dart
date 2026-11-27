@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -142,13 +143,13 @@ void main() {
         'updatedAt': 'x',
       });
       expect(s.version, 7);
-      expect(s.toMap().keys.toSet(), {'stage', 'testerIds', 'districtIds', 'slots', 'cutoffMin', 'weighHoldPercent', 'courierPayout'});
-      expect((s.toMap()['slots'] as List).single['names'], _n3('Эрталаб'));
+      // Эга 2026-11-28: кўриниш — модул созламаси, етказиш — имкон қадар тез: сақланадиган майдонлар фақат шулар.
+      expect(s.toMap().keys.toSet(), {'weighHoldPercent', 'courierPayout'});
+      expect(s.slots.single.names, _n3('Эрталаб'), reason: 'эски ҳужжат ўқилади');
       expect(s.problems(), isEmpty);
-      expect(const SmSettings(cutoffMin: 721).problems(), isNotEmpty);
-      expect(const SmSettings(cutoffMin: 720).problems(), isEmpty, reason: 'чегара');
+      expect(const SmSettings(cutoffMin: 721).problems(), isEmpty, reason: 'cutoff энди сақланмайди');
       expect(const SmSettings(weighHoldPercent: 51).problems(), isNotEmpty);
-      expect(const SmSettings(districtIds: ['Gurlan!']).problems(), isNotEmpty);
+      expect(const SmSettings(weighHoldPercent: 50).problems(), isEmpty, reason: 'чегара');
       expect(SmSettings.fromMap({'stage': 'x'}).stage, 'off');
       expect(SmSettings.fromMap(null).version, 0);
     });
@@ -302,103 +303,51 @@ void main() {
       expect(s.saved.single.purchase, isNull);
     });
 
-    testWidgets('созламалар: версия ва сабаб билан; нотўғри — сақланмайди', (t) async {
+    testWidgets('созламалар (эга 2026-11-28): босқич/синовчи/туман/вақт оралиғи ЙЎҚ; ушлаш + курьер тўлови, версия ва сабаб билан', (t) async {
       await _big(t);
       final s = _FakeAdmin();
-      await t.pumpWidget(MaterialApp(home: Scaffold(body: SmSettingsAdminTab(service: s))));
+      final fee = _FakeFee(11);
+      await t.pumpWidget(MaterialApp(home: Scaffold(body: SmSettingsAdminTab(service: s, fee: fee.source))));
       await t.pumpAndSettle();
-      expect(find.text('10:00'), findsOneWidget);
-      expect(find.text('12:00'), findsOneWidget);
-      expect(find.text('60'), findsOneWidget);
-      await t.tap(_k('sm_admin_slot_add'));
-      await t.pumpAndSettle();
-      await t.enterText(_k('sm_admin_slot_start_1'), '18');
+      for (final k in ['sm_admin_stage_public', 'sm_admin_district_search', 'sm_admin_slot_add', 'sm_admin_slot_start_0', 'sm_admin_cutoff', 'sm_admin_testers']) {
+        expect(_k(k), findsNothing, reason: k);
+      }
+      expect(_k('sm_admin_visibility_note'), findsOneWidget);
+      await t.enterText(_k('sm_admin_hold_pct'), '51');
       await t.tap(_k('sm_admin_settings_save'));
       await t.pumpAndSettle();
       expect(s.savedSettings, isNull);
-      expect(find.textContaining('Нотўғри вақт'), findsOneWidget);
       expect(find.textContaining('Сабаб ёзинг'), findsOneWidget);
-      await t.enterText(_k('sm_admin_slot_start_1'), '1500');
-      await t.enterText(_k('sm_admin_slot_end_1'), '1700');
-      await t.enterText(_k('sm_admin_cutoff'), '721');
-      await t.enterText(_k('sm_admin_reason'), 'Гурлан пилот');
-      await t.tap(_k('sm_admin_settings_save'));
-      await t.pumpAndSettle();
-      expect(s.savedSettings, isNull, reason: 'cutoff > 720');
-      await t.enterText(_k('sm_admin_cutoff'), '90');
-      await t.tap(_k('sm_admin_stage_public'));
+      await t.enterText(_k('sm_admin_hold_pct'), '12');
+      await t.enterText(_k('sm_admin_reason'), 'ушлаш');
       await t.tap(_k('sm_admin_settings_save'));
       await t.pumpAndSettle();
       final saved = s.savedSettings!;
-      expect(saved.v, 4);
-      expect(saved.reason, 'Гурлан пилот');
-      expect(saved.s.stage, 'public');
-      expect(saved.s.slots.map((x) => x.id), ['s1000_1200', 's1500_1700']);
-      expect(saved.s.districtIds, ['gurlan']);
-      expect(saved.s.cutoffMin, 90);
-      expect(saved.s.weighHoldPercent, 10);
+      expect([saved.v, saved.reason, saved.s.weighHoldPercent], [4, 'ушлаш', 12]);
+      expect(saved.s.toMap().keys.toSet(), {'weighHoldPercent', 'courierPayout'});
     });
 
-    testWidgets('туманлар: номи бўйича қидирув → танлаш → id сақланади; чипни ўчириш (эга 2026-11-27)', (t) async {
+    testWidgets('етказиш ҳақи % (эга 2026-11-28): жонли қиймат (ягона манба settings/app), таҳрир → мавжуд сервис; нотўғри — рад', (t) async {
       await _big(t);
-      final s = _FakeAdmin();
-      await t.pumpWidget(MaterialApp(home: Scaffold(body: SmSettingsAdminTab(service: s))));
+      final fee = _FakeFee(11);
+      await t.pumpWidget(MaterialApp(home: Scaffold(body: SmSettingsAdminTab(service: _FakeAdmin(), fee: fee.source))));
       await t.pumpAndSettle();
-      expect(find.text('Гурлан тумани (Хоразм)'), findsOneWidget, reason: 'мавжуд id номи билан');
-      await t.enterText(_k('sm_admin_district_search'), 'ургенч');
+      expect(t.widget<TextField>(_k('sm_admin_fee_pct')).controller!.text, '11');
+      expect(find.textContaining('Ҳозир: 11%'), findsOneWidget);
+      expect(find.textContaining('ҳозир 11%'), findsNothing, reason: 'қотирилган матн йўқ');
+      await t.enterText(_k('sm_admin_fee_pct'), '101');
+      await t.tap(_k('sm_admin_fee_save'));
       await t.pumpAndSettle();
-      expect(_k('sm_admin_district_opt_urganch'), findsOneWidget);
-      expect(_k('sm_admin_district_opt_gurlan'), findsNothing);
-      await t.tap(_k('sm_admin_district_opt_urganch'));
+      expect(fee.saved, isEmpty);
+      await t.enterText(_k('sm_admin_fee_pct'), '12,5');
+      await t.tap(_k('sm_admin_fee_save'));
       await t.pumpAndSettle();
-      expect(_k('sm_admin_district_chip_urganch'), findsOneWidget);
-      await t.enterText(_k('sm_admin_district_search'), 'гурлан');
+      expect(fee.saved, [12.5]);
+      fee.push(12.5);
       await t.pumpAndSettle();
-      expect(_k('sm_admin_district_opt_gurlan'), findsNothing, reason: 'танланган қайта чиқмайди');
-      await t.enterText(_k('sm_admin_district_search'), 'yangi');
-      await t.pumpAndSettle();
-      await t.tap(_k('sm_admin_district_opt_yangiariq'));
-      await t.pumpAndSettle();
-      await t.tap(find.descendant(of: _k('sm_admin_district_chip_gurlan'), matching: find.byIcon(Icons.close)));
-      await t.pumpAndSettle();
-      await t.enterText(_k('sm_admin_reason'), 'туманлар');
-      await t.tap(_k('sm_admin_settings_save'));
-      await t.pumpAndSettle();
-      expect(s.savedSettings!.s.districtIds, ['urganch', 'yangiariq']);
+      expect(find.textContaining('Ҳозир: 12.5%'), findsOneWidget);
+      expect(smFeePercentText(null), '—');
     });
-
-    testWidgets('вақт маскаси: «0930» → «09:30» → 570; 25:00 ва тугаш ≤ бошланиш рад (эга 2026-11-27)', (t) async {
-      await _big(t);
-      final s = _FakeAdmin();
-      await t.pumpWidget(MaterialApp(home: Scaffold(body: SmSettingsAdminTab(service: s))));
-      await t.pumpAndSettle();
-      await t.enterText(_k('sm_admin_reason'), 'вақтлар');
-      await t.enterText(_k('sm_admin_slot_start_0'), '0930');
-      await t.enterText(_k('sm_admin_slot_end_0'), '11ab30999');
-      await t.pumpAndSettle();
-      expect(find.text('09:30'), findsOneWidget);
-      expect(find.text('11:30'), findsOneWidget, reason: 'фақат рақам, 5 белги');
-      await t.enterText(_k('sm_admin_slot_start_0'), '2500');
-      await t.tap(_k('sm_admin_settings_save'));
-      await t.pumpAndSettle();
-      expect(s.savedSettings, isNull);
-      expect(find.textContaining('25:00-11:30'), findsOneWidget);
-      await t.enterText(_k('sm_admin_slot_start_0'), '1130');
-      await t.tap(_k('sm_admin_settings_save'));
-      await t.pumpAndSettle();
-      expect(s.savedSettings, isNull, reason: 'тугаш = бошланиш');
-      expect(find.textContaining('тугаш бошланишдан кейин'), findsOneWidget);
-      await t.enterText(_k('sm_admin_slot_start_0'), '1200');
-      await t.tap(_k('sm_admin_settings_save'));
-      await t.pumpAndSettle();
-      expect(s.savedSettings, isNull, reason: 'тугаш < бошланиш');
-      await t.enterText(_k('sm_admin_slot_start_0'), '0930');
-      await t.tap(_k('sm_admin_settings_save'));
-      await t.pumpAndSettle();
-      final slot = s.savedSettings!.s.slots.single;
-      expect((slot.id, slot.startMin, slot.endMin), ('s0930_1130', 570, 690));
-    });
-
     test('parseHhMm / HhMmInputFormatter чегаралари', () {
       expect(parseHhMm('00:00'), 0);
       expect(parseHhMm('23:59'), 1439);
@@ -477,4 +426,19 @@ void main() {
     expect(src.contains("label: 'AVA Супермаркет'"), isTrue);
     expect(src.contains("if (section.label == 'AVA Супермаркет') {\n      return const SupermarketAdminScreen();"), isTrue);
   });
+}
+
+class _FakeFee {
+  _FakeFee(this.initial);
+  final num initial;
+  final _ctrl = StreamController<num?>.broadcast();
+  final saved = <double>[];
+  void push(num v) => _ctrl.add(v);
+  late final SmDeliveryFeeSource source = SmDeliveryFeeSource(
+    watch: () async* {
+      yield initial;
+      yield* _ctrl.stream;
+    },
+    save: (p) async => saved.add(p),
+  );
 }

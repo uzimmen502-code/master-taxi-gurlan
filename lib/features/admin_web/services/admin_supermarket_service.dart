@@ -83,13 +83,10 @@ class SmSettings {
     );
   }
 
-  /// Сервер `SETTINGS_KEYS` — фақат шулар (номаълум калит рад этилади).
+  /// Эга 2026-11-28: кўриниш — «Ҳудудлар ва хизматлар» модул созламаси (stage/testerIds/districtIds ЙЎҚ), етказиш —
+  /// имкон қадар тез (slots/cutoffMin ЙЎҚ). Эски ҳужжатдаги бу майдонлар ўқилади, лекин сақланмайди (сервер ҳужжатни
+  /// тўлиқ алмаштиради — эски майдонлар тозаланади).
   Map<String, dynamic> toMap() => {
-        'stage': stage,
-        'testerIds': testerIds,
-        'districtIds': districtIds,
-        'slots': [for (final s in slots) s.toMap()],
-        'cutoffMin': cutoffMin,
         'weighHoldPercent': weighHoldPercent,
         // Доим юборилади: сервер ҳужжатни тўлиқ алмаштиради — тушириб қолдирилса созлама ўчиб кетарди.
         'courierPayout': courierPayout?.toMap(),
@@ -97,13 +94,6 @@ class SmSettings {
 
   /// Сервер валидатори кўзгуси (Кирилл матн).
   List<String> problems() => [
-        if (!kSmStages.contains(stage)) 'Босқич нотўғри',
-        if (testerIds.length > 200) 'Синовчилар 200 тадан кўп',
-        if (districtIds.length > 50) 'Туманлар 50 тадан кўп',
-        for (final d in districtIds)
-          if (!kSmDistrictRe.hasMatch(d)) 'Туман ID нотўғри: $d',
-        if (slots.length > 12) 'Вақтлар 12 тадан кўп',
-        if (cutoffMin < 0 || cutoffMin > 720) 'Қабул тўхташи 0..720 дақиқа',
         if (weighHoldPercent < 0 || weighHoldPercent > 50) 'Тортиш ушлаши 0..50%',
         ...?courierPayout?.problems(),
       ];

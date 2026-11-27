@@ -349,6 +349,8 @@ function attachTelegramWalletBot(exports, deps) {
     if (!uid || amount <= 0) {
       throw new Error('So\'rov buzilgan');
     }
+    // Yangi qurilma tasdiqlanganidan 24 s — admin/avto tasdiqda ham pul chiqmaydi (ega 2026-11-28).
+    await assertNotDeviceTrustLimited(uid);
     const opId = `withdraw_${requestId}`;
     await runWalletToCashInternal({
       callerUid,
@@ -1451,6 +1453,14 @@ function attachTelegramWalletBot(exports, deps) {
         : 0;
     if (amount > bal) {
       await tgSend(chatId, `Yetarli emas. Баланс: ${bal} сўм`);
+      return;
+    }
+    // Avval Telegram yo'li qurilma cheklovini tekshirmasdi (ega 2026-11-28).
+    try {
+      await assertNotDeviceTrustLimited(uid);
+    } catch (e) {
+      await tgSend(chatId,
+          '⏳ Янги қурилма тасдиқланганига 24 соат бўлмади — пул ечиш вақтинча ёпиқ.');
       return;
     }
 

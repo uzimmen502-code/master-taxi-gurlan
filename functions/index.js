@@ -288,6 +288,12 @@ const DEVICE_BINDING_BLOCK_MS = 30 * 60 * 1000;
 const DEVICE_TRANSFER_TTL_MS = 30 * 60 * 1000;
 const DEVICE_TRUST_LIMITED_MS = 24 * 60 * 60 * 1000;
 const DEVICE_TRANSFER_MAX_PER_DAY = 5;
+// Qurilma xavfsizligi (ega 2026-11-28): audit, rate limit, «Йўқ» → 24 s blok, admin ko'rigi.
+// `canonicalUid`, `notifyUserInApp` — hoisted function declaration (pastda).
+const deviceSecurity = require('./device_security');
+const deviceSec = deviceSecurity.makeDeviceSecurity({
+  db, admin, functions, canonicalUid, notifyUserInApp,
+});
 
 /** Offline / hujjat yo'q — Dart [PassengerCancelRulesConfig.defaults] bilan sinxron. */
 const PASSENGER_CANCEL_RULES_DEFAULTS = {
@@ -664,7 +670,11 @@ async function assertNotDeviceTrustLimited(uid) {
   throw new functions.https.HttpsError(
     'failed-precondition',
     'Yangi qurilma: pul yechish 24 soatga cheklangan. Keyinroq urinib ko\'ring.',
-    { code: 'device_trust_limited', untilMs },
+    {
+      code: 'device_trust_limited',
+      untilMs,
+      messages: deviceSecurity.messagesFor('DEVICE_TRUST_LIMITED'),
+    },
   );
 }
 
@@ -675,20 +685,32 @@ function oldDeviceLabelFromBinding(binding) {
   return [brand, model].filter(Boolean).join(' ').slice(0, 80);
 }
 
-async function notifyDeviceTransferRequest(phone, requestId, newDeviceLabel) {
+/**
+ * Bog'langan qurilmaga «Бу сизми?» (push + Xabarlar). 3 til: push matni uz_Cyrl, news'da `i18n`.
+ * Eski APK (<1.0.22+60) so'rov oynasini ochmaydi — matnda yangilash havolasi bor.
+ */
+async function notifyDeviceTransferRequest(phone, requestId, newDeviceLabel, meta = {}) {
   const label = String(newDeviceLabel || '').trim();
-  const body = label
-    ? `Yangi qurilma (${label}) kirish so‘radi. Tasdiqlaysizmi?`
-    : 'Yangi qurilma shu raqam bilan kirish so‘radi. Tasdiqlaysizmi?';
+  const t = deviceSecurity.texts('prompt', {
+    label,
+    city: String(meta.approxCity || ''),
+    at: deviceSecurity.tashkentTime(Date.now()),
+  });
   await notifyUserInApp({
     userId: phone,
-    title: '🔐 Qurilma almashtirish',
-    body,
-    category: 'info',
+    title: t.title,
+    body: t.body,
+    category: 'security',
     source: 'device_transfer',
     dataType: 'device_transfer_request',
     screen: 'device_transfer',
-    extraData: { requestId: String(requestId || '') },
+    extraNews: { i18n: t.i18n, requestId: String(requestId || '') },
+    extraData: {
+      requestId: String(requestId || ''),
+      newDeviceLabel: label,
+      platform: String(meta.platform || ''),
+      approxCity: String(meta.approxCity || ''),
+    },
   });
 }
 
@@ -768,9 +790,18 @@ async function trustedDevicePayload(phone, extra = {}) {
   return out;
 }
 
-async function isDeviceBindingAutoApproveEnabled() {
+/**
+ * Ega 2026-11-28: `settings/app.deviceBindingAutoApprove` E'TIBORSIZ (false deb qabul qilinadi).
+ * Faqat favqulodda kod bayrog'i (`DEVICE_SEC.EMERGENCY_HONOR_AUTO_APPROVE`, redeploy) yoqilsa
+ * sozlama yana o'qiladi — imtiyozli (panel rolli) raqamlar uchun HECH QACHON.
+ */
+async function isDeviceBindingAutoApproveEnabled(privileged) {
+  if (deviceSecurity.DEVICE_SEC.EMERGENCY_HONOR_AUTO_APPROVE !== true) return false;
   const snap = await db.collection('settings').doc('app').get();
-  return (snap.data() || {}).deviceBindingAutoApprove === true;
+  return deviceSecurity.shouldHonorAutoApprove({
+    settingEnabled: (snap.data() || {}).deviceBindingAutoApprove === true,
+    privileged: privileged === true,
+  });
 }
 
 async function isDatingAutoApproveEnabled() {
@@ -788,12 +819,16 @@ async function isJobsAutoApproveEnabled() {
   return (snap.data() || {}).jobsAutoApprove === true;
 }
 
-/** Admin yoki auto-rejim: telefon ↔ hash bog'lanishini majburan yangilash. */
+/**
+ * Admin / tasdiq / birinchi bog'lash: telefon ↔ hash bog'lanishini yangilash.
+ * Har chaqiruv shu tranzaksiyada `device_binding_events`ga yoziladi (audit, ega 2026-11-28).
+ */
 async function forceDeviceBindingLink({
   hash,
   phone,
   verifiedMethod,
   fingerprint,
+  event,
 }) {
   const bindingRef = db.collection('device_bindings').doc(hash);
   const aliasRef = db.collection('device_aliases').doc(phone);
@@ -802,9 +837,24 @@ async function forceDeviceBindingLink({
   await db.runTransaction(async (tx) => {
     const bindingSnap = await tx.get(bindingRef);
     const aliasSnap = await tx.get(aliasRef);
+    const prevAliasHash = aliasSnap.exists
+      ? String(aliasSnap.data().deviceFingerprintHash || '').toLowerCase()
+      : '';
+    const prevBoundPhone = bindingSnap.exists ? canonicalUid(bindingSnap.data().phone || '') : '';
+    deviceSec.logEventInTx(tx, {
+      action: 'bind',
+      ...(event || {}),
+      phone,
+      method: verifiedMethod || 'admin_manual',
+      hash,
+      prevHash: prevAliasHash !== hash ? prevAliasHash : '',
+      prevPhone: prevBoundPhone && prevBoundPhone !== phone ? prevBoundPhone : '',
+      platform: deviceSecurity.platformOf(fingerprint),
+      label: (event && event.label) || deviceSecurity.deviceLabelOf(fingerprint),
+    });
 
     if (aliasSnap.exists) {
-      const oldHash = String(aliasSnap.data().deviceFingerprintHash || '').toLowerCase();
+      const oldHash = prevAliasHash;
       if (oldHash && oldHash !== hash && isValidFingerprintHash(oldHash)) {
         const oldBindingRef = db.collection('device_bindings').doc(oldHash);
         tx.set(oldBindingRef, {
@@ -6063,6 +6113,13 @@ exports.confirmPayout = functions.https.onCall(async (data, context) => {
           'failed-precondition',
           'Payout KYC talab qilinadi — profil yoki admin tasdiqlashini yakunlang');
     }
+    // Yangi qurilma tasdiqlanganidan 24 s — to'lov ham bajarilmaydi (ega 2026-11-28).
+    if (isDeviceTrustLimited(userData)) {
+      throw new functions.https.HttpsError(
+          'failed-precondition',
+          'Yangi qurilma: pul yechish 24 soatga cheklangan.',
+          { code: 'device_trust_limited', messages: deviceSecurity.messagesFor('DEVICE_TRUST_LIMITED') });
+    }
     const prev = userData.bonusBalance || 0;
     if (prev < amount) {
       throw new functions.https.HttpsError('failed-precondition', 'insufficient_balance');
@@ -6686,7 +6743,7 @@ const authFunctions = functions.region('europe-west1');
 /** Composite fingerprint: login oldin qurilma ↔ telefon tekshiruvi. */
 exports.checkDeviceBinding = authFunctions
   .runWith({ timeoutSeconds: 60, memory: '256MB', minInstances: 1 })
-  .https.onCall(async (data) => {
+  .https.onCall(async (data, context) => {
   // Client til ekranidan cold-start warmup.
   if (data && data.warmup === true) {
     return { status: 'warmup', ok: true };
@@ -6704,9 +6761,9 @@ exports.checkDeviceBinding = authFunctions
 
   const bindingRef = db.collection('device_bindings').doc(hash);
   const bindingSnap = await bindingRef.get();
+  const binding = bindingSnap.exists ? (bindingSnap.data() || {}) : null;
 
-  if (bindingSnap.exists) {
-    const binding = bindingSnap.data() || {};
+  if (binding) {
     if (deviceBindingBlocked(binding)) {
       const until = binding.blockedUntil;
       const retryAfterMs = until && typeof until.toDate === 'function'
@@ -6735,17 +6792,45 @@ exports.checkDeviceBinding = authFunctions
       // Auth token шу жавобда — bootstrap 2-чи CF чақирувини кутмайди.
       return trustedDevicePayload(phone);
     }
+  }
 
-    if (await isDeviceBindingAutoApproveEnabled()) {
-      const fingerprint = data.fingerprint && typeof data.fingerprint === 'object'
-        ? data.fingerprint
-        : {};
+  // ── Bu yerdan pastda: ishonchli bo'lmagan urinish (ega 2026-11-28) ──
+  // Avto-tasdiq yo'q: yangi qurilma faqat bog'langan qurilma («Бу сизми?») yoki admin ko'rigi
+  // bilan kiradi. Har urinish auditda, rate limit (telefon/qurilma/IP), «Йўқ» → 24 s blok.
+  const fingerprint = deviceSecurity.cleanFingerprint(data.fingerprint);
+  const ipKey = deviceSecurity.ipKeyOf(context);
+  const city = deviceSecurity.approxCityOf(context);
+  const label = deviceSecurity.deviceLabelOf(fingerprint);
+  const platform = deviceSecurity.platformOf(fingerprint);
+  const evBase = { phone, hash, ipKey, city, label, platform, actor: 'new_device' };
+
+  await deviceSec.enforceRateLimits({ phone, hash, ipKey });
+
+  const denial = await deviceSec.getDenial(phone, hash);
+  if (denial.blocked) {
+    await deviceSec.logEvent({ ...evBase, action: 'attempt_denied_device', result: 'blocked_24h' });
+    return {
+      status: 'blocked',
+      reason: 'owner_rejected',
+      retryAfterMs: Math.max(0, denial.untilMs - Date.now()),
+      selfServeHint: 'owner_rejected',
+      code: 'DEVICE_DENIED_24H',
+      messages: deviceSecurity.messagesFor('DEVICE_DENIED_24H'),
+      message: 'Bu qurilmadan kirish hisob egasi tomonidan rad etildi.',
+    };
+  }
+
+  const privileged = await deviceSec.isPrivilegedPhone(phone);
+  const autoHonored = await isDeviceBindingAutoApproveEnabled(privileged);
+
+  if (binding && canonicalUid(binding.phone || '')) {
+    // Qurilma BOSHQA raqamga bog'langan.
+    if (autoHonored) {
       await forceDeviceBindingLink({
-        hash,
-        phone,
-        verifiedMethod: 'admin_auto',
-        fingerprint,
+        hash, phone, verifiedMethod: 'admin_auto', fingerprint,
+        event: { ...evBase, action: 'emergency_auto_approved' },
       });
+      await deviceSec.markTrustLimited(phone, 'emergency_auto_approve');
       return trustedDevicePayload(phone, { autoApproved: true });
     }
 
@@ -6762,6 +6847,13 @@ exports.checkDeviceBinding = authFunctions
       );
     }
     await bindingRef.set(patch, { merge: true });
+    await deviceSec.logEvent({
+      ...evBase, action: 'attempt_device_bound_other_phone', result: block ? 'blocked' : 'refused',
+      prevPhone: canonicalUid(binding.phone || ''),
+    });
+    if (await deviceSec.accountExists(phone)) {
+      await deviceSec.notifyAttempt({ phone, label, city });
+    }
 
     return {
       status: 'device_bound_other_phone',
@@ -6773,52 +6865,95 @@ exports.checkDeviceBinding = authFunctions
     };
   }
 
+  // Qurilma bog'lanmagan (yoki eski bog'lanishi bo'shatilgan — `phone: ''`).
   const aliasSnap = await db.collection('device_aliases').doc(phone).get();
-  if (aliasSnap.exists) {
-    const aliasHash = String(aliasSnap.data().deviceFingerprintHash || '').toLowerCase();
-    if (aliasHash && !isValidFingerprintHash(aliasHash)) {
-      // Eski alias (legacy hash ID) — yangi qurilma sifatida davom etadi.
-    } else if (aliasHash && aliasHash !== hash) {
-      if (await isDeviceBindingAutoApproveEnabled()) {
-        const fingerprint = data.fingerprint && typeof data.fingerprint === 'object'
-          ? data.fingerprint
-          : {};
-        await forceDeviceBindingLink({
-          hash,
-          phone,
-          verifiedMethod: 'admin_auto',
-          fingerprint,
-        });
-        return trustedDevicePayload(phone, { autoApproved: true });
-      }
-      let oldDeviceLabel = '';
-      try {
-        const oldBind = await db.collection('device_bindings').doc(aliasHash).get();
-        if (oldBind.exists) {
-          oldDeviceLabel = oldDeviceLabelFromBinding(oldBind.data());
-        }
-      } catch (_) {}
-      return {
-        status: 'phone_bound_other_device',
-        selfServeAvailable: true,
-        oldDeviceLabel,
-        message:
-          'Bu raqam boshqa qurilmaga bog\'liq. Eski qurilmadan tasdiqlashingiz mumkin.',
-      };
-    }
+  const aliasHash = aliasSnap.exists
+    ? String(aliasSnap.data().deviceFingerprintHash || '').toLowerCase()
+    : '';
+
+  if (isValidFingerprintHash(aliasHash) && aliasHash === hash) {
+    // Alias shu qurilmani ko'rsatadi, lekin binding bo'sh — o'z-o'zini tiklash (yangi qurilma emas).
+    await forceDeviceBindingLink({
+      hash, phone, verifiedMethod: 'alias_self_repair', fingerprint,
+      event: { ...evBase, action: 'alias_self_repair' },
+    });
+    return trustedDevicePayload(phone);
   }
 
-  // Янги қурилма ↔ телефон: фақат fingerprint боғлаш (token — createPhoneSession).
-  // Низолар (бошқа рақам/қурилма) юқорида блокланади — бу ерга фақат «тоза» биринчи боғлаш келади.
-  const fingerprint = data.fingerprint && typeof data.fingerprint === 'object'
-    ? data.fingerprint
-    : {};
+  if (isValidFingerprintHash(aliasHash)) {
+    // Raqam BOSHQA qurilmaga bog'langan.
+    let aliasBinding = null;
+    try {
+      const ab = await db.collection('device_bindings').doc(aliasHash).get();
+      if (ab.exists) aliasBinding = ab.data() || {};
+    } catch (_) {}
+
+    // Bir xil o'rnatma (OS yangilanishi hash'ni siljitgan) — yangi qurilma emas. Imtiyozlilarga yo'q.
+    if (!privileged && aliasBinding
+        && deviceSecurity.sameInstall(aliasBinding.fingerprint, fingerprint)) {
+      await forceDeviceBindingLink({
+        hash, phone, verifiedMethod: 'same_install_drift', fingerprint,
+        event: { ...evBase, action: 'same_install_drift' },
+      });
+      return trustedDevicePayload(phone, { sameInstall: true });
+    }
+
+    if (autoHonored) {
+      await forceDeviceBindingLink({
+        hash, phone, verifiedMethod: 'admin_auto', fingerprint,
+        event: { ...evBase, action: 'emergency_auto_approved' },
+      });
+      await deviceSec.markTrustLimited(phone, 'emergency_auto_approve');
+      return trustedDevicePayload(phone, { autoApproved: true });
+    }
+
+    const oldDeviceLabel = aliasBinding ? oldDeviceLabelFromBinding(aliasBinding) : '';
+    await deviceSec.logEvent({
+      ...evBase, action: 'attempt_new_device', result: 'approval_required', prevHash: aliasHash,
+    });
+    await deviceSec.notifyAttempt({ phone, label, city });
+    return {
+      status: 'phone_bound_other_device',
+      selfServeAvailable: true,
+      adminReviewAvailable: true,
+      oldDeviceLabel,
+      message:
+        'Bu raqam boshqa qurilmaga bog\'liq. Eski qurilmadan tasdiqlashingiz mumkin.',
+    };
+  }
+
+  // Raqamda faol bog'lanish yo'q. Hisob bo'lsa (ilgari kirilgan / admin raqami) — begona
+  // qurilma uni «birinchi bog'lash» bilan egallay olmaydi: faqat admin ko'rigi.
+  if (privileged || await deviceSec.accountExists(phone)) {
+    if (autoHonored) {
+      await forceDeviceBindingLink({
+        hash, phone, verifiedMethod: 'admin_auto', fingerprint,
+        event: { ...evBase, action: 'emergency_auto_approved' },
+      });
+      await deviceSec.markTrustLimited(phone, 'emergency_auto_approve');
+      return trustedDevicePayload(phone, { autoApproved: true });
+    }
+    await deviceSec.logEvent({
+      ...evBase, action: 'attempt_unbound_account', result: 'admin_review_required',
+    });
+    return {
+      status: 'phone_bound_other_device',
+      reason: 'account_unbound',
+      selfServeAvailable: false,
+      adminReviewAvailable: true,
+      oldDeviceLabel: '',
+      message: 'Bu raqam uchun administrator tasdig\'i kerak.',
+    };
+  }
+
+  // Yangi raqam + yangi qurilma: birinchi bog'lash (ro'yxatdan o'tish).
   try {
     await forceDeviceBindingLink({
       hash,
       phone,
       verifiedMethod: 'fingerprint_first_bind',
       fingerprint,
+      event: { ...evBase, action: 'first_bind' },
     });
   } catch (linkErr) {
     console.error('checkDeviceBinding first bind failed:', linkErr.message || linkErr);
@@ -6899,12 +7034,10 @@ exports.createPhoneSession = authFunctions
  */
 exports.requestDeviceTransfer = authFunctions
   .runWith({ timeoutSeconds: 60, memory: '256MB' })
-  .https.onCall(async (data) => {
+  .https.onCall(async (data, context) => {
   const phone = canonicalUid(data.phone || '');
   const toHash = String(data.deviceFingerprintHash || '').trim().toLowerCase();
-  const fingerprint = data.fingerprint && typeof data.fingerprint === 'object'
-    ? data.fingerprint
-    : {};
+  const fingerprint = deviceSecurity.cleanFingerprint(data.fingerprint);
 
   if (phone.length < 12) {
     throw new functions.https.HttpsError('invalid-argument', 'Telefon raqami noto\'g\'ri');
@@ -6918,6 +7051,7 @@ exports.requestDeviceTransfer = authFunctions
     throw new functions.https.HttpsError(
       'failed-precondition',
       'Bu raqam hali bog‘lanmagan. Oddiy kirishni urinib ko‘ring.',
+      { code: 'PHONE_NOT_BOUND', messages: deviceSecurity.messagesFor('PHONE_NOT_BOUND') },
     );
   }
   const fromHash = String(aliasSnap.data().deviceFingerprintHash || '').toLowerCase();
@@ -6925,11 +7059,21 @@ exports.requestDeviceTransfer = authFunctions
     throw new functions.https.HttpsError(
       'failed-precondition',
       'Eski qurilma yozuvi yaroqsiz. Adminga murojaat qiling.',
+      { code: 'PHONE_NOT_BOUND', messages: deviceSecurity.messagesFor('PHONE_NOT_BOUND') },
     );
   }
   if (fromHash === toHash) {
     return { status: 'already_bound', message: 'Qurilma allaqachon bog‘langan.' };
   }
+  // «Йўқ» дан кейин 24 соат шу қурилма шу рақамга сўров юбора олмайди (ега 2026-11-28).
+  const denial = await deviceSec.getDenial(phone, toHash);
+  if (denial.blocked) {
+    throw deviceSecurity.secError(functions, 'failed-precondition', 'DEVICE_DENIED_24H',
+      { untilMs: denial.untilMs });
+  }
+  const ipKey = deviceSecurity.ipKeyOf(context);
+  const approxCity = deviceSecurity.approxCityOf(context);
+  const platform = deviceSecurity.platformOf(fingerprint);
 
   const dayAgo = admin.firestore.Timestamp.fromDate(
     new Date(Date.now() - 24 * 60 * 60 * 1000),
@@ -6950,6 +7094,7 @@ exports.requestDeviceTransfer = authFunctions
   const existingPending = recentSnap.docs.find((d) => {
     const x = d.data() || {};
     return x.status === 'pending'
+      && (x.channel || 'old_device_push') === 'old_device_push'
       && String(x.toHash || '') === toHash
       && String(x.fromHash || '') === fromHash;
   });
@@ -6972,10 +7117,11 @@ exports.requestDeviceTransfer = authFunctions
     }, { merge: true });
   }
 
-  // Boshqa pending so‘rovlarni bekor qilish (bitta faol).
+  // Boshqa pending so‘rovlarni bekor qilish (bitta faol). Admin ko‘rigi so‘rovi tegilmaydi.
   const batch = db.batch();
   for (const d of recentSnap.docs) {
     if (d.id === (existingPending && existingPending.id)) continue;
+    if ((d.data() || {}).channel === 'admin_review') continue;
     if ((d.data() || {}).status === 'pending') {
       batch.set(d.ref, {
         status: 'cancelled',
@@ -6990,7 +7136,7 @@ exports.requestDeviceTransfer = authFunctions
     if (oldBind.exists) oldDeviceLabel = oldDeviceLabelFromBinding(oldBind.data());
   } catch (_) {}
 
-  const newDeviceLabel = oldDeviceLabelFromBinding({ fingerprint });
+  const newDeviceLabel = deviceSecurity.deviceLabelOf(fingerprint);
   const reqRef = db.collection('device_transfer_requests').doc();
   const expiresAt = admin.firestore.Timestamp.fromDate(
     new Date(Date.now() + DEVICE_TRANSFER_TTL_MS),
@@ -7002,6 +7148,9 @@ exports.requestDeviceTransfer = authFunctions
     toFingerprint: fingerprint,
     newDeviceLabel,
     oldDeviceLabel,
+    platform,
+    approxCity,
+    ipKey,
     status: 'pending',
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -7009,9 +7158,16 @@ exports.requestDeviceTransfer = authFunctions
     channel: 'old_device_push',
   });
   await batch.commit();
+  await deviceSec.logEvent({
+    phone, action: 'peer_requested', result: 'pending', hash: toHash, prevHash: fromHash,
+    platform, label: newDeviceLabel, ipKey, city: approxCity, requestId: reqRef.id,
+    channel: 'old_device_push', actor: 'new_device',
+  });
 
   try {
-    await notifyDeviceTransferRequest(phone, reqRef.id, newDeviceLabel);
+    await notifyDeviceTransferRequest(phone, reqRef.id, newDeviceLabel, {
+      platform, approxCity,
+    });
   } catch (e) {
     console.error('requestDeviceTransfer notify:', e.message || e);
   }
@@ -7058,16 +7214,39 @@ exports.getDeviceTransferStatus = authFunctions
   }
 
   return {
-    status,
+    // `approving` — tasdiq bajarilmoqda (bir necha soniya); eski klientlar uchun `pending`.
+    status: status === 'approving' ? 'pending' : status,
     requestId,
+    channel: String(req.channel || 'old_device_push'),
     expiresAtMs: exp || null,
     oldDeviceLabel: String(req.oldDeviceLabel || ''),
   };
 });
 
 /**
- * Eski qurilma (auth + fingerprint=fromHash): tasdiq / rad.
- * Approve → bog‘lanish ko‘chadi + 24s limited trust.
+ * Chaqiruvchi — raqam HOZIR bog'langan qurilmami (alias hash) yoki uning o'sha o'rnatmasi
+ * (OS yangilanishi hash'ni siljitgan; yangi klient `fingerprint` yuboradi). Eski klient faqat hash.
+ */
+async function boundDeviceMatch(phone, callerHash, callerFp) {
+  const aliasSnap = await db.collection('device_aliases').doc(phone).get();
+  const boundHash = aliasSnap.exists
+    ? String(aliasSnap.data().deviceFingerprintHash || '').toLowerCase()
+    : '';
+  if (!isValidFingerprintHash(boundHash)) return { ok: false, boundHash: '' };
+  if (boundHash === callerHash) return { ok: true, boundHash, drift: false };
+  if (!callerFp || !Object.keys(callerFp).length) return { ok: false, boundHash };
+  const b = await db.collection('device_bindings').doc(boundHash).get();
+  if (b.exists && deviceSecurity.sameInstall((b.data() || {}).fingerprint, callerFp)) {
+    return { ok: true, boundHash, drift: true };
+  }
+  return { ok: false, boundHash };
+}
+
+/**
+ * Bog'langan qurilma (auth + joriy alias qurilmasi): «Бу сизми?» → Ҳа / Йўқ (ega 2026-11-28).
+ * Ҳа → bog'lanish ko'chadi + 24 s pul chiqimi yopiq. Йўқ → shu qurilma 24 s blok, hisobning barcha
+ * refresh token'lari bekor (bog'langan qurilma o'z bog'lanishi bilan jim qayta kiradi), audit,
+ * adminlarga xabar. Ikkala kanal ham (peer va admin_review) — egasi admin ko'rigini ham rad eta oladi.
  */
 exports.respondDeviceTransfer = authFunctions
   .runWith({ timeoutSeconds: 60, memory: '256MB' })
@@ -7078,9 +7257,10 @@ exports.respondDeviceTransfer = authFunctions
   const tokenPhone = canonicalUid(callerPhone(context));
   const requestId = String(data.requestId || '').trim();
   const approve = data.approve === true;
-  const fromHash = String(data.deviceFingerprintHash || '').trim().toLowerCase();
+  const callerHash = String(data.deviceFingerprintHash || '').trim().toLowerCase();
+  const callerFp = deviceSecurity.cleanFingerprint(data.fingerprint);
 
-  if (!requestId || !isValidFingerprintHash(fromHash)) {
+  if (!requestId || !isValidFingerprintHash(callerHash)) {
     throw new functions.https.HttpsError('invalid-argument', 'Parametrlar noto\'g\'ri');
   }
 
@@ -7094,80 +7274,109 @@ exports.respondDeviceTransfer = authFunctions
   if (!phone || phone !== tokenPhone) {
     throw new functions.https.HttpsError('permission-denied', 'Bu so‘rov sizniki emas');
   }
-  if (String(req.fromHash || '') !== fromHash) {
+  const match = await boundDeviceMatch(phone, callerHash, callerFp);
+  if (!match.ok) {
     throw new functions.https.HttpsError(
       'permission-denied',
       'Faqat eski (joriy) qurilmadan tasdiqlash mumkin.',
+      { code: 'DEVICE_NOT_BOUND', messages: deviceSecurity.messagesFor('DEVICE_NOT_BOUND') },
     );
   }
-
-  let status = String(req.status || '');
-  const exp = req.expiresAt && typeof req.expiresAt.toDate === 'function'
-    ? req.expiresAt.toDate().getTime()
-    : 0;
-  if (status === 'pending' && exp > 0 && exp <= Date.now()) {
-    await ref.set({
-      status: 'expired',
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
-    status = 'expired';
-  }
-  if (status !== 'pending') {
-    return { status, requestId };
-  }
-
-  if (!approve) {
-    await ref.set({
-      status: 'rejected',
-      respondedAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
-    return { status: 'rejected', requestId };
-  }
-
   const toHash = String(req.toHash || '').toLowerCase();
   if (!isValidFingerprintHash(toHash)) {
     throw new functions.https.HttpsError('failed-precondition', 'Yangi qurilma hash yaroqsiz');
   }
+  const channel = String(req.channel || 'old_device_push');
 
-  const toFingerprint = req.toFingerprint && typeof req.toFingerprint === 'object'
-    ? req.toFingerprint
-    : {};
-  await forceDeviceBindingLink({
-    hash: toHash,
-    phone,
-    verifiedMethod: 'peer_device_transfer',
-    fingerprint: toFingerprint,
+  // Bitta g'olib (§22): pending → approving | rejected tranzaksiyada.
+  const claim = await db.runTransaction(async (tx) => {
+    const s = await tx.get(ref);
+    const r = s.data() || {};
+    const st = String(r.status || '');
+    const exp = r.expiresAt && typeof r.expiresAt.toMillis === 'function' ? r.expiresAt.toMillis() : 0;
+    if (st === 'pending' && exp > 0 && exp <= Date.now()) {
+      tx.set(ref, { status: 'expired', updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+      return { ok: false, status: 'expired' };
+    }
+    if (st !== 'pending') return { ok: false, status: st === 'approving' ? 'pending' : st };
+    tx.set(ref, {
+      status: approve ? 'approving' : 'rejected',
+      respondedAt: admin.firestore.FieldValue.serverTimestamp(),
+      respondedBy: 'bound_device',
+      approverHashPrefix: deviceSecurity.hashPrefix(callerHash),
+      approverSameInstall: match.drift === true,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return { ok: true };
   });
+  if (!claim.ok) {
+    return { status: claim.status, requestId };
+  }
 
-  const limitedUntil = admin.firestore.Timestamp.fromDate(
-    new Date(Date.now() + DEVICE_TRUST_LIMITED_MS),
-  );
-  await db.collection('users').doc(phone).set({
-    security: {
-      deviceTrustMode: 'limited',
-      deviceTrustUntil: limitedUntil,
-      deviceTrustReason: 'peer_device_transfer',
-      deviceTrustUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    },
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  }, { merge: true });
+  if (!approve) {
+    // Siljigan hash'li (o'sha o'rnatma) egasi: alias'ni joriy hash'ga tuzatamiz — aks holda
+    // token bekor qilingach uning jim qayta kirishi ishonchli bo'lmay qolardi.
+    if (match.drift) {
+      await forceDeviceBindingLink({
+        hash: callerHash, phone, verifiedMethod: 'same_install_drift', fingerprint: callerFp,
+        event: { action: 'drift_heal', actor: `peer:${phone}`, requestId },
+      });
+    }
+    const untilMs = await deviceSec.setDenial({
+      phone, hash: toHash, reason: 'owner_rejected', requestId,
+    });
+    const revoked = await deviceSec.revokeAccountSessions(phone);
+    await deviceSec.logEvent({
+      phone, action: 'peer_rejected', result: 'denied_24h', hash: toHash, requestId, channel,
+      actor: `peer:${phone}`, label: req.newDeviceLabel, platform: req.platform, revoked,
+    });
+    await deviceSec.alertAdmins({
+      title: '⚠️ Қурилма рад этилди',
+      body: `…${phone.slice(-4)}: эгаси «Йўқ» деди (${req.newDeviceLabel || 'янги қурилма'}). `
+        + 'Қурилма 24 соат блок, сессиялар бекор.',
+      extraData: { kind: 'device_peer_rejected', requestId },
+    });
+    console.log(JSON.stringify({ action: 'peer_rejected', requestId, phoneTail: phone.slice(-4), revoked }));
+    return {
+      status: 'rejected',
+      requestId,
+      deniedUntilMs: untilMs,
+      sessionsRevoked: revoked,
+      reauthRequired: revoked,
+    };
+  }
 
+  try {
+    await forceDeviceBindingLink({
+      hash: toHash,
+      phone,
+      verifiedMethod: 'peer_device_transfer',
+      fingerprint: deviceSecurity.cleanFingerprint(req.toFingerprint),
+      event: {
+        action: 'peer_approved', actor: `peer:${phone}`, requestId, channel,
+        label: req.newDeviceLabel, platform: req.platform, city: req.approxCity,
+      },
+    });
+  } catch (e) {
+    await ref.set({ status: 'pending', updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    console.error(JSON.stringify({ action: 'peer_approve_failed', requestId, err: String(e && e.message) }));
+    throw new functions.https.HttpsError('internal', 'DEVICE_APPROVE_FAILED');
+  }
+  const limitedUntilMs = await deviceSec.markTrustLimited(phone, 'peer_device_transfer');
   await ref.set({
     status: 'approved',
-    respondedAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    limitedUntil,
+    limitedUntil: admin.firestore.Timestamp.fromMillis(limitedUntilMs),
   }, { merge: true });
 
   return {
     status: 'approved',
     requestId,
-    limitedUntilMs: Date.now() + DEVICE_TRUST_LIMITED_MS,
+    limitedUntilMs,
   };
 });
 
-/** Eski qurilma: o‘zining pending transferlari (fromHash mos). */
+/** Bog'langan qurilma: o'ziga kelgan pending so'rovlar (peer + admin ko'rigi). */
 exports.listMyPendingDeviceTransfers = authFunctions
   .runWith({ timeoutSeconds: 30, memory: '256MB' })
   .https.onCall(async (data, context) => {
@@ -7175,10 +7384,12 @@ exports.listMyPendingDeviceTransfers = authFunctions
     throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
   }
   const phone = canonicalUid(callerPhone(context));
-  const fromHash = String(data.deviceFingerprintHash || '').trim().toLowerCase();
-  if (phone.length < 12 || !isValidFingerprintHash(fromHash)) {
+  const callerHash = String(data.deviceFingerprintHash || '').trim().toLowerCase();
+  if (phone.length < 12 || !isValidFingerprintHash(callerHash)) {
     throw new functions.https.HttpsError('invalid-argument', 'Parametrlar noto\'g\'ri');
   }
+  const match = await boundDeviceMatch(phone, callerHash, deviceSecurity.cleanFingerprint(data.fingerprint));
+  if (!match.ok) return { items: [] };
 
   const snap = await db.collection('device_transfer_requests')
     .where('phone', '==', phone)
@@ -7190,7 +7401,6 @@ exports.listMyPendingDeviceTransfers = authFunctions
   const items = [];
   for (const d of snap.docs) {
     const x = d.data() || {};
-    if (String(x.fromHash || '') !== fromHash) continue;
     const exp = x.expiresAt && typeof x.expiresAt.toDate === 'function'
       ? x.expiresAt.toDate().getTime()
       : 0;
@@ -7204,6 +7414,9 @@ exports.listMyPendingDeviceTransfers = authFunctions
     items.push({
       requestId: d.id,
       newDeviceLabel: String(x.newDeviceLabel || ''),
+      platform: String(x.platform || ''),
+      approxCity: String(x.approxCity || ''),
+      channel: String(x.channel || 'old_device_push'),
       expiresAtMs: exp || null,
       createdAtMs: x.createdAt && typeof x.createdAt.toDate === 'function'
         ? x.createdAt.toDate().getTime()
@@ -7302,312 +7515,36 @@ exports.registerDeviceBinding = authFunctions.https.onCall(async (data, context)
   return { ok: true, deviceFingerprintHash: hash };
 });
 
-/** Mobil: admin kod so'rovi — faqat CF yozadi (Firestore rules client write blok). */
-exports.requestPendingCode = authFunctions.https.onCall(async (data) => {
-  const phone = canonicalUid(data.phone || '');
-  const hash = String(data.deviceFingerprintHash || '').trim().toLowerCase();
-  const fingerprint = sanitizeFingerprintMap(data.fingerprint);
+/**
+ * ESKI «admin kodi» (pending_codes) oqimi — YOPILDI (ega 2026-11-28). Klient 2026-10 dan beri
+ * chaqirmaydi, lekin funksiyalar jonli edi: `autoApprovePendingCode` kodni o'zi tasdiqlar,
+ * `getPendingCodeStatus` kodni auth'siz qaytarar, `verifyPendingCodeAndRegister` token berardi —
+ * ya'ni raqamni bilgan har kim kira olardi. Eksportlar qoladi (deploy o'chirishni so'ramasin),
+ * hammasi `ENDPOINT_RETIRED` bilan rad etadi; triggerlar hech narsa yozmaydi.
+ */
+function retiredEndpoint(name) {
+  return authFunctions.https.onCall(async () => {
+    console.warn(JSON.stringify({ action: 'retired_endpoint_called', name }));
+    throw deviceSecurity.secError(functions, 'unimplemented', 'ENDPOINT_RETIRED');
+  });
+}
 
-  if (phone.length < 12) {
-    throw new functions.https.HttpsError('invalid-argument', 'Telefon raqami noto\'g\'ri');
-  }
-  if (!isValidFingerprintHash(hash)) {
-    throw new functions.https.HttpsError('invalid-argument', 'deviceFingerprintHash noto\'g\'ri');
-  }
-
-  const pendingRef = db.collection('pending_codes').doc(phone);
-  const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-
-  await pendingRef.set({
-    phone: `+${phone}`,
-    status: 'pending',
-    code: admin.firestore.FieldValue.delete(),
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
-    deviceFingerprintHash: hash,
-    ...(Object.keys(fingerprint).length > 0 ? { fingerprint } : {}),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  }, { merge: true });
-
-  return { ok: true, phone };
-});
-
-/** Mobil: kod holati (auth talab qilinmaydi — hash tekshiruvi). */
-exports.getPendingCodeStatus = authFunctions.https.onCall(async (data) => {
-  const phone = canonicalUid(data.phone || '');
-  const hash = String(data.deviceFingerprintHash || '').trim().toLowerCase();
-
-  if (phone.length < 12) {
-    throw new functions.https.HttpsError('invalid-argument', 'Telefon raqami noto\'g\'ri');
-  }
-  if (!isValidFingerprintHash(hash)) {
-    throw new functions.https.HttpsError('invalid-argument', 'deviceFingerprintHash noto\'g\'ri');
-  }
-
-  const pendingRef = db.collection('pending_codes').doc(phone);
-  const pendingSnap = await pendingRef.get();
-  if (!pendingSnap.exists) {
-    return { status: 'none' };
-  }
-
-  const pending = pendingSnap.data() || {};
-  const storedHash = String(pending.deviceFingerprintHash || '').toLowerCase();
-  if (storedHash && isValidFingerprintHash(storedHash) && storedHash !== hash) {
-    throw new functions.https.HttpsError('permission-denied', 'Qurilma mos emas');
-  }
-
-  let status = String(pending.status || 'pending');
-  const expiresAt = pending.expiresAt;
-  if (expiresAt && typeof expiresAt.toDate === 'function') {
-    if (expiresAt.toDate().getTime() < Date.now()) {
-      if (status === 'approved' || status === 'pending') {
-        await pendingRef.set({
-          status: 'expired',
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        }, { merge: true });
-      }
-      return { status: 'expired' };
-    }
-  }
-
-  if (status === 'approved') {
-    const code = String(pending.code || '').trim();
-    return {
-      status: 'approved',
-      code: /^\d{6}$/.test(code) ? code : null,
-    };
-  }
-
-  return { status: status || 'pending' };
-});
-
-/** Admin panel kodidan keyin: pending_codes tekshiruvi + device_bindings + custom token. */
-exports.verifyPendingCodeAndRegister = authFunctions.https.onCall(async (data) => {
-  try {
-    const phone = canonicalUid(data.phone || '');
-    const code = String(data.code || '').trim();
-    const hash = String(data.deviceFingerprintHash || '').trim().toLowerCase();
-    const fingerprint = sanitizeFingerprintMap(data.fingerprint);
-
-    if (phone.length < 12) {
-      throw new functions.https.HttpsError('invalid-argument', 'Telefon raqami noto\'g\'ri');
-    }
-    if (!/^\d{6}$/.test(code)) {
-      throw new functions.https.HttpsError('invalid-argument', 'Kod 6 xonali bo\'lishi kerak');
-    }
-    if (!isValidFingerprintHash(hash)) {
-      throw new functions.https.HttpsError('invalid-argument', 'deviceFingerprintHash noto\'g\'ri');
-    }
-
-    const pendingRef = db.collection('pending_codes').doc(phone);
-    const pendingSnap = await pendingRef.get();
-    if (!pendingSnap.exists) {
-      throw new functions.https.HttpsError('not-found', 'Kod so\'rovi topilmadi');
-    }
-
-    const pending = pendingSnap.data() || {};
-    const expectedCode = String(pending.code || '').trim();
-    const status = String(pending.status || '');
-    const storedHash = String(pending.deviceFingerprintHash || '').toLowerCase();
-
-    if (status !== 'approved') {
-      throw new functions.https.HttpsError(
-        'failed-precondition',
-        'Admin hali kod yaratmagan',
-      );
-    }
-    if (!expectedCode || expectedCode !== code) {
-      throw new functions.https.HttpsError('permission-denied', 'Kod noto\'g\'ri');
-    }
-    if (storedHash && isValidFingerprintHash(storedHash) && storedHash !== hash) {
-      throw new functions.https.HttpsError(
-        'failed-precondition',
-        'Qurilma o\'zgargan. Qayta urinib ko\'ring',
-      );
-    }
-
-    const expiresAt = pending.expiresAt;
-    if (expiresAt && typeof expiresAt.toDate === 'function') {
-      if (expiresAt.toDate().getTime() < Date.now()) {
-        await pendingRef.set({
-          status: 'expired',
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        }, { merge: true });
-        throw new functions.https.HttpsError('deadline-exceeded', 'Kod muddati o\'tgan');
-      }
-    }
-
-    const bindingRef = db.collection('device_bindings').doc(hash);
-    const aliasRef = db.collection('device_aliases').doc(phone);
-
-    const [bindingSnap, aliasSnap] = await Promise.all([
-      bindingRef.get(),
-      aliasRef.get(),
-    ]);
-
-    if (aliasSnap.exists) {
-      const aliasHash = String(aliasSnap.data().deviceFingerprintHash || '').toLowerCase();
-      if (aliasHash && isValidFingerprintHash(aliasHash) && aliasHash !== hash) {
-        throw new functions.https.HttpsError(
-          'failed-precondition',
-          'Bu raqam boshqa qurilmaga bog\'liq',
-        );
-      }
-    }
-
-    if (bindingSnap.exists) {
-      const boundPhone = canonicalUid(bindingSnap.data().phone || '');
-      if (boundPhone && boundPhone !== phone) {
-        throw new functions.https.HttpsError(
-          'failed-precondition',
-          'Bu qurilma boshqa raqamga bog\'liq',
-        );
-      }
-    }
-
-    const now = admin.firestore.FieldValue.serverTimestamp();
-    await db.runTransaction(async (tx) => {
-      const bindingInTx = await tx.get(bindingRef);
-      const aliasInTx = await tx.get(aliasRef);
-
-      if (aliasInTx.exists) {
-        const aliasHash = String(aliasInTx.data().deviceFingerprintHash || '').toLowerCase();
-        if (aliasHash && isValidFingerprintHash(aliasHash) && aliasHash !== hash) {
-          throw new Error('phone_bound_other_device');
-        }
-      }
-
-      if (bindingInTx.exists) {
-        const boundPhone = canonicalUid(bindingInTx.data().phone || '');
-        if (boundPhone && boundPhone !== phone) {
-          throw new Error('device_bound_other_phone');
-        }
-      }
-
-      tx.set(bindingRef, {
-        phone,
-        deviceFingerprintHash: hash,
-        firstRegisteredAt: bindingInTx.exists
-          ? (bindingInTx.data().firstRegisteredAt || now)
-          : now,
-        lastSeenAt: now,
-        failedAttempts: 0,
-        isBlocked: false,
-        blockedUntil: admin.firestore.FieldValue.delete(),
-        verifiedMethod: 'admin_code',
-        fingerprint,
-        updatedAt: now,
-      }, { merge: true });
-
-      tx.set(aliasRef, {
-        phone,
-        deviceFingerprintHash: hash,
-        updatedAt: now,
-      }, { merge: true });
-
-      tx.delete(pendingRef);
-    });
-
-    let customToken;
-    try {
-      customToken = await createPhoneCustomToken(phone);
-    } catch (authErr) {
-      console.error('verifyPendingCodeAndRegister auth', authErr);
-      throw new functions.https.HttpsError(
-        'internal',
-        authErr.message || 'Auth token yaratilmadi',
-      );
-    }
-
-    return { ok: true, deviceFingerprintHash: hash, customToken };
-  } catch (e) {
-    if (e instanceof functions.https.HttpsError) throw e;
-    if (e && e.message === 'phone_bound_other_device') {
-      throw new functions.https.HttpsError(
-        'failed-precondition',
-        'Bu raqam boshqa qurilmaga bog\'liq',
-      );
-    }
-    if (e && e.message === 'device_bound_other_phone') {
-      throw new functions.https.HttpsError(
-        'failed-precondition',
-        'Bu qurilma boshqa raqamga bog\'liq',
-      );
-    }
-    console.error('verifyPendingCodeAndRegister', e);
-    throw new functions.https.HttpsError(
-      'internal',
-      (e && e.message) ? e.message : 'Server xatolik',
-    );
-  }
-});
+exports.requestPendingCode = retiredEndpoint('requestPendingCode');
+exports.getPendingCodeStatus = retiredEndpoint('getPendingCodeStatus');
+exports.verifyPendingCodeAndRegister = retiredEndpoint('verifyPendingCodeAndRegister');
 
 exports.autoApprovePendingCode = functions.firestore
   .document('pending_codes/{phone}')
-  .onCreate(async (snap, context) => {
-    const phone = context.params.phone;
-    const data = snap.data() || {};
-
-    if (data.status !== 'pending') return null;
-
-    if (!/^\d{12}$/.test(phone) || !phone.startsWith('998')) {
-      console.error('autoApprovePendingCode: invalid phone', phone);
-      return null;
-    }
-
-    try {
-      const code = String(
-        100000 + Math.floor(Math.random() * 900000),
-      );
-      const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-
-      await snap.ref.set({
-        code,
-        status: 'approved',
-        approvedAt: admin.firestore.FieldValue.serverTimestamp(),
-        expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
-        autoApproved: true,
-      }, { merge: true });
-
-      console.log(`autoApprovePendingCode: approved ${phone}`);
-      return null;
-    } catch (e) {
-      console.error('autoApprovePendingCode error:', e);
-      return null;
-    }
+  .onCreate(async () => {
+    console.warn(JSON.stringify({ action: 'retired_trigger', name: 'autoApprovePendingCode' }));
+    return null;
   });
 
 exports.autoApprovePendingCodeOnUpdate = functions.firestore
   .document('pending_codes/{phone}')
-  .onUpdate(async (change, context) => {
-    const after = change.after.data() || {};
-    const before = change.before.data() || {};
-
-    if (after.status !== 'pending' || before.status === 'pending') return null;
-
-    const phone = context.params.phone;
-    if (!/^\d{12}$/.test(phone) || !phone.startsWith('998')) return null;
-
-    try {
-      const code = String(
-        100000 + Math.floor(Math.random() * 900000),
-      );
-      const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-
-      await change.after.ref.set({
-        code,
-        status: 'approved',
-        approvedAt: admin.firestore.FieldValue.serverTimestamp(),
-        expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
-        autoApproved: true,
-      }, { merge: true });
-
-      console.log(`autoApprovePendingCode onUpdate: approved ${phone}`);
-      return null;
-    } catch (e) {
-      console.error('autoApprovePendingCode onUpdate error:', e);
-      return null;
-    }
+  .onUpdate(async () => {
+    console.warn(JSON.stringify({ action: 'retired_trigger', name: 'autoApprovePendingCodeOnUpdate' }));
+    return null;
   });
 
 exports.changeDevicePhone = functions.https.onCall(async (data, context) => {
@@ -7708,20 +7645,32 @@ exports.changeDevicePhone = functions.https.onCall(async (data, context) => {
   return { ok: true, message: 'Phone updated successfully' };
 });
 
-/** Admin: global avtomatik tasdiqlash rejimi. */
+/**
+ * Admin: global avtomatik tasdiqlash sozlamasi. Ega 2026-11-28: SERVER UNI E'TIBORSIZ QOLDIRADI
+ * (`isDeviceBindingAutoApproveEnabled`) — qiymat saqlanadi va auditga yoziladi, xolos.
+ */
 exports.adminSetDeviceBindingAutoApprove = functions.https.onCall(async (data, context) => {
-  await assertAdmin(String(data.adminPhone || ''), context);
+  const actor = await assertAdmin(String(data.adminPhone || ''), context);
   const enabled = data.enabled === true;
   await db.collection('settings').doc('app').set({
     deviceBindingAutoApprove: enabled,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   }, { merge: true });
-  return { ok: true, enabled };
+  await db.collection('admin_audit').add({
+    kind: 'device_auto_approve_setting', actor, enabled,
+    serverIgnored: deviceSecurity.DEVICE_SEC.EMERGENCY_HONOR_AUTO_APPROVE !== true,
+    at: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return {
+    ok: true,
+    enabled,
+    serverIgnored: deviceSecurity.DEVICE_SEC.EMERGENCY_HONOR_AUTO_APPROVE !== true,
+  };
 });
 
 /** Admin: bir bosishda avtomatik tasdiqlash (konfliktlarni hal qiladi). */
 exports.adminAutoApproveDeviceBinding = functions.https.onCall(async (data, context) => {
-  await assertAdmin(String(data.adminPhone || ''), context);
+  const actor = await assertAdmin(String(data.adminPhone || ''), context);
   const hash = String(data.deviceFingerprintHash || '').trim().toLowerCase();
   let phone = canonicalUid(data.phone || '');
   if (!isValidFingerprintHash(hash)) {
@@ -7734,17 +7683,39 @@ exports.adminAutoApproveDeviceBinding = functions.https.onCall(async (data, cont
   if (phone.length < 12) {
     throw new functions.https.HttpsError('invalid-argument', 'Telefon raqami topilmadi');
   }
-  await forceDeviceBindingLink({
-    hash,
-    phone,
-    verifiedMethod: 'admin_auto',
-  });
+  await adminApproveDeviceLink({ actor, hash, phone, method: 'admin_auto' });
   return { ok: true, phone, deviceFingerprintHash: hash };
 });
 
+/**
+ * Admin qo'lda bog'lash (ega 2026-11-28): imtiyozli raqam — faqat superadmin; audit
+ * (`admin_audit` + `device_binding_events`); yangi qurilma → 24 s pul chiqimi yopiq.
+ */
+async function adminApproveDeviceLink({ actor, hash, phone, method }) {
+  await deviceSec.assertCanApproveFor({ callerUid: actor, targetPhone: phone });
+  const aliasSnap = await db.collection('device_aliases').doc(phone).get();
+  const prevHash = aliasSnap.exists
+    ? String(aliasSnap.data().deviceFingerprintHash || '').toLowerCase()
+    : '';
+  await forceDeviceBindingLink({
+    hash,
+    phone,
+    verifiedMethod: method,
+    event: { action: method, actor: `admin:${actor}` },
+  });
+  if (prevHash !== hash) {
+    await deviceSec.markTrustLimited(phone, method);
+  }
+  await db.collection('admin_audit').add({
+    kind: 'device_binding_admin_link', method, actor, target: phone,
+    hashPrefix: deviceSecurity.hashPrefix(hash),
+    at: admin.firestore.FieldValue.serverTimestamp(),
+  });
+}
+
 /** Admin: qo'lda tasdiqlash (telefonni admin kiritadi). */
 exports.adminManualApproveDeviceBinding = functions.https.onCall(async (data, context) => {
-  await assertAdmin(String(data.adminPhone || ''), context);
+  const actor = await assertAdmin(String(data.adminPhone || ''), context);
   const hash = String(data.deviceFingerprintHash || '').trim().toLowerCase();
   const phone = canonicalUid(data.phone || '');
   if (!isValidFingerprintHash(hash)) {
@@ -7753,11 +7724,7 @@ exports.adminManualApproveDeviceBinding = functions.https.onCall(async (data, co
   if (phone.length < 12) {
     throw new functions.https.HttpsError('invalid-argument', 'Telefon raqami noto\'g\'ri');
   }
-  await forceDeviceBindingLink({
-    hash,
-    phone,
-    verifiedMethod: 'admin_manual',
-  });
+  await adminApproveDeviceLink({ actor, hash, phone, method: 'admin_manual' });
   return { ok: true, phone, deviceFingerprintHash: hash };
 });
 
@@ -7796,6 +7763,9 @@ exports.adminRejectDeviceBinding = functions.https.onCall(async (data, context) 
     batch.delete(db.collection('device_aliases').doc(phone));
   }
   await batch.commit();
+  await deviceSec.logEvent({
+    phone, action: 'admin_binding_deleted', hash, actor: `admin:${digits(context.auth.token.phone_number || '')}`,
+  });
   return { ok: true };
 });
 
@@ -7872,6 +7842,20 @@ exports.migrateOldBindings = functions.https.onCall(async (data, context) => {
     bindingsMoved,
     aliasesRemoved,
   };
+});
+
+// «Эски телефоним йўқ» → admin ko'rigi + admin panel «Қурилма тасдиқлари» (ega 2026-11-28).
+deviceSecurity.attachDeviceSecurity(exports, {
+  functions,
+  authFunctions,
+  db,
+  admin,
+  canonicalUid,
+  requireCallerRoles,
+  isValidFingerprintHash,
+  forceDeviceBindingLink,
+  oldDeviceLabelFromBinding,
+  sec: deviceSec,
 });
 
 // Kirish xatolari — bitta umumiy xabar: qaysi raqam admin ekanini, PIN
@@ -16735,6 +16719,8 @@ exports.walletToCash = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError(
         'failed-precondition', 'Foydalanuvchi topilmadi');
   }
+  // Yangi qurilma tasdiqlanganidan 24 s — naqd chiqim yopiq (ega 2026-11-28).
+  await assertNotDeviceTrustLimited(userUid12);
 
   const pcAcc = settlementLedger.passengerCreditAccount(userUid12);
   const res = await settlementLedger.postEntry(db, {

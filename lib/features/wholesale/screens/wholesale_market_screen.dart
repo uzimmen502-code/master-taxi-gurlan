@@ -21,6 +21,7 @@ import '../../../models/platform_product.dart';
 import '../../../repositories/platform_products_repository.dart';
 import '../../ads/widgets/platform_market_card.dart';
 import '../data/wholesale_ring_source.dart';
+import '../../supermarket/partner/sm_partner_screen.dart';
 import '../models/wholesale_product.dart';
 import '../models/wholesale_seller.dart';
 import '../open_wholesale_seller.dart';
@@ -857,6 +858,17 @@ class _MyProductsView extends StatelessWidget {
                 context,
                 MaterialPageRoute(builder: (_) => WholesaleImportScreen(market: market)),
               ),
+            ),
+          // «Супермаркетга чиқариш» (эга 2026-11-28, ҳамкор модели): тасдиқланган сотувчи ўз таклифларини AVA Супермаркетга.
+          if (market != WholesaleProduct.marketChina && seller.isApproved)
+            ListTile(
+              key: const ValueKey('wholesale-supermarket-row'),
+              dense: true,
+              leading: const Icon(Icons.local_grocery_store_outlined),
+              title: Text(context.tr('smp_entry')),
+              subtitle: Text(context.tr('smp_entry_sub')),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SmPartnerScreen())),
             ),
           Expanded(
             // StatefulBuilder: «Қайта уриниш» шу ерни қайта қуради ва янги stream олинади.

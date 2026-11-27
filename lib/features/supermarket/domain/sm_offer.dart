@@ -57,7 +57,11 @@ class SmOffer {
     this.priceUpdatedBy = '',
     this.packQtyMilli,
     this.packUnit = '',
+    this.sample = false,
   });
+
+  /// Эга 2026-11-28 (ҳамкор модели): эски «AVA» таклифи — харидорга «Намуна» бўлиб кўринади, СОТИЛМАЙДИ (сервер ҳам рад этади).
+  final bool sample;
 
   final String id;
   final String name;
@@ -89,7 +93,7 @@ class SmOffer {
   bool get visible => isSupermarket && status != SmStatus.hidden && price > 0;
   /// Сотувда: ҳолат active ВА қолдиқ бор. Сервер (supermarket.js) stock йўқ/0 ни «0 мавжуд» деб
   /// ҳисоблайди — клиент ҳам шундай (буюртмада OUT_OF_STOCK бўлмасин).
-  bool get available => visible && status == SmStatus.active && (stockMilli ?? 0) >= stepMilli;
+  bool get available => visible && !sample && status == SmStatus.active && (stockMilli ?? 0) >= stepMilli;
 
   String varietyName(String lang) => localizedName(varietyNames, lang, fallback: name);
   String qualityName(String lang) => localizedName(qualityNames, lang);
@@ -134,9 +138,13 @@ class SmOffer {
       priceUpdatedBy: (d['priceUpdatedBy'] as String?)?.trim() ?? '',
       packQtyMilli: d['packQty'] is num ? smToMilli(d['packQty'] as num) : null,
       packUnit: (d['packUnit'] as String?)?.trim() ?? '',
+      sample: d['smSample'] == true,
     );
   }
 }
+
+/// Сотиб бўлмайдиган таклиф ёрлиғи калити: намуна — «Намуна», бошқа — «Тугаган».
+String smUnavailableKey(SmOffer? o) => o != null && o.sample ? 'sm_sample_badge' : 'sm_out_of_stock';
 
 /// Нав ичидаги таклифлар: аввал мавжудлари нарх ўсиши бўйича, кейин «Ҳозир мавжуд эмас»
 /// (улар ҳам нарх бўйича). Яширинлар — йўқ.

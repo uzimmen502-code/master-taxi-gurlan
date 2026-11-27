@@ -214,7 +214,7 @@ class _SmOfferCardState extends State<SmOfferCard> {
             ),
             const SizedBox(height: 10),
             if (!enabled)
-              Text(context.tr('sm_out_of_stock'),
+              Text(context.tr(smUnavailableKey(o)),
                   key: ValueKey('sm_offer_oos_${o.id}'),
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.danger))
             else

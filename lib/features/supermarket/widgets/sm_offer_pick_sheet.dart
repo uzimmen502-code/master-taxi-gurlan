@@ -199,7 +199,7 @@ class _OfferOption extends StatelessWidget {
                         Text(o.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 15, color: c.ink)),
                         if (label.isNotEmpty) Text(label, style: TextStyle(fontSize: 13, color: c.ink2)),
                         if (onTap == null)
-                          Text(context.tr('sm_out_of_stock'), style: TextStyle(fontSize: 13, color: c.danger))
+                          Text(context.tr(smUnavailableKey(o)), style: TextStyle(fontSize: 13, color: c.danger))
                         else if (perUnit != null)
                           Text(
                             context

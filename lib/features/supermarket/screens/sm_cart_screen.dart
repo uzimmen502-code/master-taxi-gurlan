@@ -191,7 +191,7 @@ class _CartLineTile extends StatelessWidget {
                     if (o != null)
                       Text(smPricePerUnit(context, o.price, o.unit), style: TextStyle(fontSize: 14, color: c.ink2)),
                     if (!ok)
-                      Text(context.tr('sm_out_of_stock'),
+                      Text(context.tr(smUnavailableKey(o)),
                           style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.danger)),
                   ],
                 ),

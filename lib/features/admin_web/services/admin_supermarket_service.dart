@@ -396,6 +396,44 @@ class AdminSupermarketService {
     }
   }
 
+  // ── Ҳамкор модели (эга 2026-11-28) ──
+
+  /// Модерация навбати: ҳамкор таклифлари `smModeration == pending` (оммавий ўқиш; ёзиш — callable).
+  Future<List<SmPartnerQueueItem>> partnerModerationQueue({int limit = 200}) async {
+    final snap = await _db.collection('platform_products').where('smModeration', isEqualTo: 'pending').limit(limit).get();
+    return [for (final d in snap.docs) SmPartnerQueueItem.fromMap(d.id, d.data())];
+  }
+
+  Future<void> moderateOffer(String productId, {required bool approve, String reason = ''}) =>
+      _call('adminModerateSupermarketOffer', {'productId': productId, 'decision': approve ? 'approve' : 'reject', 'reason': reason});
+
+  Future<bool> partnerAutoApprove() async =>
+      ((await _db.collection('settings').doc('app').get()).data() ?? const {})['supermarketPartnerAutoApprove'] == true;
+
+  Future<void> setPartnerAutoApprove(bool enabled) => _call('adminSetSupermarketPartnerAutoApprove', {'enabled': enabled});
+
+  /// Намунага номзодлар: супермаркет таклифи, ҳамкорники эмас, ҳали намуна эмас (эски «AVA» маҳсулотлари).
+  Future<List<String>> sampleCandidates() async {
+    final snap = await _db.collection('platform_products').where('smGroupId', isGreaterThan: '').limit(2000).get();
+    return [
+      for (final d in snap.docs)
+        if (d.data()['smPartnerKey'] == null && d.data()['smSample'] != true) d.id,
+    ];
+  }
+
+  /// Сервер ≤ 200 тадан қабул қилади — бўлиб юборилади. → янгиланганлар сони.
+  Future<int> setSample(List<String> productIds, {required bool sample}) async {
+    var n = 0;
+    for (var i = 0; i < productIds.length; i += 200) {
+      final d = await _callData('adminSetSupermarketSample', {
+        'productIds': productIds.sublist(i, i + 200 > productIds.length ? productIds.length : i + 200),
+        'sample': sample,
+      });
+      n += (d['updated'] as num?)?.toInt() ?? 0;
+    }
+    return n;
+  }
+
   Future<SmSettings> loadSettings() async =>
       SmSettings.fromMap((await _db.collection('settings').doc('supermarket').get()).data());
 
@@ -641,3 +679,25 @@ List<String> smShortageAdminProblems({required num orderedQty, required num? ava
       if (substitutes.length > 3) 'Ўрнини босувчи — кўпи билан 3 та',
       if (substitutes.toSet().length != substitutes.length) 'Ўрнини босувчи такрорланмасин',
     ];
+
+/// Модерация навбатидаги ҳамкор таклифи (эга 2026-11-28). Сотувчи телефони ЙЎҚ (калит; сотувчи — private/partner).
+class SmPartnerQueueItem {
+  const SmPartnerQueueItem({required this.productId, required this.name, required this.price, required this.groupId, required this.partnerKey, this.imageUrl = '', this.stock});
+  final String productId;
+  final String name;
+  final int price;
+  final String groupId;
+  final String partnerKey;
+  final String imageUrl;
+  final num? stock;
+
+  factory SmPartnerQueueItem.fromMap(String id, Map<String, dynamic> d) => SmPartnerQueueItem(
+        productId: id,
+        name: '${d['name'] ?? ''}',
+        price: (d['price'] as num?)?.toInt() ?? 0,
+        groupId: '${d['smGroupId'] ?? ''}',
+        partnerKey: '${d['smPartnerKey'] ?? ''}',
+        imageUrl: '${d['imageUrl'] ?? ''}',
+        stock: d['stock'] is num ? d['stock'] as num : null,
+      );
+}

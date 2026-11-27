@@ -35,6 +35,26 @@ class _FakeAdmin extends AdminSupermarketService {
   final settled = <(String, List<({String productId, num actualQty})>)>[];
   final removed = <(String, String, String)>[];
 
+  final moderated = <(String, bool, String)>[];
+  final autoSet = <bool>[];
+  final sampled = <(List<String>, bool)>[];
+  @override
+  Future<List<SmPartnerQueueItem>> partnerModerationQueue({int limit = 200}) async => [
+        SmPartnerQueueItem.fromMap('ps_k_a', {'name': 'Картошка Қизил', 'price': 6000, 'smGroupId': 'potato', 'smPartnerKey': 'k', 'stock': 5}),
+      ];
+  @override
+  Future<void> moderateOffer(String productId, {required bool approve, String reason = ''}) async => moderated.add((productId, approve, reason));
+  @override
+  Future<bool> partnerAutoApprove() async => false;
+  @override
+  Future<void> setPartnerAutoApprove(bool enabled) async => autoSet.add(enabled);
+  @override
+  Future<List<String>> sampleCandidates() async => ['pp_1', 'pp_2'];
+  @override
+  Future<int> setSample(List<String> productIds, {required bool sample}) async {
+    sampled.add((productIds, sample));
+    return productIds.length;
+  }
   @override
   Future<Map<String, dynamic>?> loadTaxonomyRaw() async => _txRaw();
   @override
@@ -445,6 +465,35 @@ void main() {
       final ok = smTxGroupFromForm(id: 'milk', names: const {'uz_Cyrl': 'Сут', 'uz_Latn': 'Sut', 'ru': 'Молоко'}, unit: 'l', step: '1', weighed: false, synonyms: 'sut;молоко', pairs: '', knownIds: {'a'});
       expect([ok.problems, ok.group['synonyms'], ok.group.containsKey('pairs')], [<String>[], ['sut', 'молоко'], false]);
       expect(smTaxonomyJsonProblem(jsonEncode({'categories': smTxUpsertGroup(cats(), 0, {...ok.group})})), isNull);
+    });
+
+    testWidgets('«Ҳамкорлар» (эга 2026-11-28): навбат — тасдиқлаш/рад (сабаб шарт), автоматик тасдиқ, намуна', (t) async {
+      await _big(t);
+      final s = _FakeAdmin();
+      await t.pumpWidget(MaterialApp(home: Scaffold(body: SmPartnersAdminTab(service: s))));
+      await t.pumpAndSettle();
+      expect(find.text('Модерация навбати (1)'), findsOneWidget);
+      await t.tap(_k('sm_partner_approve_ps_k_a'));
+      await t.pumpAndSettle();
+      await t.tap(_k('sm_partner_reject_ps_k_a'));
+      await t.pumpAndSettle();
+      await t.enterText(_k('sm_partner_reject_reason'), 'x');
+      await t.tap(_k('sm_partner_reject_ok'));
+      await t.pumpAndSettle();
+      expect(find.textContaining('Сабаб ёзинг'), findsOneWidget);
+      await t.tap(_k('sm_partner_reject_ps_k_a'));
+      await t.pumpAndSettle();
+      await t.enterText(_k('sm_partner_reject_reason'), 'Расм йўқ');
+      await t.tap(_k('sm_partner_reject_ok'));
+      await t.pumpAndSettle();
+      expect(s.moderated, [('ps_k_a', true, ''), ('ps_k_a', false, 'Расм йўқ')]);
+      await t.tap(_k('sm_partner_auto'));
+      await t.pumpAndSettle();
+      expect(s.autoSet, [true]);
+      expect(find.textContaining('эски «AVA» таклифлари: 2'), findsOneWidget);
+      await t.tap(_k('sm_partner_mark_samples'));
+      await t.pumpAndSettle();
+      expect([s.sampled.single.$1, s.sampled.single.$2], [['pp_1', 'pp_2'], true]);
     });
 
     testWidgets('буюртмалар: тортиш (фақат тортилмаган) ва қаторни олиш; ҳолат ёпиқ — тугма йўқ', (t) async {

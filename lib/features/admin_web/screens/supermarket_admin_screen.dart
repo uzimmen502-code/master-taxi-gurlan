@@ -17,9 +17,11 @@ import '../services/admin_market_service.dart';
 import '../services/admin_supermarket_service.dart';
 import 'supermarket_import_admin_tab.dart';
 import 'supermarket_reports_admin_tab.dart';
+import 'supermarket_partners_admin_tab.dart';
 
 export 'supermarket_import_admin_tab.dart';
 export 'supermarket_reports_admin_tab.dart';
+export 'supermarket_partners_admin_tab.dart';
 
 const _statusText = <String, String>{
   'active': 'Сотувда',
@@ -39,7 +41,7 @@ class SupermarketAdminScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = service ?? AdminSupermarketService();
     return DefaultTabController(
-      length: 8,
+      length: 9,
       child: Column(
         children: [
           const TabBar(
@@ -53,6 +55,7 @@ class SupermarketAdminScreen extends StatelessWidget {
               Tab(text: 'Харид режаси'),
               Tab(text: 'Аналитика'),
               Tab(text: 'Курьерларга тўлов'),
+              Tab(text: 'Ҳамкорлар'),
             ],
           ),
           Expanded(
@@ -65,6 +68,7 @@ class SupermarketAdminScreen extends StatelessWidget {
               SmProcurementAdminTab(service: s),
               SmAnalyticsAdminTab(service: s),
               SmCourierPayoutsAdminTab(service: s),
+              SmPartnersAdminTab(service: s),
             ]),
           ),
         ],

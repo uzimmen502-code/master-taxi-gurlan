@@ -61,8 +61,43 @@ const BONUS_PROGRAM = 'car_insurance_bonus';
 
 const STAGES = Object.freeze(['off', 'internal', 'pilot', 'public']);
 const POLICY_TYPES = Object.freeze(['osago', 'kasko']);
-/** Транспорт тури (PROPOSED рўйхат; ҳуқуқий тоифалар эмас — админ жадвалида ишлатилади). */
+/**
+ * Транспорт тоифаси — эга расмий ОСАГО жадвали (2026-11-28): car = «Енгил автомобил», truck = «Юк автомобили»,
+ * bus = «Микроавтобус», moto = «Трактор ва мотоцикл» (калитлар аввалги рўйхатдан ўзгармаган — эски аризалар мос).
+ */
 const VEHICLE_TYPES = Object.freeze(['car', 'truck', 'bus', 'moto']);
+/**
+ * Нарх ҳудуди (эга жадвали 2026-11-28): tashkent = «Тошкент шаҳри ва Тошкент вилояти», other = «Ўзбекистоннинг бошқа
+ * ҳудудлари», cis = «МДҲ давлатларидан кирувчи автомобиллар» (фақат car + truck). Профил туманидан автоматик
+ * (tashkent/other), cis — фойдаланувчи танлайди; фойдаланувчи ҳудуд/тоифа/ҳайдовчини тузатиши мумкин (эга).
+ */
+const ZONES = Object.freeze(['tashkent', 'other', 'cis']);
+const TASHKENT_REGION_IDS = Object.freeze(['toshkent_shahri', 'toshkent_viloyati']);
+const CIS_VEHICLE_TYPES = Object.freeze(['car', 'truck']);
+/** Ҳайдовчилар: limited = «Чекланган», unlimited = «Чекланмаган». */
+const DRIVER_SCOPES = Object.freeze(['limited', 'unlimited']);
+/** Ҳудуд × тоифа × ҳайдовчи жадвали (schema 2). Эски (schema йўқ) жадваллар — вилоят қаторлари, фақат ўқиш. */
+const TARIFF_SCHEMA = 2;
+/**
+ * Эга расмий ОСАГО жадвали (2026-11-28), сўм, 12 ой — ФАҚАТ админ таҳрирловчисига ҚОРАЛАМА (`adminInsuranceGetSettings`
+ * `draftRows`). Нарх админ «Эълон қилиш» босгандагина (янги версия) кучга киради; бу ерда ҳеч нарса ёзилмайди.
+ */
+const OSAGO_OWNER_TABLE_2026_11_28 = Object.freeze({
+  tashkent: { car: [192000, 384000], truck: [336000, 672000], bus: [384000, 768000], moto: [72000, 144000] },
+  other: { car: [160000, 320000], truck: [280000, 560000], bus: [320000, 640000], moto: [60000, 120000] },
+  cis: { car: [320000, 640000], truck: [560000, 1120000] },
+});
+function ownerDraftRows() {
+  const rows = [];
+  for (const zone of ZONES) {
+    for (const vehicleType of VEHICLE_TYPES) {
+      const p = OSAGO_OWNER_TABLE_2026_11_28[zone][vehicleType];
+      if (!p) continue;
+      DRIVER_SCOPES.forEach((driverScope, i) => rows.push({ policyType: 'osago', zone, vehicleType, driverScope, termMonths: 12, price: p[i] }));
+    }
+  }
+  return rows;
+}
 const STATUSES = Object.freeze(['requested', 'paid', 'in_progress', 'issued', 'cancelled']);
 /** Рухсат этилган ўтишлар (17-банд). */
 const TRANSITIONS = Object.freeze({
@@ -114,6 +149,11 @@ const TEXT = Object.freeze({
   CENTER_NOT_FOUND: ['Сервис маркази топилмади.', 'Servis markazi topilmadi.', 'Сервисный центр не найден.'],
   CONFIG_INVALID: ['Созлама нотўғри.', 'Sozlama notöğri.', 'Неверные настройки.'],
   TARIFF_INVALID: ['Нарх жадвали нотўғри.', "Narx jadvali notöğri.", 'Неверная таблица цен.'],
+  CIS_VEHICLE_NOT_ALLOWED: [
+    'Чет эл (МДҲ) рақамли автомобил учун фақат енгил ёки юк автомобили.',
+    'Çet el (MDH) raqamli avtomobil uçun faqat yengil yoki yuk avtomobili.',
+    'Для автомобилей с номерами СНГ — только легковой или грузовой.',
+  ],
   CAMPAIGN_INVALID: ['Таклиф созламаси нотўғри.', "Taklif sozlamasi notöğri.", 'Неверные настройки предложения.'],
   REASON_REQUIRED: ['Сабабни ёзинг.', 'Sababni yozing.', 'Укажите причину.'],
 });
@@ -245,33 +285,80 @@ function validateConfig(input) {
   };
 }
 
-/** Нарх жадвали (соф). rows: [{policyType, regionId('*'|geo id), vehicleType, termMonths, price}]. */
+/** Ҳудуд учун рухсат этилган тоифалар (cis — фақат енгил ва юк). */
+const vehiclesForZone = (zone) => (zone === 'cis' ? CIS_VEHICLE_TYPES : VEHICLE_TYPES);
+
+/**
+ * Нарх жадвали (соф, schema 2): rows [{policyType, zone, vehicleType, driverScope, termMonths, price}]. Ҳар
+ * (policyType, termMonths) гуруҳида БАРЧА комбинация шарт: tashkent/other × 4 тоифа × 2, cis × 2 тоифа × 2 = 20 қатор;
+ * етишмаган — `MISSING …`, cis + микроавтобус/трактор — `ROW_i_CIS_VEHICLE`. Нарх — бутун сўм.
+ */
 function validateTariffRows(rows) {
   const errors = [];
   if (!Array.isArray(rows) || rows.length < 1 || rows.length > 500) return { ok: false, errors: ['ROWS_COUNT'] };
   const seen = new Set();
+  const groups = new Set();
   const clean = [];
   rows.forEach((r, i) => {
     const x = isObj(r) ? r : {};
-    const regionId = String(x.regionId || '').trim();
     const row = {
-      policyType: String(x.policyType || ''), regionId, vehicleType: String(x.vehicleType || ''),
-      termMonths: x.termMonths, price: x.price,
+      policyType: String(x.policyType || ''), zone: String(x.zone || ''), vehicleType: String(x.vehicleType || ''),
+      driverScope: String(x.driverScope || ''), termMonths: x.termMonths, price: x.price,
     };
     if (!POLICY_TYPES.includes(row.policyType)) errors.push(`ROW_${i}_POLICY`);
-    if (!(regionId === '*' || GEO_RE.test(regionId))) errors.push(`ROW_${i}_REGION`);
+    if (!ZONES.includes(row.zone)) errors.push(`ROW_${i}_ZONE`);
     if (!VEHICLE_TYPES.includes(row.vehicleType)) errors.push(`ROW_${i}_VEHICLE`);
+    else if (row.zone === 'cis' && !CIS_VEHICLE_TYPES.includes(row.vehicleType)) errors.push(`ROW_${i}_CIS_VEHICLE`);
+    if (!DRIVER_SCOPES.includes(row.driverScope)) errors.push(`ROW_${i}_SCOPE`);
     if (!isInt(row.termMonths, 1, 36)) errors.push(`ROW_${i}_TERM`);
     if (!isInt(row.price, 1, MAX_PRICE)) errors.push(`ROW_${i}_PRICE`);
-    const k = `${row.policyType}|${regionId}|${row.vehicleType}|${row.termMonths}`;
+    const k = `${row.policyType}|${row.zone}|${row.vehicleType}|${row.driverScope}|${row.termMonths}`;
     if (seen.has(k)) errors.push(`ROW_${i}_DUPLICATE`);
     seen.add(k);
+    if (POLICY_TYPES.includes(row.policyType) && isInt(row.termMonths, 1, 36)) groups.add(`${row.policyType}|${row.termMonths}`);
     clean.push(row);
   });
+  for (const g of groups) {
+    const [policyType, term] = g.split('|');
+    for (const zone of ZONES) {
+      for (const vehicleType of vehiclesForZone(zone)) {
+        for (const driverScope of DRIVER_SCOPES) {
+          const k = `${policyType}|${zone}|${vehicleType}|${driverScope}|${term}`;
+          if (!seen.has(k)) errors.push(`MISSING ${k}`);
+        }
+      }
+    }
+  }
   return errors.length ? { ok: false, errors } : { ok: true, rows: clean };
 }
 
-/** Аниқ вилоят қатори устун, бўлмаса '*' (соф). → row | null. */
+/** Профил вилоятидан ҳудуд (соф): Тошкент шаҳри/вилояти → tashkent, бошқаси (номаълум ҳам) → other. */
+function zoneForRegion(regionId) {
+  return TASHKENT_REGION_IDS.includes(String(regionId || '')) ? 'tashkent' : 'other';
+}
+
+/** schema 2 нархи (соф): аниқ мос қатор ёки null. */
+function findZoneTariffRow(rows, { policyType, zone, vehicleType, driverScope, termMonths }) {
+  const list = Array.isArray(rows) ? rows : [];
+  return list.find((r) => r.policyType === policyType && r.zone === zone && r.vehicleType === vehicleType
+    && r.driverScope === driverScope && r.termMonths === termMonths) || null;
+}
+
+/** schema 2 танловлари (соф): рухсат этилган турлар, барча ҳудудлар (клиент олдиндан кўради; нарх серверда қайта). */
+function zoneTariffOptions(rows, policyTypes) {
+  const zi = (z) => ZONES.indexOf(z);
+  const vi = (v) => VEHICLE_TYPES.indexOf(v);
+  const si = (s) => DRIVER_SCOPES.indexOf(s);
+  return (Array.isArray(rows) ? rows : [])
+    .filter((r) => policyTypes.includes(r.policyType))
+    .map((r) => ({ policyType: r.policyType, zone: r.zone, vehicleType: r.vehicleType, driverScope: r.driverScope, termMonths: r.termMonths, price: r.price }))
+    .sort((a, b) => a.policyType.localeCompare(b.policyType) || zi(a.zone) - zi(b.zone) || vi(a.vehicleType) - vi(b.vehicleType)
+      || si(a.driverScope) - si(b.driverScope) || a.termMonths - b.termMonths);
+}
+
+const isZoneTariff = (tariff) => !!tariff && tariff.schema === TARIFF_SCHEMA;
+
+/** ЭСКИ (schema йўқ) жадвал: аниқ вилоят қатори устун, бўлмаса '*' (соф). → row | null. Фақат олдин эълон қилинганлар учун. */
 function findTariffRow(rows, { policyType, regionId, vehicleType, termMonths }) {
   const list = Array.isArray(rows) ? rows : [];
   const match = (r, reg) => r.policyType === policyType && r.vehicleType === vehicleType
@@ -391,6 +478,7 @@ function requestView(id, r) {
   const toMs = (v) => (v && typeof v.toMillis === 'function' ? v.toMillis() : (Number.isFinite(v) ? v : null));
   return {
     requestId: id, status: x.status, policyType: x.policyType, vehicleType: x.vehicleType, termMonths: x.termMonths,
+    zone: x.zone || '', driverScope: x.driverScope || '',
     car: x.car || {}, tariffVersion: x.tariffVersion, price: x.price || 0,
     oilDiscountPct: x.oilDiscountPct || 0, oilDiscount: x.oilDiscount || 0, incentiveApplied: x.incentiveApplied || 0,
     walletPaid: x.walletPaid || 0,
@@ -518,7 +606,8 @@ function attachCarInsurance(exportsObj, deps) {
     const available = !!user && stageAllows(cfg, key, u.districtId);
     const ci = isObj(u.carInsurance) ? u.carInsurance : null;
     const out = {
-      ok: true, available, kaskoEnabled: cfg.kaskoEnabled, options: [], tariffVersion: 0,
+      ok: true, available, kaskoEnabled: cfg.kaskoEnabled, options: [], tariffVersion: 0, tariffSchema: 1,
+      derivedZone: 'other', zones: ZONES, driverScopes: DRIVER_SCOPES, cisVehicleTypes: CIS_VEHICLE_TYPES,
       car: { ...carOf(u), complete: inc.hasCarProfile(u) },
       carInsurance: ci ? { expiresOn: ci.expiresOn || '', policyType: ci.policyType || '', source: ci.source || '' } : null,
       remindersOptIn: u.insuranceRemindersOptIn !== false,
@@ -526,9 +615,16 @@ function attachCarInsurance(exportsObj, deps) {
     };
     if (!available) return out;
     const tariff = await loadTariff(cfg.activeTariffVersion);
+    const regionId = await regionOf(u.districtId);
+    out.derivedZone = zoneForRegion(regionId);
     if (tariff) {
       out.tariffVersion = tariff.version;
-      out.options = tariffOptionsFor(tariff.rows, await regionOf(u.districtId), policyTypesOf(cfg));
+      if (isZoneTariff(tariff)) {
+        out.tariffSchema = TARIFF_SCHEMA;
+        out.options = zoneTariffOptions(tariff.rows, policyTypesOf(cfg));
+      } else {
+        out.options = tariffOptionsFor(tariff.rows, regionId, policyTypesOf(cfg));
+      }
     }
     const nowMs = now();
     const camp = await campaignFor(nowMs);
@@ -559,7 +655,11 @@ function attachCarInsurance(exportsObj, deps) {
     const vehicleType = String(d.vehicleType || '');
     const termMonths = d.termMonths;
     const idem = String(d.idempotencyKey || '');
-    if (!POLICY_TYPES.includes(policyType) || !VEHICLE_TYPES.includes(vehicleType) || !isInt(termMonths, 1, 36) || !IDEM_RE.test(idem)) {
+    // Эга 2026-11-28: ҳудуд (бўш — профилдан автоматик; фойдаланувчи тузатиши мумкин) ва ҳайдовчилар доираси.
+    const zoneIn = d.zone == null ? '' : String(d.zone);
+    const driverScopeIn = d.driverScope == null ? '' : String(d.driverScope);
+    if (!POLICY_TYPES.includes(policyType) || !VEHICLE_TYPES.includes(vehicleType) || !isInt(termMonths, 1, 36) || !IDEM_RE.test(idem)
+      || (zoneIn && !ZONES.includes(zoneIn)) || (driverScopeIn && !DRIVER_SCOPES.includes(driverScopeIn))) {
       throw fail('invalid-argument', 'INVALID_REQUEST');
     }
     const requestId = `ins_${key}_${idem}`;
@@ -576,7 +676,19 @@ function attachCarInsurance(exportsObj, deps) {
     if (!inc.hasCarProfile(user.data) || !car.plateKey) throw fail('failed-precondition', 'CAR_PROFILE_REQUIRED');
     const tariff = await loadTariff(cfg.activeTariffVersion);
     const regionId = await regionOf(user.data.districtId);
-    const row = tariff ? findTariffRow(tariff.rows, { policyType, regionId, vehicleType, termMonths }) : null;
+    const zoneDerived = zoneForRegion(regionId);
+    let row = null;
+    let sel = {};
+    if (isZoneTariff(tariff)) {
+      if (!driverScopeIn) throw fail('invalid-argument', 'INVALID_REQUEST');
+      const zone = zoneIn || zoneDerived;
+      if (zone === 'cis' && !CIS_VEHICLE_TYPES.includes(vehicleType)) throw fail('failed-precondition', 'CIS_VEHICLE_NOT_ALLOWED');
+      row = findZoneTariffRow(tariff.rows, { policyType, zone, vehicleType, driverScope: driverScopeIn, termMonths });
+      // Ҳудуд фойдаланувчи танлови бўлса — агент полисда текширади (zoneSource 'user').
+      sel = { zone, zoneDerived, zoneSource: zoneIn && zoneIn !== zoneDerived ? 'user' : 'auto', driverScope: driverScopeIn, tariffSchema: TARIFF_SCHEMA };
+    } else if (tariff) {
+      row = findTariffRow(tariff.rows, { policyType, regionId, vehicleType, termMonths });
+    }
     if (!row) throw fail('failed-precondition', 'TARIFF_NOT_FOUND');
     const lockRef = db.collection(OPEN).doc(`${key}_${policyType}`);
     const out = await db.runTransaction(async (t) => {
@@ -587,10 +699,10 @@ function attachCarInsurance(exportsObj, deps) {
       t.create(reqRef, {
         uid: key, walletDocId: user.id, status: 'requested', policyType, vehicleType, termMonths,
         districtId: String(user.data.districtId || ''), regionId, car,
-        tariffVersion: tariff.version, tariffRegionId: row.regionId, price: row.price,
+        tariffVersion: tariff.version, tariffRegionId: row.regionId || null, price: row.price, ...sel,
         idempotencyKey: idem, createdAt: ts(), updatedAt: ts(),
       });
-      event(t, requestId, 'requested', key, { price: row.price, tariffVersion: tariff.version });
+      event(t, requestId, 'requested', key, { price: row.price, tariffVersion: tariff.version, ...(sel.zone ? { zone: sel.zone, driverScope: sel.driverScope } : {}) });
       return { duplicate: false, price: row.price, tariffVersion: tariff.version };
     });
     log({ action: 'insuranceCreateRequest', userId: tail(key), requestId: requestId.replace(key, tail(key)), result: out.duplicate ? 'duplicate' : 'created', price: out.price, durationMs: now() - started });
@@ -834,7 +946,7 @@ function attachCarInsurance(exportsObj, deps) {
     const status = String((data && data.status) || 'paid');
     if (!STATUSES.includes(status)) throw fail('invalid-argument', 'INVALID_REQUEST');
     const snap = await db.collection(REQUESTS).where('status', '==', status).limit(200).get();
-    const list = snap.docs.map((d) => ({ ...requestView(d.id, d.data()), uid: d.data().uid, regionId: d.data().regionId || '', districtId: d.data().districtId || '' }));
+    const list = snap.docs.map((d) => ({ ...requestView(d.id, d.data()), uid: d.data().uid, regionId: d.data().regionId || '', districtId: d.data().districtId || '', zoneDerived: d.data().zoneDerived || '', zoneSource: d.data().zoneSource || '' }));
     list.sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
     return { ok: true, requests: list };
   });
@@ -1075,7 +1187,10 @@ function attachCarInsurance(exportsObj, deps) {
     ]);
     return {
       ok: true, config: cfg, vehicleTypes: VEHICLE_TYPES, policyTypes: POLICY_TYPES,
-      tariff: tariff ? { version: tariff.version, rows: tariff.rows, note: tariff.note || '' } : null,
+      zones: ZONES, driverScopes: DRIVER_SCOPES, cisVehicleTypes: CIS_VEHICLE_TYPES, tariffSchema: TARIFF_SCHEMA,
+      tariff: tariff ? { version: tariff.version, schema: isZoneTariff(tariff) ? TARIFF_SCHEMA : 1, rows: tariff.rows, note: tariff.note || '' } : null,
+      // Эга расмий ОСАГО жадвали — фаол жадвал schema 2 бўлмаса таҳрирловчига қоралама (админ «Эълон қилиш» босади).
+      draftRows: isZoneTariff(tariff) ? null : ownerDraftRows(),
       tariffVersions: tariffs.docs.map((x) => ({ version: x.data().version, note: x.data().note || '', rowCount: (x.data().rows || []).length })),
       campaigns: camps.docs.map((x) => {
         const c = x.data();
@@ -1111,7 +1226,7 @@ function attachCarInsurance(exportsObj, deps) {
       const prev = s.exists && Number.isSafeInteger(s.data().activeTariffVersion) ? s.data().activeTariffVersion : 0;
       const maxV = Number.isSafeInteger((s.data() || {}).maxTariffVersion) ? s.data().maxTariffVersion : prev;
       const next = maxV + 1;
-      t.create(db.collection(TARIFFS).doc(`v${next}`), { version: next, rows: v.rows, note, createdBy: actor, createdAt: ts() });
+      t.create(db.collection(TARIFFS).doc(`v${next}`), { version: next, schema: TARIFF_SCHEMA, rows: v.rows, note, createdBy: actor, createdAt: ts() });
       t.set(configRef(), { activeTariffVersion: next, maxTariffVersion: next, updatedAt: ts(), updatedBy: actor }, { merge: true });
       t.create(db.collection(ADMIN_AUDIT).doc(), { action: 'insurance_tariff_publish', actor, from: prev, to: next, rowCount: v.rows.length, note, at: ts() });
       return next;
@@ -1199,8 +1314,9 @@ function attachCarInsurance(exportsObj, deps) {
 module.exports = {
   attachCarInsurance,
   normalizePlate, dateOk, addDaysKey, tashkentYear, displayDate, validateConfig, validateTariffRows, findTariffRow,
-  tariffOptionsFor, validOilSteps, oilDiscountPct, oilGoal, validateCampaign, computePayment, canTransition,
+  tariffOptionsFor, zoneForRegion, findZoneTariffRow, zoneTariffOptions, ownerDraftRows, validOilSteps, oilDiscountPct, oilGoal, validateCampaign, computePayment, canTransition,
   reminderTargets, sniffFile, requestView, messagesOf,
-  STAGES, POLICY_TYPES, VEHICLE_TYPES, STATUSES, TRANSITIONS, OPEN_STATUSES, OPTIONS, REMIND_DAYS, BONUS_PROGRAM, NOTICE,
+  STAGES, POLICY_TYPES, VEHICLE_TYPES, ZONES, DRIVER_SCOPES, CIS_VEHICLE_TYPES, TASHKENT_REGION_IDS, TARIFF_SCHEMA,
+  OSAGO_OWNER_TABLE_2026_11_28, STATUSES, TRANSITIONS, OPEN_STATUSES, OPTIONS, REMIND_DAYS, BONUS_PROGRAM, NOTICE,
   REQUESTS, ENROLL, EXPIRY, FILES, CAMPAIGNS, TARIFFS, CONFIG,
 };

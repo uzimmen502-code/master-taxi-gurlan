@@ -29,18 +29,64 @@ check('I2 сана: ҳақиқий YYYY-MM-DD; кун қўшиш ой/йил ч�
   assert.strictEqual(c.tashkentYear(Date.UTC(2026, 11, 31, 20)), 2027); // 01:00 Тошкент 1-январ
 });
 
-check('I3 нарх жадвали: тўғри; такрор калит, нотўғри нарх/муддат/тур — рад; float нарх рад', () => {
-  assert.ok(c.validateTariffRows([row(), row({ regionId: 'xorazm', price: 180000 })]).ok);
-  assert.ok(!c.validateTariffRows([row(), row()]).ok);
-  assert.ok(!c.validateTariffRows([row({ price: 1000.5 })]).ok);
-  assert.ok(!c.validateTariffRows([row({ price: 0 })]).ok);
-  assert.ok(!c.validateTariffRows([row({ termMonths: 40 })]).ok);
-  assert.ok(!c.validateTariffRows([row({ vehicleType: 'tank' })]).ok);
-  assert.ok(!c.validateTariffRows([row({ policyType: 'life' })]).ok);
+// Эга расмий ОСАГО жадвали (2026-11-28), сўм: [чекланган, чекланмаган].
+const OWNER = {
+  tashkent: { car: [192000, 384000], truck: [336000, 672000], bus: [384000, 768000], moto: [72000, 144000] },
+  other: { car: [160000, 320000], truck: [280000, 560000], bus: [320000, 640000], moto: [60000, 120000] },
+  cis: { car: [320000, 640000], truck: [560000, 1120000] },
+};
+const OWNER_ROWS = c.ownerDraftRows();
+
+check('I3 эга жадвали (қоралама): 20 қатор, ҲАР комбинация нархи жадвалдагидек, МДҲ — фақат енгил/юк; валидациядан ўтади', () => {
+  assert.strictEqual(OWNER_ROWS.length, 20);
+  let n = 0;
+  for (const [zone, byV] of Object.entries(OWNER)) {
+    for (const [vehicleType, [lim, unl]] of Object.entries(byV)) {
+      assert.strictEqual(c.findZoneTariffRow(OWNER_ROWS, { policyType: 'osago', zone, vehicleType, driverScope: 'limited', termMonths: 12 }).price, lim, `${zone}/${vehicleType}/limited`);
+      assert.strictEqual(c.findZoneTariffRow(OWNER_ROWS, { policyType: 'osago', zone, vehicleType, driverScope: 'unlimited', termMonths: 12 }).price, unl, `${zone}/${vehicleType}/unlimited`);
+      n += 2;
+    }
+  }
+  assert.strictEqual(n, 20);
+  for (const v of ['bus', 'moto']) for (const s of c.DRIVER_SCOPES) assert.strictEqual(c.findZoneTariffRow(OWNER_ROWS, { policyType: 'osago', zone: 'cis', vehicleType: v, driverScope: s, termMonths: 12 }), null);
+  assert.ok(OWNER_ROWS.every((r) => Number.isSafeInteger(r.price) && r.termMonths === 12 && r.policyType === 'osago'));
+  const v = c.validateTariffRows(OWNER_ROWS);
+  assert.ok(v.ok, JSON.stringify(v.errors));
+});
+
+check('I3b жадвал рад: етишмаган комбинация, МДҲ микроавтобус/трактор, такрор, float/0 нарх, нотўғри ҳудуд/ҳайдовчи/тур', () => {
+  const miss = c.validateTariffRows(OWNER_ROWS.filter((r) => !(r.zone === 'other' && r.vehicleType === 'moto' && r.driverScope === 'unlimited')));
+  assert.ok(!miss.ok);
+  assert.deepStrictEqual(miss.errors, ['MISSING osago|other|moto|unlimited|12']);
+  const cisBus = c.validateTariffRows([...OWNER_ROWS, { policyType: 'osago', zone: 'cis', vehicleType: 'bus', driverScope: 'limited', termMonths: 12, price: 1 }]);
+  assert.ok(!cisBus.ok && cisBus.errors.includes('ROW_20_CIS_VEHICLE'));
+  assert.ok(!c.validateTariffRows([...OWNER_ROWS, OWNER_ROWS[0]]).errors.length === false);
+  const mut = (i, o) => OWNER_ROWS.map((r, j) => (j === i ? { ...r, ...o } : r));
+  assert.ok(c.validateTariffRows(mut(0, { price: 1000.5 })).errors.includes('ROW_0_PRICE'));
+  assert.ok(c.validateTariffRows(mut(0, { price: 0 })).errors.includes('ROW_0_PRICE'));
+  assert.ok(c.validateTariffRows(mut(0, { zone: 'xorazm' })).errors.includes('ROW_0_ZONE'));
+  assert.ok(c.validateTariffRows(mut(0, { driverScope: 'any' })).errors.includes('ROW_0_SCOPE'));
+  assert.ok(c.validateTariffRows(mut(0, { vehicleType: 'tank' })).errors.includes('ROW_0_VEHICLE'));
+  assert.ok(c.validateTariffRows(mut(0, { policyType: 'life' })).errors.includes('ROW_0_POLICY'));
+  assert.ok(!c.validateTariffRows([...OWNER_ROWS, OWNER_ROWS[3]]).ok);
+  assert.ok(!c.validateTariffRows([row()]).ok, 'эски (вилоят) қатори энди эълон қилинмайди');
   assert.ok(!c.validateTariffRows([]).ok);
 });
 
-check('I4 нарх топиш: вилоят қатори устун, бўлмаса «*»; йўқ — null; танловлар рўйхати вилоятга мос', () => {
+check('I3c ҳудуд: Тошкент шаҳри/вилояти → tashkent, бошқаси/номаълум → other; танловлар тартибли, рухсат этилган турлар', () => {
+  assert.strictEqual(c.zoneForRegion('toshkent_shahri'), 'tashkent');
+  assert.strictEqual(c.zoneForRegion('toshkent_viloyati'), 'tashkent');
+  assert.strictEqual(c.zoneForRegion('xorazm'), 'other');
+  assert.strictEqual(c.zoneForRegion(''), 'other');
+  assert.strictEqual(c.zoneForRegion(null), 'other');
+  const opts = c.zoneTariffOptions(OWNER_ROWS, ['osago']);
+  assert.strictEqual(opts.length, 20);
+  assert.deepStrictEqual(opts[0], { policyType: 'osago', zone: 'tashkent', vehicleType: 'car', driverScope: 'limited', termMonths: 12, price: 192000 });
+  assert.deepStrictEqual(opts[19], { policyType: 'osago', zone: 'cis', vehicleType: 'truck', driverScope: 'unlimited', termMonths: 12, price: 1120000 });
+  assert.strictEqual(c.zoneTariffOptions(OWNER_ROWS, ['kasko']).length, 0);
+});
+
+check('I4 ЭСКИ жадвал (фақат ўқиш): вилоят қатори устун, бўлмаса «*»; йўқ — null; танловлар рўйхати вилоятга мос', () => {
   const rows = [row(), row({ regionId: 'xorazm', price: 180000 }), row({ policyType: 'kasko', price: 900000 }), row({ termMonths: 6, price: 120000 })];
   assert.strictEqual(c.findTariffRow(rows, { policyType: 'osago', regionId: 'xorazm', vehicleType: 'car', termMonths: 12 }).price, 180000);
   assert.strictEqual(c.findTariffRow(rows, { policyType: 'osago', regionId: 'toshkent', vehicleType: 'car', termMonths: 12 }).price, 200000);
@@ -119,7 +165,7 @@ check('I11 созлама: телефонлар шахс калитига, но�
 check('I12 хабарлар 3 тилда; uz_Latn янги алифбода (o\'/g\'/sh/ch йўқ)', () => {
   for (const k of Object.keys(c.NOTICE)) for (const l of ['uz_Cyrl', 'uz_Latn', 'ru']) assert.ok(c.NOTICE[k][l].title && c.NOTICE[k][l].body, `${k}.${l}`);
   for (const k of Object.keys(c.NOTICE)) assert.ok(!/o'|g'|sh|ch/i.test(c.NOTICE[k].uz_Latn.body + c.NOTICE[k].uz_Latn.title), k);
-  for (const code of ['INSUFFICIENT_BALANCE', 'PLATE_ALREADY_ENROLLED', 'NOT_AVAILABLE']) assert.ok(!/o'|g'|sh|ch/i.test(c.messagesOf(code).uz_Latn), code);
+  for (const code of ['INSUFFICIENT_BALANCE', 'PLATE_ALREADY_ENROLLED', 'NOT_AVAILABLE', 'CIS_VEHICLE_NOT_ALLOWED']) assert.ok(!/o'|g'|sh|ch/i.test(c.messagesOf(code).uz_Latn), code);
 });
 
 const passed = results.filter(Boolean).length;

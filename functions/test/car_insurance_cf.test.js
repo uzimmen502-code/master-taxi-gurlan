@@ -63,11 +63,9 @@ const car = (plate) => ({ carModel: 'Cobalt', carColor: 'oq', carPlate: plate, c
 const PDF = Buffer.from('%PDF-1.7\n1 0 obj\n<<>>\nendobj\n').toString('base64');
 const CONFIG = { stage: 'internal', internalPhones: [U, V, W], pilotDistrictIds: [], agentPhones: [AGENT], reporterPhones: [REP], kaskoEnabled: false, remindersEnabled: true };
 const CAMPAIGN = { stage: 'internal', internalPhones: [U, V, W], pilotDistrictIds: [], bonusEnabled: true, bonusAmount: 100000, bonusValidityDays: 60, bonusMaxOrderSharePct: 100, bonusBudgetTotal: 150000, oilEnabled: true, oilSteps: [{ count: 1, pct: 50 }, { count: 2, pct: 100 }] };
-const ROWS = [
-  { policyType: 'osago', regionId: '*', vehicleType: 'car', termMonths: 12, price: 250000 },
-  { policyType: 'osago', regionId: 'xorazm', vehicleType: 'car', termMonths: 12, price: 200000 },
-  { policyType: 'kasko', regionId: '*', vehicleType: 'car', termMonths: 12, price: 900000 },
-];
+// Эга ОСАГО жадвали (schema 2, 20 қатор); тест учун «бошқа ҳудуд / енгил / чекланган» = 200 000. КАСКО — 20 қатор 900 000.
+const OSAGO_ROWS = ci.ownerDraftRows().map((r) => (r.zone === 'other' && r.vehicleType === 'car' && r.driverScope === 'limited' ? { ...r, price: 200000 } : r));
+const ROWS = [...OSAGO_ROWS, ...OSAGO_ROWS.map((r) => ({ ...r, policyType: 'kasko', price: 900000 }))];
 let reqU1;
 
 async function main() {
@@ -87,9 +85,10 @@ async function main() {
     await expectCode(call('adminInsuranceSaveConfig', { config: { ...CONFIG, stage: 'on' } }, ADMIN), 'CONFIG_INVALID');
     await call('adminInsuranceSaveConfig', { config: CONFIG }, ADMIN);
     await expectCode(call('adminInsurancePublishTariff', { rows: [{ ...ROWS[0], price: 1.5 }] }, ADMIN), 'TARIFF_INVALID');
-    assert.strictEqual((await call('adminInsurancePublishTariff', { rows: [ROWS[0]], note: 'v1' }, ADMIN)).version, 1);
+    await expectCode(call('adminInsurancePublishTariff', { rows: [ROWS[0]], note: 'x' }, ADMIN), 'TARIFF_INVALID'); // етишмаган комбинациялар
+    assert.strictEqual((await call('adminInsurancePublishTariff', { rows: OSAGO_ROWS, note: 'v1' }, ADMIN)).version, 1);
     assert.strictEqual((await call('adminInsurancePublishTariff', { rows: ROWS, note: 'v2' }, ADMIN)).version, 2);
-    assert.strictEqual((await get('insurance_tariffs/v1')).rows.length, 1);
+    assert.deepStrictEqual([(await get('insurance_tariffs/v1')).rows.length, (await get('insurance_tariffs/v1')).schema], [20, 2]);
     await call('adminInsuranceSaveCampaign', { year: 2026, campaign: CAMPAIGN }, ADMIN);
     const prog = await get('incentive_programs/car_insurance_bonus');
     assert.deepStrictEqual([prog.stage, prog.kind, prog.counters.grantedAmount], ['off', 'car_insurance_bonus', 0]);
@@ -99,23 +98,28 @@ async function main() {
     assert.deepStrictEqual(au, ['insurance_campaign', 'insurance_config', 'insurance_tariff_publish', 'insurance_tariff_publish']);
   });
 
-  await check('C2 ҳолат: ички рўйхатдагига вилоят нархи (Хоразм 200 000), КАСКО ёпиқ; бегонага мавжуд эмас', async () => {
+  await check('C2 ҳолат: ички рўйхатдагига ҳудуд жадвали (Хоразм → бошқа ҳудуд, 200 000), КАСКО ёпиқ; бегонага мавжуд эмас', async () => {
     const st = await call('insuranceGetMyState', {}, U);
-    assert.deepStrictEqual([st.available, st.tariffVersion, st.options.length, st.options[0].price, st.car.plateKey, st.car.complete], [true, 2, 1, 200000, '01A123BC', true]);
+    assert.deepStrictEqual([st.available, st.tariffVersion, st.tariffSchema, st.derivedZone, st.options.length, st.car.plateKey, st.car.complete], [true, 2, 2, 'other', 20, '01A123BC', true]);
+    assert.strictEqual(st.options.find((o) => o.zone === 'other' && o.vehicleType === 'car' && o.driverScope === 'limited').price, 200000);
+    assert.ok(st.options.every((o) => o.policyType === 'osago'), 'КАСКО ёпиқ');
     assert.deepStrictEqual([st.campaign.year, st.campaign.bonusAmount, st.enrollment], [2026, 100000, null]);
     const out = await call('insuranceGetMyState', {}, OUT);
     assert.deepStrictEqual([out.available, out.options.length, out.campaign], [false, 0, null]);
-    await expectCode(call('insuranceCreateRequest', { policyType: 'osago', vehicleType: 'car', termMonths: 12, idempotencyKey: 'out-key-0001' }, OUT), 'NOT_AVAILABLE');
-    await expectCode(call('insuranceCreateRequest', { policyType: 'kasko', vehicleType: 'car', termMonths: 12, idempotencyKey: 'u-kasko-0001' }, U), 'POLICY_TYPE_OFF');
-    await expectCode(call('insuranceCreateRequest', { policyType: 'osago', vehicleType: 'bus', termMonths: 12, idempotencyKey: 'u-bus-00001' }, U), 'TARIFF_NOT_FOUND');
+    await expectCode(call('insuranceCreateRequest', { policyType: 'osago', vehicleType: 'car', termMonths: 12, driverScope: 'limited', idempotencyKey: 'out-key-0001' }, OUT), 'NOT_AVAILABLE');
+    await expectCode(call('insuranceCreateRequest', { policyType: 'kasko', vehicleType: 'car', termMonths: 12, driverScope: 'limited', idempotencyKey: 'u-kasko-0001' }, U), 'POLICY_TYPE_OFF');
+    await expectCode(call('insuranceCreateRequest', { policyType: 'osago', vehicleType: 'bus', zone: 'cis', termMonths: 12, driverScope: 'limited', idempotencyKey: 'u-bus-00001' }, U), 'CIS_VEHICLE_NOT_ALLOWED');
+    await expectCode(call('insuranceCreateRequest', { policyType: 'osago', vehicleType: 'car', termMonths: 12, idempotencyKey: 'u-noscope-01' }, U), 'INVALID_REQUEST');
+    await expectCode(call('insuranceCreateRequest', { policyType: 'osago', vehicleType: 'car', zone: 'mars', termMonths: 12, driverScope: 'limited', idempotencyKey: 'u-zone-0001' }, U), 'INVALID_REQUEST');
+    await expectCode(call('insuranceCreateRequest', { policyType: 'osago', vehicleType: 'car', termMonths: 6, driverScope: 'limited', idempotencyKey: 'u-term-0001' }, U), 'TARIFF_NOT_FOUND');
   });
 
   await check('C3 ариза: tariffVersion+нарх сақланади, такрор — бир ариза, иккинчи очиқ ариза рад; тариф ўзгарса эски ариза нархи ўзгармайди', async () => {
-    const r = await call('insuranceCreateRequest', { policyType: 'osago', vehicleType: 'car', termMonths: 12, idempotencyKey: 'u-req-00001' }, U);
+    const r = await call('insuranceCreateRequest', { policyType: 'osago', vehicleType: 'car', termMonths: 12, driverScope: 'limited', idempotencyKey: 'u-req-00001' }, U);
     reqU1 = r.requestId;
     assert.deepStrictEqual([r.price, r.tariffVersion, r.duplicate], [200000, 2, false]);
-    assert.strictEqual((await call('insuranceCreateRequest', { policyType: 'osago', vehicleType: 'car', termMonths: 12, idempotencyKey: 'u-req-00001' }, U)).duplicate, true);
-    await expectCode(call('insuranceCreateRequest', { policyType: 'osago', vehicleType: 'car', termMonths: 12, idempotencyKey: 'u-req-00002' }, U), 'OPEN_REQUEST_EXISTS');
+    assert.strictEqual((await call('insuranceCreateRequest', { policyType: 'osago', vehicleType: 'car', termMonths: 12, driverScope: 'limited', idempotencyKey: 'u-req-00001' }, U)).duplicate, true);
+    await expectCode(call('insuranceCreateRequest', { policyType: 'osago', vehicleType: 'car', termMonths: 12, driverScope: 'limited', idempotencyKey: 'u-req-00002' }, U), 'OPEN_REQUEST_EXISTS');
     await call('adminInsurancePublishTariff', { rows: ROWS.map((x) => ({ ...x, price: x.price + 50000 })), note: 'v3' }, ADMIN);
     const doc = await get(`insurance_requests/${reqU1}`);
     assert.deepStrictEqual([doc.status, doc.price, doc.tariffVersion, doc.car.plateKey, doc.uid], ['requested', 200000, 2, '01A123BC', U]);
@@ -186,7 +190,7 @@ async function main() {
   });
 
   await check('C7 тўлов бонус+ҳамён, агент бекор қилади → ҳамён ва грант тикланади (идемпотент), журнал', async () => {
-    const reqV = (await call('insuranceCreateRequest', { policyType: 'osago', vehicleType: 'car', termMonths: 12, idempotencyKey: 'v-req-00001' }, V)).requestId;
+    const reqV = (await call('insuranceCreateRequest', { policyType: 'osago', vehicleType: 'car', termMonths: 12, driverScope: 'limited', idempotencyKey: 'v-req-00001' }, V)).requestId;
     const doc0 = await get(`insurance_requests/${reqV}`);
     assert.deepStrictEqual([doc0.price, doc0.tariffVersion], [250000, 3]); // v3 (Хоразм 250 000)
     // 250 000 − бонус 100 000 = 150 000 > ҳамён 100 000 → рад, грант ўзгармайди.
@@ -237,7 +241,7 @@ async function main() {
   });
 
   await check('C9 100% чегирма: ҳамёндан 0 сўм, чегирма ишлатилди; бекор → чегирма қайтади; қайта тўлов → яна 100%', async () => {
-    const r = await call('insuranceCreateRequest', { policyType: 'osago', vehicleType: 'car', termMonths: 12, idempotencyKey: 'u-req-00003' }, U);
+    const r = await call('insuranceCreateRequest', { policyType: 'osago', vehicleType: 'car', termMonths: 12, driverScope: 'limited', idempotencyKey: 'u-req-00003' }, U);
     const bal0 = (await get(`users/${U}`)).bonusBalance;
     const p = await call('insurancePayRequest', { requestId: r.requestId }, U);
     assert.deepStrictEqual([p.oilDiscount, p.walletPaid, p.incentive], [250000, 0, 0]);
@@ -247,7 +251,7 @@ async function main() {
     assert.deepStrictEqual(c.refund, { wallet: 0, incentive: 0, oilRestored: true });
     const st = await call('insuranceGetMyState', {}, U);
     assert.deepStrictEqual([st.enrollment.discountUsed, st.enrollment.discountPct], [false, 100]);
-    const r2 = await call('insuranceCreateRequest', { policyType: 'osago', vehicleType: 'car', termMonths: 12, idempotencyKey: 'u-req-00004' }, U);
+    const r2 = await call('insuranceCreateRequest', { policyType: 'osago', vehicleType: 'car', termMonths: 12, driverScope: 'limited', idempotencyKey: 'u-req-00004' }, U);
     assert.strictEqual((await call('insurancePayRequest', { requestId: r2.requestId }, U)).oilDiscount, 250000);
   });
 
@@ -268,10 +272,48 @@ async function main() {
     assert.strictEqual(s.sent, 1);
     assert.ok(await get(`insurance_reminder_log/${W}_2026-12-05_d3`));
     // Мижоз тўланмаган аризани бекор қилади; тўланганини — йўқ.
-    const r = await call('insuranceCreateRequest', { policyType: 'osago', vehicleType: 'car', termMonths: 12, idempotencyKey: 'w-req-00001' }, W);
+    const r = await call('insuranceCreateRequest', { policyType: 'osago', vehicleType: 'car', termMonths: 12, driverScope: 'limited', idempotencyKey: 'w-req-00001' }, W);
     await call('insuranceCancelMyRequest', { requestId: r.requestId }, W);
     assert.strictEqual((await get(`insurance_requests/${r.requestId}`)).status, 'cancelled');
     assert.strictEqual(await get(`insurance_open/${W}_osago`), undefined);
+  });
+
+  await check('C11 ҳудуд (эга 2026-11-28): Тошкент тумани → tashkent автоматик; фойдаланувчи МДҲ/бошқа ҳудудни танлайди; аризада zone/driverScope сақланади (v3 = жадвал + 50 000)', async () => {
+    await db.doc('geo_districts/chilonzor').set({ regionId: 'toshkent_shahri' });
+    await db.doc(`users/${W}`).update({ districtId: 'chilonzor' });
+    const st = await call('insuranceGetMyState', {}, W);
+    assert.deepStrictEqual([st.derivedZone, st.tariffSchema, st.zones, st.cisVehicleTypes], ['tashkent', 2, ['tashkent', 'other', 'cis'], ['car', 'truck']]);
+    const cases = [
+      [{ vehicleType: 'truck', driverScope: 'unlimited' }, 722000, 'tashkent', 'auto'],
+      [{ vehicleType: 'car', driverScope: 'limited', zone: 'cis' }, 370000, 'cis', 'user'],
+      [{ vehicleType: 'moto', driverScope: 'unlimited', zone: 'other' }, 170000, 'other', 'user'],
+      [{ vehicleType: 'bus', driverScope: 'limited', zone: 'tashkent' }, 434000, 'tashkent', 'auto'],
+    ];
+    let i = 0;
+    for (const [sel, price, zone, source] of cases) {
+      i += 1;
+      const r = await call('insuranceCreateRequest', { policyType: 'osago', termMonths: 12, idempotencyKey: `w-zone-000${i}`, ...sel }, W);
+      assert.strictEqual(r.price, price, JSON.stringify(sel));
+      const doc = await get(`insurance_requests/${r.requestId}`);
+      assert.deepStrictEqual([doc.zone, doc.zoneDerived, doc.zoneSource, doc.driverScope, doc.vehicleType, doc.tariffSchema, doc.tariffVersion], [zone, 'tashkent', source, sel.driverScope, sel.vehicleType, 2, 3]);
+      await call('insuranceCancelMyRequest', { requestId: r.requestId }, W);
+    }
+    await expectCode(call('insuranceCreateRequest', { policyType: 'osago', vehicleType: 'moto', zone: 'cis', termMonths: 12, driverScope: 'unlimited', idempotencyKey: 'w-zone-cis-m' }, W), 'CIS_VEHICLE_NOT_ALLOWED');
+    const s = await call('adminInsuranceGetSettings', {}, ADMIN);
+    assert.deepStrictEqual([s.tariff.schema, s.draftRows, s.tariffSchema], [2, null, 2]);
+  });
+
+  await check('C12 эски (вилоят) жадвал фаол бўлса — эски йўл ишлайди (backward compat); админга эга жадвали қоралама', async () => {
+    await db.doc('insurance_tariffs/v90').set({ version: 90, rows: [{ policyType: 'osago', regionId: '*', vehicleType: 'car', termMonths: 12, price: 111000 }] });
+    await db.doc('insurance_config/main').update({ activeTariffVersion: 90 });
+    const st = await call('insuranceGetMyState', {}, W);
+    assert.deepStrictEqual([st.tariffSchema, st.options.length, st.options[0].price], [1, 1, 111000]);
+    const r = await call('insuranceCreateRequest', { policyType: 'osago', vehicleType: 'car', termMonths: 12, idempotencyKey: 'w-legacy-001' }, W);
+    assert.strictEqual(r.price, 111000);
+    assert.strictEqual((await get(`insurance_requests/${r.requestId}`)).zone, undefined);
+    const s = await call('adminInsuranceGetSettings', {}, ADMIN);
+    assert.deepStrictEqual([s.tariff.schema, s.draftRows.length], [1, 20]);
+    assert.strictEqual(s.draftRows.find((x) => x.zone === 'cis' && x.vehicleType === 'truck' && x.driverScope === 'unlimited').price, 1120000);
   });
 
   const passed = results.filter(Boolean).length;

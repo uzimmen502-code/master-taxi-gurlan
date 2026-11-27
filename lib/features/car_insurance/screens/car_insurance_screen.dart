@@ -1,7 +1,10 @@
+import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
@@ -14,7 +17,10 @@ import '../car_insurance_service.dart';
 /// (бонус ёки мой дастури) · ариза ва тўлов (ҳамён/бонус/чегирма — серверда) · менинг аризаларим ва полис.
 /// «Суғурталанган» белгиси ҲЕЧ ҚАЕРДА йўқ (эга).
 class CarInsuranceScreen extends StatefulWidget {
-  const CarInsuranceScreen({super.key, required this.phone, this.service, this.requestsStream});
+  const CarInsuranceScreen({super.key, required this.phone, this.service, this.requestsStream, this.pickImage});
+
+  /// Тест учун: техпаспорт расмини танлаш (side 'front'|'back'); сукут — галерея (1600 px, сифат 80).
+  final Future<Uint8List?> Function(String side)? pickImage;
 
   /// Телефон (исталган формат) — ичида `canonicalPhoneId`.
   final String phone;
@@ -44,6 +50,10 @@ class _CarInsuranceScreenState extends State<CarInsuranceScreen> {
   String? _zone;
   bool _cis = false;
   String? _scope;
+
+  /// Техпаспорт расмлари (эга 2026-11-28; янги ОСАГО аризасида шарт) — юборилгунча қурилмада.
+  Uint8List? _techFront;
+  Uint8List? _techBack;
   String? _pendingKey;
   bool? _remindersOptIn;
 
@@ -530,6 +540,7 @@ class _CarInsuranceScreenState extends State<CarInsuranceScreen> {
                   onSelected: (_) => setState(() => _term = m),
                 ),
             ]),
+          _techPassportPickers(),
           const SizedBox(height: 10),
           Text(
             opt == null ? context.tr('ins_no_prices') : context.tr('ins_price').replaceAll('{price}', formatMoney(opt.price)),
@@ -543,7 +554,9 @@ class _CarInsuranceScreenState extends State<CarInsuranceScreen> {
             width: double.infinity,
             child: FilledButton.icon(
               key: const ValueKey('ins_request_submit'),
-              onPressed: _busy || !s.carComplete || opt == null ? null : () => _submit(opt, zone: _cis || _zone != null ? zone : ''),
+              onPressed: _busy || !s.carComplete || opt == null || _techFront == null || _techBack == null
+                  ? null
+                  : () => _submit(opt, zone: _cis || _zone != null ? zone : ''),
               icon: const Icon(Icons.send),
               label: Text(context.tr(s.carComplete ? 'ins_request_submit' : 'ins_car_required')),
             ),
@@ -567,8 +580,51 @@ class _CarInsuranceScreenState extends State<CarInsuranceScreen> {
       );
       requestId = r.requestId;
       _pendingKey = null;
+      // Эга 2026-11-28: техпаспорт (schema 2) — ариза яратилгач, тўловдан олдин.
+      if (opt.zone.isNotEmpty) {
+        for (final (side, bytes) in [('front', _techFront), ('back', _techBack)]) {
+          if (bytes != null) await _svc.uploadTechPassport(r.requestId, side, base64Encode(bytes));
+        }
+        if (mounted) setState(() => _techFront = _techBack = null);
+      }
     });
-    if (requestId != null && mounted) await _payFlow(requestId!);
+    // Техпаспорт юкланмаган бўлса (хато) — тўлов очилмайди; «Менинг аризаларим»дан қайта юклаш мумкин.
+    if (requestId != null && mounted && (opt.zone.isEmpty || (_techFront == null && _techBack == null))) await _payFlow(requestId!);
+  }
+
+  Future<Uint8List?> _pick(String side) async {
+    if (widget.pickImage != null) return widget.pickImage!(side);
+    final f = await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 1600, imageQuality: 80);
+    return f == null ? null : await f.readAsBytes();
+  }
+
+  Widget _techPassportPickers() {
+    Widget btn(String side, Uint8List? v) => OutlinedButton.icon(
+          key: ValueKey('ins_tech_$side'),
+          onPressed: _busy
+              ? null
+              : () async {
+                  final b = await _pick(side);
+                  if (b != null && mounted) setState(() => side == 'front' ? _techFront = b : _techBack = b);
+                },
+          icon: Icon(v == null ? Icons.add_a_photo_outlined : Icons.check_circle, color: v == null ? null : Colors.green),
+          label: Text(context.tr('ins_techpass_$side')),
+        );
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(context.tr('ins_techpass_title'), style: TextStyle(color: Colors.grey.shade700)),
+        Wrap(spacing: 8, runSpacing: 4, children: [btn('front', _techFront), btn('back', _techBack)]),
+        Text(context.tr('ins_techpass_hint'), style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+      ]),
+    );
+  }
+
+  /// Аризадан кейин юкланмаган томон (масалан тармоқ узилган бўлса) — «Менинг аризаларим»дан.
+  Future<void> _uploadLater(String requestId, String side) async {
+    final b = await _pick(side);
+    if (b == null || !mounted) return;
+    await _run(() => _svc.uploadTechPassport(requestId, side, base64Encode(b)), okKey: 'ins_techpass_done');
   }
 
   Future<void> _payFlow(String requestId) async {
@@ -678,6 +734,22 @@ class _CarInsuranceScreenState extends State<CarInsuranceScreen> {
                   .replaceAll('{to}', insuranceDisplayDate(r.validTo)),
             ),
           Wrap(spacing: 8, children: [
+            if (r.status == 'requested' && r.zone.isNotEmpty && !r.techComplete) ...[
+              if (!r.techFront)
+                TextButton.icon(
+                  key: ValueKey('ins_req_tech_front_${r.id}'),
+                  onPressed: _busy ? null : () => _uploadLater(r.id, 'front'),
+                  icon: const Icon(Icons.add_a_photo_outlined),
+                  label: Text(context.tr('ins_techpass_front')),
+                ),
+              if (!r.techBack)
+                TextButton.icon(
+                  key: ValueKey('ins_req_tech_back_${r.id}'),
+                  onPressed: _busy ? null : () => _uploadLater(r.id, 'back'),
+                  icon: const Icon(Icons.add_a_photo_outlined),
+                  label: Text(context.tr('ins_techpass_back')),
+                ),
+            ],
             if (r.status == 'requested') ...[
               TextButton(
                 key: ValueKey('ins_req_pay_${r.id}'),

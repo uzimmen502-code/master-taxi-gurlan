@@ -191,7 +191,28 @@ class _InsuranceRequestsAdminTabState extends State<InsuranceRequestsAdminTab> {
             Text('Нарх: ${formatMoney(r.price)} · ҳамёндан: ${formatMoney(r.walletPaid)} · бонус: ${formatMoney(r.incentiveApplied)} · мой чегирмаси: ${formatMoney(r.oilDiscount)}'),
             if (r.status == 'issued') Text('Полис № ${r.policyNumber}: ${insuranceDisplayDate(r.validFrom)} — ${insuranceDisplayDate(r.validTo)}'),
             if (r.status == 'cancelled') Text('Сабаб: ${r.cancelReason}'),
+            if (r.zone.isNotEmpty)
+              Text(
+                r.techPurged
+                    ? 'Техпаспорт: ўчирилган (30 кун ўтди)'
+                    : 'Техпаспорт: олд ${r.techFront ? '✓' : '—'} · орқа ${r.techBack ? '✓' : '—'}',
+                key: ValueKey('ins_admin_tech_${r.id}'),
+              ),
             Wrap(spacing: 8, children: [
+              if (r.techFront || r.techBack)
+                TextButton.icon(
+                  key: ValueKey('ins_admin_tech_open_${r.id}'),
+                  onPressed: _busy ? null : () => _openTech(r),
+                  icon: const Icon(Icons.badge_outlined),
+                  label: const Text('Техпаспортни кўриш'),
+                ),
+              if (r.zone.isNotEmpty && (r.status == 'requested' || r.status == 'paid' || r.status == 'in_progress'))
+                TextButton.icon(
+                  key: ValueKey('ins_admin_correct_${r.id}'),
+                  onPressed: _busy ? null : () => _correct(r),
+                  icon: const Icon(Icons.edit_note),
+                  label: const Text('Маълумотни тузатиш'),
+                ),
               if (r.status == 'paid')
                 TextButton(
                   onPressed: _busy ? null : () => _do(() => widget.service.agentStart(r.id), 'Иш бошланди'),
@@ -223,6 +244,59 @@ class _InsuranceRequestsAdminTabState extends State<InsuranceRequestsAdminTab> {
         ),
       ),
     );
+  }
+
+  Future<void> _openTech(InsuranceRequest r) => _do(() async {
+        final l = await widget.service.techPassportLinks(r.id);
+        for (final u in [l.front, l.back]) {
+          if (u.isNotEmpty) await launchUrl(Uri.parse(u), mode: LaunchMode.externalApplication);
+        }
+      }, 'Очилди');
+
+  /// Техпаспорт бўйича тузатиш (эга 2026-11-28): тўланган аризада нарх ўзгарса сервер рад этади — бекор қилинг (пул қайтади).
+  Future<void> _correct(InsuranceRequest r) async {
+    var zone = r.zone;
+    var vehicle = r.vehicleType;
+    var scope = r.driverScope.isEmpty ? 'limited' : r.driverScope;
+    final reason = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, set) {
+          final vehicles = insuranceGridVehicles(zone);
+          if (!vehicles.contains(vehicle)) vehicle = vehicles.first;
+          DropdownButtonFormField<String> dd(String key, String label, String value, Map<String, String> names, Iterable<String> keys, ValueChanged<String> on) =>
+              DropdownButtonFormField<String>(
+                key: ValueKey(key),
+                initialValue: value,
+                decoration: InputDecoration(labelText: label),
+                items: [for (final k in keys) DropdownMenuItem(value: k, child: Text(names[k] ?? k))],
+                onChanged: (v) => set(() => on(v ?? value)),
+              );
+          return AlertDialog(
+            title: const Text('Техпаспорт бўйича тузатиш'),
+            content: Column(mainAxisSize: MainAxisSize.min, children: [
+              dd('ins_corr_zone', 'Ҳудуд', zone, _zoneNames, kInsuranceZones, (v) => zone = v),
+              dd('ins_corr_vehicle', 'Тоифа', vehicle, _vehicleNames, vehicles, (v) => vehicle = v),
+              dd('ins_corr_scope', 'Ҳайдовчилар', scope, _scopeNames, kInsuranceDriverScopes, (v) => scope = v),
+              TextField(key: const ValueKey('ins_corr_reason'), controller: reason, decoration: const InputDecoration(labelText: 'Сабаб')),
+              const SizedBox(height: 6),
+              const Text('Тўланган аризада нарх ўзгарса — тузатиб бўлмайди: бекор қилинг (пул тўлиқ қайтади), мижоз қайта топширади.',
+                  style: TextStyle(fontSize: 12, color: Colors.black54)),
+            ]),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Ёпиш')),
+              FilledButton(key: const ValueKey('ins_corr_ok'), onPressed: () => Navigator.pop(ctx, true), child: const Text('Сақлаш')),
+            ],
+          );
+        },
+      ),
+    );
+    if (ok != true) return;
+    await _do(() async {
+      await widget.service.agentCorrect(
+          requestId: r.id, zone: zone, vehicleType: vehicle, driverScope: scope, reason: reason.text.trim());
+    }, 'Тузатилди — нарх қайта ҳисобланди');
   }
 
   Future<void> _cancel(InsuranceRequest r) async {

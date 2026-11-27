@@ -2,6 +2,7 @@
 // (мой дастури жараёни, нарх, аризалар, «Суғурталанган» белгиси ЙЎҚ), 3 тил калитлари.
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:ava_gurlan/features/admin_web/screens/car_insurance_admin_screen.dart';
 import 'package:ava_gurlan/features/car_insurance/car_insurance_service.dart';
@@ -50,7 +51,25 @@ class _ZoneSvc extends CarInsuranceService {
     String driverScope = '',
   }) async {
     created.add((policyType, vehicleType, termMonths, zone, driverScope));
-    throw StateError('stop'); // тўлов оқими бу тестда керак эмас
+    return (requestId: 'ins_test_000001', price: 0);
+  }
+
+  final uploads = <(String, String, int)>[];
+  @override
+  Future<void> uploadTechPassport(String requestId, String side, String fileBase64) async =>
+      uploads.add((requestId, side, fileBase64.length));
+
+  @override
+  Future<InsuranceQuote> quote(String requestId) async => throw StateError('stop'); // тўлов оқими бу тестда керак эмас
+
+  final corrected = <Map<String, String>>[];
+  List<InsuranceRequest> agentRequests = const [];
+  @override
+  Future<List<InsuranceRequest>> agentList(String status) async => agentRequests;
+  @override
+  Future<int> agentCorrect({required String requestId, required String zone, required String vehicleType, required String driverScope, required String reason}) async {
+    corrected.add({'id': requestId, 'zone': zone, 'vehicle': vehicleType, 'scope': driverScope, 'reason': reason});
+    return 1;
   }
 
   @override
@@ -318,7 +337,19 @@ void main() {
         'available': true, 'tariffVersion': 4, 'tariffSchema': 2, 'derivedZone': 'tashkent', 'options': ownerRows(),
         'car': {'brand': 'Chevrolet', 'model': 'Cobalt', 'year': 2020, 'plate': '01 A 123 BC', 'complete': true},
       }));
-      await t.pumpWidget(l10nApp(delegate: d, home: CarInsuranceScreen(phone: '998901234567', service: svc, requestsStream: Stream.value(const []))));
+      final picked = <String>[];
+      await t.pumpWidget(l10nApp(
+        delegate: d,
+        home: CarInsuranceScreen(
+          phone: '998901234567',
+          service: svc,
+          requestsStream: Stream.value(const []),
+          pickImage: (side) async {
+            picked.add(side);
+            return Uint8List.fromList([0xff, 0xd8, 0xff, 1, 2, 3]);
+          },
+        ),
+      ));
       await t.pumpAndSettle();
       String price(int p) => d.tr('ins_price').replaceAll('{price}', formatMoney(p));
       Future<void> tap(String key) async {
@@ -341,8 +372,15 @@ void main() {
       expect(find.byKey(const ValueKey('ins_vehicle_moto')), findsNothing);
       expect(find.byKey(const ValueKey('ins_zone_other')), findsNothing);
       expect(find.text(price(1120000)), findsOneWidget);
+      // Эга 2026-11-28: техпаспорт икки томони танланмагунча юбориш ўчиқ.
+      expect(t.widget<FilledButton>(find.byKey(const ValueKey('ins_request_submit'))).onPressed, isNull);
+      await tap('ins_tech_front');
+      expect(t.widget<FilledButton>(find.byKey(const ValueKey('ins_request_submit'))).onPressed, isNull);
+      await tap('ins_tech_back');
       await tap('ins_request_submit');
       expect(svc.created, [('osago', 'truck', 12, 'cis', 'unlimited')]);
+      expect(picked, ['front', 'back']);
+      expect(svc.uploads.map((u) => (u.$1, u.$2)), [('ins_test_000001', 'front'), ('ins_test_000001', 'back')]);
     });
 
     testWidgets('админ: эга жадвали қоралама (сервер draftRows) — катаклар тўла, «Эълон қилиш» → 20 қатор', (t) async {
@@ -369,6 +407,36 @@ void main() {
         expect(svc.published.any((x) => x['zone'] == r['zone'] && x['vehicleType'] == r['vehicleType'] && x['driverScope'] == r['driverScope'] && x['price'] == r['price']), isTrue, reason: '$r');
       }
     });
+  });
+
+  testWidgets('агент (эга 2026-11-28): техпаспорт белгиси, «Маълумотни тузатиш» — ҳудуд/тоифа/ҳайдовчи + сабаб серверга', (t) async {
+    final svc = _ZoneSvc(InsuranceState.unavailable)
+      ..agentRequests = [
+        InsuranceRequest.fromMap('ins_a1', {
+          'requestId': 'ins_a1', 'status': 'paid', 'policyType': 'osago', 'vehicleType': 'car', 'termMonths': 12, 'price': 192000,
+          'zone': 'tashkent', 'zoneDerived': 'other', 'zoneSource': 'user', 'driverScope': 'limited',
+          'techPassport': {'front': true, 'back': true},
+        }),
+      ];
+    await t.binding.setSurfaceSize(const Size(1000, 1600));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    await t.pumpWidget(MaterialApp(home: Scaffold(body: InsuranceRequestsAdminTab(service: svc))));
+    await t.pumpAndSettle();
+    expect(find.textContaining('олд ✓ · орқа ✓'), findsOneWidget);
+    expect(find.textContaining('текширинг'), findsOneWidget);
+    expect(find.byKey(const ValueKey('ins_admin_tech_open_ins_a1')), findsOneWidget);
+    await t.tap(find.byKey(const ValueKey('ins_admin_correct_ins_a1')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('ins_corr_zone')));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Ўзбекистоннинг бошқа ҳудудлари').last);
+    await t.pumpAndSettle();
+    await t.enterText(find.byKey(const ValueKey('ins_corr_reason')), 'техпаспорт: Хоразм');
+    await t.tap(find.byKey(const ValueKey('ins_corr_ok')));
+    await t.pumpAndSettle();
+    expect(svc.corrected, [
+      {'id': 'ins_a1', 'zone': 'other', 'vehicle': 'car', 'scope': 'limited', 'reason': 'техпаспорт: Хоразм'},
+    ]);
   });
 
   test('ins_* калитлари 3 тилда бир хил, uz_Latn янги алифбода', () {

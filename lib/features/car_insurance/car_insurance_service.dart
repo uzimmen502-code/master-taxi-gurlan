@@ -240,6 +240,9 @@ class InsuranceRequest {
     this.zoneDerived = '',
     this.zoneSource = '',
     this.driverScope = '',
+    this.techFront = false,
+    this.techBack = false,
+    this.techPurged = false,
     this.createdAt,
   });
   final String id;
@@ -267,6 +270,12 @@ class InsuranceRequest {
   /// 'user' — мижоз ҳудудни ўзи танлаган (агент полисда текширади).
   final String zoneSource;
   final String driverScope;
+
+  /// Техпаспорт расмлари юкланганми (сервер белгиси; эга 2026-11-28). purged — 30 кундан кейин ўчирилган.
+  final bool techFront;
+  final bool techBack;
+  final bool techPurged;
+  bool get techComplete => techFront && techBack;
   final DateTime? createdAt;
 
   factory InsuranceRequest.fromMap(String id, Map m) {
@@ -302,6 +311,9 @@ class InsuranceRequest {
       zoneDerived: _s(m['zoneDerived']),
       zoneSource: _s(m['zoneSource']),
       driverScope: _s(m['driverScope']),
+      techFront: m['techPassport'] is Map && (m['techPassport'] as Map)['front'] == true,
+      techBack: m['techPassport'] is Map && (m['techPassport'] as Map)['back'] == true,
+      techPurged: m['techPassport'] is Map && (m['techPassport'] as Map)['purged'] == true,
       createdAt: created,
     );
   }
@@ -352,6 +364,32 @@ class CarInsuranceService {
     });
     return (requestId: _s(d['requestId']), price: _i(d['price']));
   }
+
+  /// Техпаспорт расми (эга 2026-11-28): side 'front' | 'back'; сервер текширади (JPG/PNG/WebP ≤ 5 МБ).
+  Future<void> uploadTechPassport(String requestId, String side, String fileBase64) =>
+      _call('insuranceUploadTechPassport', {'requestId': requestId, 'side': side, 'fileBase64': fileBase64});
+
+  /// Техпаспорт ҳаволалари (эгаси ёки агент): {front, back} — бўш бўлса йўқ.
+  Future<({String front, String back})> techPassportLinks(String requestId) async {
+    final d = await _call('insuranceGetTechPassportLinks', {'requestId': requestId});
+    return (front: _s(d['front']), back: _s(d['back']));
+  }
+
+  /// Агент тузатиши: тўланган аризада нарх ўзгарса сервер PRICE_CHANGED_CANCEL_REQUIRED (бекор қилиш керак).
+  Future<int> agentCorrect({
+    required String requestId,
+    required String zone,
+    required String vehicleType,
+    required String driverScope,
+    required String reason,
+  }) async =>
+      _i((await _call('insuranceAgentCorrect', {
+        'requestId': requestId,
+        'zone': zone,
+        'vehicleType': vehicleType,
+        'driverScope': driverScope,
+        'reason': reason,
+      }))['price']);
 
   Future<InsuranceQuote> quote(String requestId) async =>
       InsuranceQuote.fromMap(await _call('insuranceQuote', {'requestId': requestId}));

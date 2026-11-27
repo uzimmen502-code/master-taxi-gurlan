@@ -18,11 +18,14 @@ void main() {
       expect(datingSectionVisibleFor(_birthDateForAge(25)), isTrue);
     });
 
-    // Ega 2026-11-20: «Tanişuv» kartasi faqat 18..45 yoşga (ikkala çet kiradi).
-    test('45 yosh — ko‘rinadi, 46 yosh — KO‘RINMAYDI', () {
-      expect(kDatingMaxViewerAge, 45);
+    // Ega 2026-11-27: «Tanişuv» kartasi 18..60 yoşga (ikkala çet kiradi; avval 18..45).
+    test('60 yosh — ko‘rinadi, 61 yosh — KO‘RINMAYDI', () {
+      expect(kDatingMinViewerAge, 18);
+      expect(kDatingMaxViewerAge, 60);
       expect(datingSectionVisibleFor(_birthDateForAge(45)), isTrue);
-      expect(datingSectionVisibleFor(_birthDateForAge(46)), isFalse);
+      expect(datingSectionVisibleFor(_birthDateForAge(46)), isTrue);
+      expect(datingSectionVisibleFor(_birthDateForAge(60)), isTrue);
+      expect(datingSectionVisibleFor(_birthDateForAge(61)), isFalse);
       expect(datingSectionVisibleFor(_birthDateForAge(70)), isFalse);
     });
 

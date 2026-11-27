@@ -230,7 +230,7 @@ List<ServiceSpotlightItem> buildHomeServices(
     ServiceSpotlightItem(
       moduleId: 'oil_change',
       label: context.tr('home_module_oil_change'),
-      imagePath: 'assets/images/services/service_oil_change.png',
+      imagePath: 'assets/images/services/service_oil_change_v2.webp',
       onTap: () => a.push(
         const OilChangeHomeScreen(),
       ),
@@ -238,7 +238,7 @@ List<ServiceSpotlightItem> buildHomeServices(
     ServiceSpotlightItem(
       moduleId: 'circles',
       label: context.tr('home_module_relatives'),
-      imagePath: 'assets/images/services/service_relatives.png',
+      imagePath: 'assets/images/services/service_relatives_v2.webp',
       onTap: () => a.push(const RelativesScreen()),
     ),
     ServiceSpotlightItem(

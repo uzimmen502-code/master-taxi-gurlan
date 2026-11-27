@@ -153,12 +153,29 @@ class _ServiceCircleTileState extends State<ServiceCircleTile> {
                       shape: BoxShape.circle,
                     ),
                     alignment: Alignment.center,
-                    // Расм доирадан ошиб кетмасин — OLX'да ҳам расм
+                    // Эга фотоси (webp, эга 2026-11-27) — доирани тўлиқ қоплайди (ClipOval, cover).
+                    // Қолганлари: расм доирадан ошиб кетмасин — OLX'да ҳам расм
                     // доиранинг ичида, четида ҳаво қолади.
-                    child: Padding(
-                      padding: EdgeInsets.all(circle * 0.14),
-                      child: _Glyph(item: item, size: circle * 0.72),
-                    ),
+                    child: isServicePhoto(item.imagePath)
+                        ? ClipOval(
+                            child: Image.asset(
+                              item.imagePath!,
+                              key: ValueKey('service_photo_${item.moduleId}'),
+                              width: circle,
+                              height: circle,
+                              fit: BoxFit.cover,
+                              filterQuality: FilterQuality.high,
+                              errorBuilder: (_, __, ___) => Icon(
+                                Icons.apps_rounded,
+                                size: circle * 0.58,
+                                color: Colors.white,
+                              ),
+                            ),
+                          )
+                        : Padding(
+                            padding: EdgeInsets.all(circle * 0.14),
+                            child: _Glyph(item: item, size: circle * 0.72),
+                          ),
                   ),
                   const SizedBox(height: ServiceCircleTile.labelGap),
                   Flexible(
@@ -263,27 +280,39 @@ class ServiceCircleBadge extends StatelessWidget {
         shape: BoxShape.circle,
       ),
       alignment: Alignment.center,
-      child: Padding(
-        padding: EdgeInsets.all(size * 0.14),
-        child: svg != null
-            ? SvgPicture.asset(svg, fit: BoxFit.contain)
-            : image != null
-                ? Image.asset(
-                    image,
-                    fit: BoxFit.contain,
-                    filterQuality: FilterQuality.high,
-                    errorBuilder: (_, __, ___) => Icon(
-                      Icons.apps_rounded,
-                      size: size * 0.58,
-                      color: Colors.white,
-                    ),
-                  )
-                : Icon(
-                    icon ?? Icons.apps_rounded,
-                    size: size * 0.62,
-                    color: Colors.white,
-                  ),
-      ),
+      child: isServicePhoto(image)
+          ? ClipOval(
+              child: Image.asset(
+                image!,
+                width: size,
+                height: size,
+                fit: BoxFit.cover,
+                filterQuality: FilterQuality.high,
+                errorBuilder: (_, __, ___) => Icon(Icons.apps_rounded,
+                    size: size * 0.58, color: Colors.white),
+              ),
+            )
+          : Padding(
+              padding: EdgeInsets.all(size * 0.14),
+              child: svg != null
+                  ? SvgPicture.asset(svg, fit: BoxFit.contain)
+                  : image != null
+                      ? Image.asset(
+                          image,
+                          fit: BoxFit.contain,
+                          filterQuality: FilterQuality.high,
+                          errorBuilder: (_, __, ___) => Icon(
+                            Icons.apps_rounded,
+                            size: size * 0.58,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Icon(
+                          icon ?? Icons.apps_rounded,
+                          size: size * 0.62,
+                          color: Colors.white,
+                        ),
+            ),
     );
   }
 }
@@ -310,8 +339,8 @@ const _kServiceImages = <String, String>{
   'jobs': 'assets/images/services/service_jobs.png',
   'cheap_products_home': 'assets/images/services/service_market.png',
   'bread': 'assets/images/services/service_bread.png',
-  'oil_change': 'assets/images/services/service_oil_change.png',
-  'circles': 'assets/images/services/service_relatives.png',
+  'oil_change': 'assets/images/services/service_oil_change_v2.webp',
+  'circles': 'assets/images/services/service_relatives_v2.webp',
   'courier': 'assets/images/services/service_courier.png',
   'milk': 'assets/images/services/service_milk.png',
   'tire': 'assets/images/services/service_tire.png',
@@ -349,6 +378,11 @@ const _kServiceIcons = <String, IconData>{
   // «AVA Супермаркет» (эга 2026-11-20) — плитка йўқ, «Бозорлар» карточкаси + админ рўйхати.
   'supermarket': Icons.local_grocery_store_rounded,
 };
+
+/// Эга фотоси (оқ фонли тўлиқ сурат, `.webp`, эга 2026-11-27) — доира ичида тўлиқ қоплаб
+/// (cover) чизилади; шаффоф PNG белгилар эса аввалгидек ранг доира ичида.
+bool isServicePhoto(String? path) =>
+    path != null && path.toLowerCase().endsWith('.webp');
 
 /// PNG расм йўли — бўлмаса `null`.
 String? serviceImageFor(String moduleId) => _kServiceImages[moduleId];

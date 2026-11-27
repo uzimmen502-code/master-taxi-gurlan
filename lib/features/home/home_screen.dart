@@ -124,6 +124,7 @@ import 'widgets/home_restaurants_section.dart';
 import '../ads/models/ad_model.dart';
 import '../wholesale/screens/wholesale_product_detail_screen.dart';
 import 'widgets/home_lite_cards.dart';
+import '../profile/screens/user_info_screen.dart' show openUserInfoScreen;
 import 'widgets/service_spotlight_item.dart';
 import '../restaurants/domain/restaurants_access.dart';
 import '../markets/open_market.dart';
@@ -1337,6 +1338,11 @@ class _HomeViewState extends State<_HomeView> {
       restaurantsAllowed: _restaurantsAllowed,
       holidayVisible: _holidayState.holiday,
       relativesPromptVisible: _holidayState.showRelativesPrompt,
+      birthDatePromptVisible: birthDatePromptVisibleFor(
+        hasUser: user != null,
+        phoneDigits: phoneDigits(context.read<HomeController>().phone),
+        birthDate: user?.birthDate,
+      ),
     );
     final progress = relativesBonusProgress(
       bonusActive: _holidayState.bonusActive,
@@ -1345,6 +1351,15 @@ class _HomeViewState extends State<_HomeView> {
     return [
       for (final id in ids)
         switch (id) {
+          // «Туғилган кунингизни киритинг» (эга 2026-11-27): сана йўқ — профилдаги мавжуд таҳрир экрани.
+          'birth_date' => HomeLiteCardData(
+              id: 'birth_date',
+              title: context.tr('home_lite_birth_title'),
+              caption: context.tr('home_lite_birth_caption'),
+              icon: Icons.cake_rounded,
+              fit: HomeLiteImageFit.contain,
+              onTap: () => openUserInfoScreen(context),
+            ),
           // «Байрам саватчаси» (эга 2026-11-26).
           'holiday' => HomeLiteCardData(
               id: 'holiday',
@@ -1366,7 +1381,9 @@ class _HomeViewState extends State<_HomeView> {
                       .replaceAll('{goal}', '${progress.goal}')
                       .replaceAll('{left}', '${progress.left}'),
               icon: Icons.cake_rounded,
-              fit: HomeLiteImageFit.contain,
+              // Эга расми (2026-11-27): оила сурати — карточка расм ўрнини тўлиқ қоплайди.
+              imagePath: kHomeRelativesCardImage,
+              fit: HomeLiteImageFit.cover,
               onTap: _openRelativesAdd,
             ),
           'dating' => HomeLiteCardData(

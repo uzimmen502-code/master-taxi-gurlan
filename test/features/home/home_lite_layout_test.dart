@@ -48,13 +48,15 @@ void main() {
       );
     });
 
-    test('Танишув: 17 — йўқ, 18 — бор, 45 — бор, 46 — йўқ, туғилган сана йўқ — йўқ', () {
+    // Эга 2026-11-27: 18..60 (аввал 18..45).
+    test('Танишув: 17 — йўқ, 18 — бор, 60 — бор, 61 — йўқ, туғилган сана йўқ — йўқ', () {
       List<String> ids(String bd) =>
           homeAdsServicesCardIds(isVisible: _all, viewerBirthDate: bd, restaurantsAllowed: false);
       expect(ids(_birthDateForAge(17)).contains('dating'), isFalse);
       expect(ids(_birthDateForAge(18)).contains('dating'), isTrue);
-      expect(ids(_birthDateForAge(45)).contains('dating'), isTrue);
-      expect(ids(_birthDateForAge(46)).contains('dating'), isFalse);
+      expect(ids(_birthDateForAge(46)).contains('dating'), isTrue);
+      expect(ids(_birthDateForAge(60)).contains('dating'), isTrue);
+      expect(ids(_birthDateForAge(61)).contains('dating'), isFalse);
       expect(ids('').contains('dating'), isFalse);
       // ёш мос, лекин модул ёпиқ — йўқ
       expect(

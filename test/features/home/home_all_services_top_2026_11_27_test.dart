@@ -7,6 +7,7 @@ import 'package:ava_gurlan/core/service_config_holder.dart';
 import 'package:ava_gurlan/core/utils/payment_provider_launcher.dart';
 import 'package:ava_gurlan/features/home/home_services_catalog.dart';
 import 'package:ava_gurlan/features/home/widgets/all_services_screen.dart';
+import 'package:ava_gurlan/features/home/widgets/home_lite_cards.dart';
 import 'package:ava_gurlan/features/home/widgets/home_services_olx_row.dart';
 import 'package:ava_gurlan/features/home/widgets/service_circle_tile.dart';
 import 'package:ava_gurlan/features/home/widgets/service_spotlight_item.dart';
@@ -172,5 +173,44 @@ void main() {
     }
     expect(iconOnly, _kIconOnly);
     expect(File('pubspec.yaml').readAsStringSync().contains('- assets/images/services/'), isTrue);
+  });
+
+  // Эга расмлари 2026-11-27: Мой алмаштириш (oil_change) ва Менинг яқинларим (circles).
+  testWidgets('эга фотолари: oil_change/circles — янги webp, доирани тўлиқ қоплайди; бошқалар — эски', (t) async {
+    final items = await _catalog(t);
+    final byId = {for (final e in items) e.moduleId: e};
+    expect(byId['oil_change']!.imagePath, 'assets/images/services/service_oil_change_v2.webp');
+    expect(byId['circles']!.imagePath, 'assets/images/services/service_relatives_v2.webp');
+    expect(kHomeRelativesCardImage, 'assets/images/services/service_relatives_v2.webp');
+    for (final p in [byId['oil_change']!.imagePath!, kHomeRelativesCardImage]) {
+      expect(File(p).existsSync(), isTrue, reason: p);
+      expect(File(p).lengthSync(), lessThan(60 * 1024), reason: p);
+      expect(isServicePhoto(p), isTrue);
+    }
+    expect(isServicePhoto(byId['bread']!.imagePath), isFalse);
+    expect(isServicePhoto(null), isFalse);
+
+    ServiceConfigHolder.setForTest(
+      defaults: ServiceModuleConfig({
+        'oil_change': ModuleStatus.enabled,
+        'bread': ModuleStatus.enabled,
+      }),
+      enforce: true,
+    );
+    await t.pumpWidget(MaterialApp(
+      home: AllServicesScreen(items: [byId['oil_change']!, byId['bread']!]),
+    ));
+    expect(find.byKey(const ValueKey('service_photo_oil_change')), findsOneWidget);
+    expect(find.byKey(const ValueKey('service_photo_bread')), findsNothing);
+    expect(find.byType(ClipOval), findsOneWidget);
+  });
+
+  test('«Яқинларингиз туғилган кунини қўшинг» карточкаси — эга расми, cover', () {
+    final src = File('lib/features/home/home_screen.dart').readAsStringSync();
+    final i = src.indexOf("id: 'relatives_bday'");
+    expect(i, greaterThan(0));
+    final card = src.substring(i, src.indexOf('onTap: _openRelativesAdd', i));
+    expect(card.contains('imagePath: kHomeRelativesCardImage'), isTrue);
+    expect(card.contains('fit: HomeLiteImageFit.cover'), isTrue);
   });
 }

@@ -202,20 +202,25 @@ List<String> visiblePayModules(bool Function(String moduleId) isVisible) => [
     ];
 
 /// «Эълон ва хизматлар» бўлими карточкалари (эга 2026-11-20), шу ТАРТИБДА:
-/// Танишув (`dating` + ёш 18..45) · Янги эълонлар (`jobs`) · Почта жўнатиш (`logistics`) ·
+/// Танишув (`dating` + ёш 18..60) · Янги эълонлар (`jobs`) · Почта жўнатиш (`logistics`) ·
 /// Пул ўтказмалари (камида битта `pay_*`) · Кафе-ресторанлар (ўз дарвозаси, [restaurantsAllowed]).
 ///
 /// Эга 2026-11-26: «Байрам саватчаси» (`holiday`, [holidayVisible] — `holidayCardVisible`) бўлим БОШИДА (жозибали,
 /// юқорига яқин); «Яқинларингиз туғилган кунини қўшинг» (`relatives_bday`, [relativesPromptVisible] —
 /// `relativesPromptVisible`: ≥ 3 туғилган кун бўлса яширин) ундан кейин.
+///
+/// Эга 2026-11-27: туғилган санаси йўқ фойдаланувчига «Туғилган кунингизни киритинг» (`birth_date`,
+/// [birthDatePromptVisible] — [birthDatePromptVisibleFor]) бўлим ЭНГ БОШИДА; сана киритилгач — йўқ.
 List<String> homeAdsServicesCardIds({
   required bool Function(String moduleId) isVisible,
   required String viewerBirthDate,
   required bool restaurantsAllowed,
   bool holidayVisible = false,
   bool relativesPromptVisible = false,
+  bool birthDatePromptVisible = false,
 }) =>
     [
+      if (birthDatePromptVisible) 'birth_date',
       if (holidayVisible) 'holiday',
       if (holidayVisible && relativesPromptVisible) 'relatives_bday',
       if (isVisible('dating') && datingSectionVisibleFor(viewerBirthDate)) 'dating',
@@ -225,12 +230,27 @@ List<String> homeAdsServicesCardIds({
       if (restaurantsAllowed) 'restaurants',
     ];
 
+/// «Туғилган кунингизни киритинг» карточкаси кўринадими (эга 2026-11-27) — ЯГОНА манба.
+///
+/// Фойдаланувчи ҳужжати юкланган ([hasUser]), телефон билан рўйхатдан ўтган (≥ 9 рақам — меҳмон/аноним
+/// санани сақлай олмайди) ва `users.birthDate` бўш ёки йўқ бўлса — кўринади; сана бўлса — йўқ.
+bool birthDatePromptVisibleFor({
+  required bool hasUser,
+  required String phoneDigits,
+  required String? birthDate,
+}) =>
+    hasUser && phoneDigits.length >= 9 && (birthDate ?? '').trim().isEmpty;
+
 /// «Транспорт ва логистика» бўлими (эга 2026-11-20), шу тартибда. Халқаро такси — кейинга қолдирилган.
 /// Эга 2026-11-27: «Юк ташиш — шаҳарлараро / халқаро» (мавжуд `yuk_intercity` модули) — `yuk_local`дан кейин.
 const kHomeTransportModuleIds = <String>['intercity', 'local_taxi', 'marshrut', 'yuk_local', 'yuk_intercity'];
 
 /// `yuk_intercity` карточкаси расми (эга расми, 2026-11-27; 400×276 webp). Алмашса — янги ном (`_v2`), hosting кэши туфайли.
 const kHomeYukIntercityCardImage = 'assets/images/home/card_yuk_intercity_v1.webp';
+
+/// «Яқинларингиз туғилган кунини қўшинг» (`relatives_bday`) карточкаси расми — эга расми (2026-11-27;
+/// 400×267 webp). «Барча хизматлар»даги «Менинг яқинларим» (`circles`) доираси ҳам шу сурат.
+const kHomeRelativesCardImage = 'assets/images/services/service_relatives_v2.webp';
 
 List<String> homeTransportCardIds(bool Function(String moduleId) isVisible) => [
       for (final id in kHomeTransportModuleIds)

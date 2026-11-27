@@ -8,6 +8,31 @@ import '../controllers/profile_controller.dart';
 import '../widgets/language_settings_tile.dart';
 import 'address_edit_screen.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../repositories/driver_repository.dart';
+import '../../../repositories/orders_repository.dart';
+import '../../../repositories/trips_repository.dart';
+import '../../../repositories/user_repository.dart';
+import '../../../services/location_service.dart';
+
+/// [UserInfoScreen] ни профил ташқарисидан очиш (эга 2026-11-27: бош саҳифа «Туғилган кунингизни
+/// киритинг» карточкаси). Профил экранидаги ўша [ProfileController] (ўша репозиторийлар) яратилиб
+/// юкланади; туғилган сана шу экрандаги мавжуд йўл билан сақланади (`saveBirthDateOrRequest`).
+Future<void> openUserInfoScreen(BuildContext context) {
+  return Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => ChangeNotifierProvider<ProfileController>(
+        create: (ctx) => ProfileController(
+          driverRepo: ctx.read<DriverRepository>(),
+          tripsRepo: ctx.read<TripsRepository>(),
+          ordersRepo: ctx.read<OrdersRepository>(),
+          userRepo: ctx.read<UserRepository>(),
+          locationService: ctx.read<LocationService>(),
+        )..load(),
+        child: const UserInfoScreen(),
+      ),
+    ),
+  );
+}
 
 /// Фойдаланувчи маълумотлари — исм/жинс/роль/манзил.
 ///

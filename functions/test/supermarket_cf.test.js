@@ -49,7 +49,17 @@ const get = async (path) => (await db.doc(path).get()).data();
 const audits = async (kind) => (await db.collection('admin_audit').where('kind', '==', kind).get()).docs.map((d) => d.data());
 const variety = (id, c, l, r) => ({ id, names: { uz_Cyrl: c, uz_Latn: l, ru: r } });
 const ADDR = { districtId: 'gurlan', mahalla: 'Navoiy', street: 'Mustaqillik', house: '12', phone: '901234567', lat: 41.84, lng: 60.39 };
-const order = (rid, items, extra = {}) => ({ clientRequestId: rid, items, address: ADDR, slotId: 'morning', day: 'tomorrow', ...extra });
+// Эга 2026-11-28: оддий буюртма — вақт оралиғисиз (имкон қадар тез). Эски клиент шакли — legacyOrder.
+const order = (rid, items, extra = {}) => ({ clientRequestId: rid, items, address: ADDR, ...extra });
+const legacyOrder = (rid, items, extra = {}) => order(rid, items, { slotId: 'morning', day: 'tomorrow', ...extra });
+const moduleGate = require('../module_gate');
+async function setModules(defaults, districts = {}) {
+  await db.doc('config/module_defaults').set({ enforce: true, modules: defaults });
+  for (const [id, status] of Object.entries(districts)) {
+    await db.doc(`geo_district_modules/${id}`).set({ manualModules: ['supermarket'], modules: { supermarket: status } });
+  }
+  moduleGate.resetCache();
+}
 
 async function main() {
   await clearEmulator();
@@ -80,29 +90,38 @@ async function main() {
     assert.strictEqual((await audits('supermarket_taxonomy_set')).length, 1);
   });
 
-  await check('C2 дарвоза: ҳужжат йўқ → STAGE_OFF; internal: оддий мижоз NOT_TESTER; % созланмаган → TARIFF_NOT_CONFIGURED (fail closed); тестер — рухсат + оралиқлар + feePercent=11', async () => {
-    const off = await call('getSupermarketAccess', {}, USER);
-    assert.deepStrictEqual([off.allowed, off.reason], [false, 'STAGE_OFF']);
-    await assert.rejects(call('adminSetSupermarketSettings', { settings: SETTINGS, expectedVersion: 0 }, USER), (e) => e.code === 'permission-denied');
-    await expectCode(call('adminSetSupermarketSettings', { settings: { ...SETTINGS, stage: 'beta' }, expectedVersion: 0 }, ADMIN), 'SETTINGS_INVALID');
-    const s1 = await call('adminSetSupermarketSettings', { settings: SETTINGS, expectedVersion: 0, reason: 'start' }, ADMIN);
-    assert.deepStrictEqual([s1.version, s1.changed], [1, true]);
-    const nt = await call('getSupermarketAccess', {}, USER);
-    assert.deepStrictEqual([nt.allowed, nt.reason, nt.slots.tomorrow.length], [false, 'NOT_TESTER', 0]);
-    await expectCode(call('placeSupermarketOrder', order('req-nottester-1', [{ productId: 'beef_lean_1', qty: 1 }]), USER), 'NOT_TESTER');
-    const s2 = await call('adminSetSupermarketSettings', { settings: { ...SETTINGS, testerIds: [USER, OTHER, POOR] }, expectedVersion: 1 }, ADMIN);
-    assert.strictEqual(s2.version, 2);
+  await check('C2 дарвоза (эга 2026-11-28): ФАҚАТ модул созламаси — hidden/coming_soon рад, туман override enabled; settings ҳужжати йўқ — ёпиқ ЭМАС; % йўқ → TARIFF_NOT_CONFIGURED', async () => {
+    await setModules({ supermarket: 'hidden' });
+    const hid = await call('getSupermarketAccess', {}, USER);
+    assert.deepStrictEqual([hid.allowed, hid.reason, !!hid.messages.uz_Latn], [false, 'MODULE_CLOSED', true]);
+    await expectCode(call('placeSupermarketOrder', order('req-hidden-001', [{ productId: 'beef_lean_1', qty: 1 }]), USER), 'MODULE_CLOSED');
+    await setModules({ supermarket: 'hidden' }, { gurlan: 'enabled', urganch: 'coming_soon' });
+    // settings/supermarket ҳали ЙЎҚ — эски «STAGE_OFF» эмас; фақат тариф (fail closed).
+    assert.strictEqual((await db.doc('settings/supermarket').get()).exists, false);
     const nf = await call('getSupermarketAccess', {}, USER);
     assert.deepStrictEqual([nf.allowed, nf.reason, nf.feePercent], [false, 'TARIFF_NOT_CONFIGURED', null]);
     await expectCode(call('placeSupermarketOrder', order('req-nofee-0001', [{ productId: 'beef_lean_1', qty: 1 }]), USER), 'TARIFF_NOT_CONFIGURED');
     await db.doc('settings/app').set({ platformDeliveryFeePercent: 11 }, { merge: true });
     const ok = await call('getSupermarketAccess', {}, USER);
-    assert.deepStrictEqual([ok.allowed, ok.feePercent, ok.weighHoldPercent, ok.slots.tomorrow.length], [true, 11, 10, 3]);
-    const far = await call('getSupermarketAccess', {}, OTHER);
-    assert.deepStrictEqual([far.allowed, far.reason], [false, 'DISTRICT_NOT_SERVED']);
+    assert.deepStrictEqual([ok.allowed, ok.feePercent, ok.weighHoldPercent, ok.slots.tomorrow.length], [true, 11, 10, 0]);
+    const soon = await call('getSupermarketAccess', {}, OTHER);
+    assert.deepStrictEqual([soon.allowed, soon.reason], [false, 'MODULE_CLOSED'], 'urganch — coming_soon');
     const farOk = await call('getSupermarketAccess', { districtId: 'gurlan' }, OTHER);
-    assert.strictEqual(farOk.allowed, true);
+    assert.strictEqual(farOk.allowed, true, 'фаол (тепада танланган) туман');
+    const dates = await call('getSupermarketAccess', { withDates: true }, USER);
+    assert.strictEqual(dates.deliveryDates.length, 15);
+    // Созламалар: эски шакл (stage/slots…) ҳам, янги минимал шакл ҳам қабул қилинади; stage дарвозага таъсир қилмайди.
+    await assert.rejects(call('adminSetSupermarketSettings', { settings: SETTINGS, expectedVersion: 0 }, USER), (e) => e.code === 'permission-denied');
+    await expectCode(call('adminSetSupermarketSettings', { settings: { ...SETTINGS, stage: 'beta' }, expectedVersion: 0 }, ADMIN), 'SETTINGS_INVALID');
+    const s1 = await call('adminSetSupermarketSettings', { settings: { ...SETTINGS, stage: 'off' }, expectedVersion: 0, reason: 'legacy' }, ADMIN);
+    assert.deepStrictEqual([s1.version, s1.changed], [1, true]);
+    assert.strictEqual((await call('getSupermarketAccess', {}, USER)).allowed, true, 'эски stage off — эътиборсиз');
+    const s2 = await call('adminSetSupermarketSettings', { settings: { weighHoldPercent: 10 }, expectedVersion: 1 }, ADMIN);
+    assert.strictEqual(s2.version, 2);
+    assert.strictEqual((await get('settings/supermarket')).slots, undefined, 'янги сақлаш эски майдонларни олиб ташлайди');
     assert.strictEqual((await audits('supermarket_settings_set')).length, 2);
+    // Эски клиент синови учун оралиқлар қайтадан (legacyOrder).
+    await call('adminSetSupermarketSettings', { settings: { weighHoldPercent: 10, slots: SETTINGS.slots, cutoffMin: 60 }, expectedVersion: 2 }, ADMIN);
   });
 
   await check('C3 таклиф: admin яратади (active:false, sm майдонлар, searchTokens, private/cost), нарх аудити; такрор — аудитсиз; GROUP_UNKNOWN', async () => {
@@ -138,7 +157,8 @@ async function main() {
       ['platform', 'supermarket', 'new', 'pending', 'paid', 171840, 0, '912000001', 'sm-v1', 'gurlan']);
     assert.deepStrictEqual([o.deliveryFeePercent, o.deliveryFeeVersion, r.deliveryFeeVersion], [11, 2, 2]);
     assert.deepStrictEqual([o.items[0].price, o.items[0].qty, o.items[0].holdExtra, o.items[1].total], [80000, 1.5, 12000, 24000]);
-    assert.deepStrictEqual([o.slot.id, o.slot.day, o.lat, o.contactPhone], ['morning', 'tomorrow', 41.84, '998901234567']);
+    // Эга 2026-11-28: вақт оралиғисиз — имкон қадар тез (бугун); slot.date — статистика асоси сақланади.
+    assert.deepStrictEqual([o.slot.id, o.slot.day, o.slot.asap, o.slot.date === o.deliveryDate, r.asap, o.lat, o.contactPhone], ['asap', 'today', true, true, true, 41.84, '998901234567']);
     assert.strictEqual(o.address, 'Navoiy, Mustaqillik, 12');
     assert.deepStrictEqual([(await get('platform_products/beef_lean_1')).stock, (await get('platform_products/milk_1l_1')).stock], [8.5, 3]);
     const j = await get(`journal_entries/bonus:sm_order_${orderId}`);
@@ -165,8 +185,15 @@ async function main() {
     await expectCode(call('placeSupermarketOrder', order('req-step-00001', [{ productId: 'beef_lean_1', qty: 1.3 }]), USER), 'QTY_STEP_INVALID');
     await expectCode(call('placeSupermarketOrder', order('req-stock-0001', [{ productId: 'milk_1l_1', qty: 4 }]), USER), 'OUT_OF_STOCK');
     await expectCode(call('placeSupermarketOrder', order('req-nf-0000001', [{ productId: 'nope_123', qty: 1 }]), USER), 'PRODUCT_NOT_FOUND');
-    await expectCode(call('placeSupermarketOrder', order('req-slot-00001', [{ productId: 'milk_1l_1', qty: 1 }], { slotId: 'night' }), USER), 'SLOT_UNAVAILABLE');
-    await expectCode(call('placeSupermarketOrder', order('req-dist-00001', [{ productId: 'milk_1l_1', qty: 1 }], { address: { ...ADDR, districtId: 'urganch' } }), USER), 'DISTRICT_NOT_SERVED');
+    await expectCode(call('placeSupermarketOrder', legacyOrder('req-slot-00001', [{ productId: 'milk_1l_1', qty: 1 }], { slotId: 'night' }), USER), 'SLOT_UNAVAILABLE');
+    await expectCode(call('placeSupermarketOrder', order('req-dist-00001', [{ productId: 'milk_1l_1', qty: 1 }], { address: { ...ADDR, districtId: 'urganch' } }), USER), 'MODULE_CLOSED');
+    // Совға/байрам санаси: нотўғри шакл, ўтган кун, +15 кун — рад (бугун..+14).
+    const today = new Date(Date.now() + 5 * 3600000).toISOString().slice(0, 10);
+    const plus = (n) => new Date(Date.now() + 5 * 3600000 + n * 86400000).toISOString().slice(0, 10);
+    await expectCode(call('placeSupermarketOrder', order('req-date-bad01', [{ productId: 'milk_1l_1', qty: 1 }], { deliveryDate: '2026-13-01' }), USER), 'INVALID_REQUEST');
+    await expectCode(call('placeSupermarketOrder', order('req-date-past1', [{ productId: 'milk_1l_1', qty: 1 }], { deliveryDate: plus(-1) }), USER), 'INVALID_REQUEST');
+    await expectCode(call('placeSupermarketOrder', order('req-date-far01', [{ productId: 'milk_1l_1', qty: 1 }], { deliveryDate: plus(15) }), USER), 'INVALID_REQUEST');
+    assert.ok(today.length === 10);
     await expectCode(call('placeSupermarketOrder', order('req-dup-000001', [{ productId: 'milk_1l_1', qty: 1 }, { productId: 'milk_1l_1', qty: 1 }]), USER), 'DUPLICATE_ITEM');
     await expectCode(call('placeSupermarketOrder', order('bad', [{ productId: 'milk_1l_1', qty: 1 }]), USER), 'INVALID_REQUEST');
     await assert.rejects(call('placeSupermarketOrder', order('req-anon-00001', [{ productId: 'milk_1l_1', qty: 1 }]), null), (e) => e.code === 'unauthenticated');
@@ -270,6 +297,18 @@ async function main() {
     assert.deepStrictEqual(wl.map((d) => d.meta.noteKey).sort(), ['sm_refund_line_removed', 'sm_refund_weigh']);
     for (const d of wl) assert.ok(d.meta.messages.uz_Latn && d.meta.messages.ru && d.meta.note === d.meta.messages.uz_Cyrl);
     assert.strictEqual((await get(`journal_entries/bonus:sm_adjust_${r.orderId}_1`)).postedRole, 'dispatcher');
+  });
+
+  await check('C13 сана (эга 2026-11-28): совға/байрам — deliveryDate +2 кун, оралиқсиз (scheduled); эски клиент slotId — аввалгидек', async () => {
+    await db.doc('platform_products/potato_1').update({ stock: 100 });
+    await db.doc('users/912000001').update({ bonusBalance: 500000 });
+    const plus2 = new Date(Date.now() + 5 * 3600000 + 2 * 86400000).toISOString().slice(0, 10);
+    const r = await call('placeSupermarketOrder', order('req-sched-0001', [{ productId: 'potato_1', qty: 1 }], { deliveryDate: plus2, origin: 'holiday' }), USER);
+    const o = await get(`orders/${r.orderId}`);
+    assert.deepStrictEqual([o.slot.id, o.slot.day, o.slot.asap, o.slot.date, o.deliveryDate, r.asap], ['date', 'scheduled', false, plus2, plus2, false]);
+    const l = await call('placeSupermarketOrder', legacyOrder('req-legacy-001', [{ productId: 'potato_1', qty: 1 }]), USER);
+    const lo = await get(`orders/${l.orderId}`);
+    assert.deepStrictEqual([lo.slot.id, lo.slot.day, lo.slot.startMin], ['morning', 'tomorrow', 600]);
   });
 
   const passed = results.filter(Boolean).length;

@@ -29,6 +29,7 @@ const { buildSearchTokens } = require('./market_search_tokens');
 const { normalizeLang, langOfPhone } = require('./notif_i18n');
 // Мавжуд рағбат тизими (feat/incentives-srv e0985429 — жонли нусха; бу ердан фақат тоза/tx ёрдамчилар ишлатилади).
 const incentivesLib = require('./incentives');
+const moduleGate = require('./module_gate');
 // Байрам саватчаси (эга 2026-11-26) — holiday.js бу модулни талаб қилади, шунинг учун кеч юкланади (айланма require йўқ).
 let holidayMod = null;
 const hol = () => holidayMod || (holidayMod = require('./holiday'));
@@ -116,6 +117,8 @@ const MSG = Object.freeze({
   PERMISSION_DENIED: ['Бу амал учун рухсат йўқ.', 'Bu amal uçun ruxsat yöq.', 'Нет доступа к этому действию.'],
   INVALID_REQUEST: ['Маълумот нотўғри. Қайта уриниб кўринг.', "Ma'lumot notöğri. Qayta urinib köring.", 'Неверные данные. Попробуйте ещё раз.'],
   STAGE_OFF: ['Супермаркет ҳозир ёпиқ.', 'Supermarket hozir yopiq.', 'Супермаркет сейчас закрыт.'],
+  // Эга 2026-11-28: кўриниш ФАҚАТ «Ҳудудлар ва хизматлар» модул созламаси (supermarket) бўйича.
+  MODULE_CLOSED: ['Супермаркет бу ҳудудда ҳозирча ишламайди.', 'Supermarket bu hududda hozirça işlamaydi.', 'Супермаркет пока не работает в этом районе.'],
   NOT_TESTER: ['Супермаркет ҳозир синов режимида.', 'Supermarket hozir sinov rejimida.', 'Супермаркет сейчас в тестовом режиме.'],
   DISTRICT_NOT_SERVED: ['Бу ҳудудга ҳозирча етказиб бермаймиз.', 'Bu hududga hozirça yetkazib bermaymiz.', 'В этот район пока не доставляем.'],
   DISTRICT_REQUIRED: ['Етказиш ҳудудини танланг.', 'Yetkaziş hududini tanlang.', 'Выберите район доставки.'],
@@ -284,26 +287,25 @@ function availableSlots(settings, nowMs) {
 // ══════════════════════ ДАРВОЗА (gate) ══════════════════════
 
 /**
- * off — ҳеч ким; internal/pilot — admin + testerIds (PROPOSED: pilot = кенгайтирилган тестерлар); public — ҳамма.
- * Ҳудуд: `districtId` берилса — `districtIds` ичида бўлиши шарт; requireDistrict=true бўлса бўш ҳудуд рад.
+ * Эга 2026-11-28: супермаркет кўриниши ФАҚАТ мавжуд модул созламаси («Ҳудудлар ва хизматлар»: config/module_defaults
+ * → geo_district_modules → service_area_modules, модул 'supermarket') — клиент ServiceConfig мантиғининг серверда
+ * нусхаси `module_gate.js`. settings/supermarket даги эски stage/districtIds/testerIds ЭЪТИБОРСИЗ (бўлса ҳам).
+ * Соф қисм: модул ҳолати → қарор; requireDistrict=true бўлса бўш туман рад.
  */
-function gateDecision(settings, { uid, role, districtId, requireDistrict }) {
-  const s = settings || null;
-  const stage = s && STAGES.includes(s.stage) ? s.stage : 'off';
-  if (stage === 'off') return { allowed: false, reason: 'STAGE_OFF', stage };
-  const privileged = ADMIN_ROLES.includes(role);
-  const testers = Array.isArray(s.testerIds) ? s.testerIds : [];
-  if ((stage === 'internal' || stage === 'pilot') && !privileged && !testers.includes(uid)) {
-    return { allowed: false, reason: 'NOT_TESTER', stage };
-  }
+function gateFromModuleStatus(status, { districtId, requireDistrict } = {}) {
   const d = String(districtId || '').trim();
-  const districts = Array.isArray(s.districtIds) ? s.districtIds : [];
-  if (!d) {
-    if (requireDistrict) return { allowed: false, reason: 'DISTRICT_REQUIRED', stage };
-  } else if (!districts.includes(d)) {
-    return { allowed: false, reason: 'DISTRICT_NOT_SERVED', stage };
-  }
-  return { allowed: true, reason: '', stage };
+  if (!d && requireDistrict) return { allowed: false, reason: 'DISTRICT_REQUIRED', status: status || 'unknown' };
+  // 'unknown' — module_gate FAIL-OPEN (конфиг йўқ/ўқиш хатоси) — модул дарвозасининг мавжуд қоидаси.
+  if (status === 'enabled' || status === 'unknown') return { allowed: true, reason: '', status };
+  return { allowed: false, reason: 'MODULE_CLOSED', status: status || 'hidden' };
+}
+
+/** Фойдаланувчи (ва фаол/манзил тумани) учун супермаркет дарвозаси (async, модул созламаси кэши 60 с). */
+async function supermarketGate(db, { uid, districtId, requireDistrict, nowMs }) {
+  const d = String(districtId || '').trim();
+  if (!d && requireDistrict) return gateFromModuleStatus('hidden', { districtId: d, requireDistrict });
+  const r = await moduleGate.moduleOpenFor(db, 'supermarket', uid, { activeDistrictId: d, nowMs });
+  return gateFromModuleStatus(r.open ? (r.status === 'enabled' ? 'enabled' : 'unknown') : r.status, { districtId: d, requireDistrict });
 }
 
 // ══════════════════════ ВАЛИДАТОРЛАР ══════════════════════
@@ -448,8 +450,10 @@ function validateSupermarketSettings(obj) {
   const done = () => ({ ok: errors.length === 0, errors });
   if (!isPlainObject(obj)) { err('SETTINGS_NOT_OBJECT'); return done(); }
   unknownKeys(obj, SETTINGS_KEYS, '', err);
-  if (!STAGES.includes(obj.stage)) err('STAGE_INVALID', 'stage');
-  if (!Array.isArray(obj.testerIds) || obj.testerIds.length > LIMITS.testers) err('TESTERS_INVALID', 'testerIds');
+  // Эга 2026-11-28: stage/testerIds/districtIds (кўриниш — модул созламасида), slots/cutoffMin (етказиш — имкон қадар
+  // тез) ЭСКИ ва ИХТИЁРИЙ: юборилса — аввалгидек текширилади (эски админ), юборилмаса — йўқ.
+  if (obj.stage !== undefined && !STAGES.includes(obj.stage)) err('STAGE_INVALID', 'stage');
+  if (obj.testerIds === undefined) { /* ихтиёрий */ } else if (!Array.isArray(obj.testerIds) || obj.testerIds.length > LIMITS.testers) err('TESTERS_INVALID', 'testerIds');
   else {
     const seen = new Set();
     obj.testerIds.forEach((t, i) => {
@@ -458,7 +462,7 @@ function validateSupermarketSettings(obj) {
       else seen.add(t);
     });
   }
-  if (!Array.isArray(obj.districtIds) || obj.districtIds.length > LIMITS.districts) err('DISTRICTS_INVALID', 'districtIds');
+  if (obj.districtIds === undefined) { /* ихтиёрий */ } else if (!Array.isArray(obj.districtIds) || obj.districtIds.length > LIMITS.districts) err('DISTRICTS_INVALID', 'districtIds');
   else {
     const seen = new Set();
     obj.districtIds.forEach((d, i) => {
@@ -467,7 +471,7 @@ function validateSupermarketSettings(obj) {
       else seen.add(d);
     });
   }
-  if (!Array.isArray(obj.slots) || obj.slots.length > LIMITS.slots) err('SLOTS_INVALID', 'slots');
+  if (obj.slots === undefined) { /* ихтиёрий */ } else if (!Array.isArray(obj.slots) || obj.slots.length > LIMITS.slots) err('SLOTS_INVALID', 'slots');
   else {
     const seen = new Set();
     obj.slots.forEach((s, i) => {
@@ -482,7 +486,7 @@ function validateSupermarketSettings(obj) {
       if (!Number.isInteger(s.endMin) || s.endMin > 1440 || !(s.endMin > s.startMin)) err('SLOT_END_INVALID', `${sp}.endMin`);
     });
   }
-  if (!Number.isInteger(obj.cutoffMin) || obj.cutoffMin < 0 || obj.cutoffMin > 720) err('CUTOFF_INVALID', 'cutoffMin');
+  if (obj.cutoffMin !== undefined && (!Number.isInteger(obj.cutoffMin) || obj.cutoffMin < 0 || obj.cutoffMin > 720)) err('CUTOFF_INVALID', 'cutoffMin');
   if (!Number.isInteger(obj.weighHoldPercent) || obj.weighHoldPercent < 0 || obj.weighHoldPercent > 50) {
     err('WEIGH_HOLD_PERCENT_INVALID', 'weighHoldPercent');
   }
@@ -947,7 +951,7 @@ function attachSupermarket(exportsObj, deps) {
     } catch (e) {
       rethrow(e, 'adminSetSupermarketSettings', { userId: actor });
     }
-    log({ action: 'adminSetSupermarketSettings', result: 'ok', userId: actor, ...out, stage: settings.stage });
+    log({ action: 'adminSetSupermarketSettings', result: 'ok', userId: actor, ...out });
     return { ok: true, ...out };
   });
 
@@ -975,8 +979,8 @@ function attachSupermarket(exportsObj, deps) {
     const { settings, feeConfig, user } = await loadGateContext(uid);
     const reqDistrict = typeof (data && data.districtId) === 'string' ? data.districtId.trim() : '';
     const districtId = reqDistrict || String((user && user.data.districtId) || '').trim();
-    const role = String((user && user.data.role) || 'user');
-    const g = gateDecision(settings, { uid, role, districtId, requireDistrict: true });
+    const g = await supermarketGate(db, { uid, districtId, requireDistrict: true, nowMs: now() });
+    // Эга 2026-11-28: оддий буюртма — имкон қадар тез (вақт оралиғи йўқ). Эски клиент учун settings.slots бўлса — берилади.
     const slots = g.allowed ? availableSlots(settings, now()) : { today: [], tomorrow: [] };
     return {
       allowed: g.allowed,
@@ -991,6 +995,8 @@ function attachSupermarket(exportsObj, deps) {
       // Байрам/совға (эга 2026-11-26): withDates=true бўлса — бугундан +14 кунгача санага оралиқлар.
       ...(data && data.withDates === true && g.allowed ? {
         maxAheadDays: hol().MAX_AHEAD_DAYS,
+        // Совға/байрам саватчаси учун фақат САНА (бугун..+14); вақт оралиғи йўқ.
+        deliveryDates: Array.from({ length: hol().MAX_AHEAD_DAYS + 1 }, (_, i) => hol().addDays(tashkentParts(now()).dateKey, i)),
         dateSlots: Array.from({ length: hol().MAX_AHEAD_DAYS + 1 }, (_, i) => {
           const date = hol().addDays(tashkentParts(now()).dateKey, i);
           return { date, slots: hol().slotsForDate(settings, now(), date) };
@@ -1163,9 +1169,15 @@ function attachSupermarket(exportsObj, deps) {
     // Сана: эски клиент — day ('today'|'tomorrow'); янги — deliveryDate 'YYYY-MM-DD' (бугун..+14 кун, эга 2026-11-26).
     const deliveryDate = d.deliveryDate == null ? null : String(d.deliveryDate);
     const day = deliveryDate == null ? String(d.day || '') : '';
-    const slotId = String(d.slotId || '');
-    if ((deliveryDate == null ? !DAYS.includes(day) : !hol().validDateKey(deliveryDate)) || !SLOT_ID_RE.test(slotId)) {
-      throw fail('invalid-argument', 'INVALID_REQUEST', { field: 'slot' });
+    // Эга 2026-11-28: slotId ИХТИЁРИЙ — йўқ бўлса имкон қадар тез (бугун) ёки deliveryDate куни (совға/байрам).
+    // Эски клиент (slotId + day/deliveryDate) — аввалги текширув.
+    const slotId = d.slotId == null || d.slotId === '' ? '' : String(d.slotId);
+    if (slotId) {
+      if ((deliveryDate == null ? !DAYS.includes(day) : !hol().validDateKey(deliveryDate)) || !SLOT_ID_RE.test(slotId)) {
+        throw fail('invalid-argument', 'INVALID_REQUEST', { field: 'slot' });
+      }
+    } else if ((deliveryDate != null && !hol().validDateKey(deliveryDate)) || (d.day != null && d.day !== '' && !DAYS.includes(day))) {
+      throw fail('invalid-argument', 'INVALID_REQUEST', { field: 'deliveryDate' });
     }
     // 3-босқич: буюртма манбаи (аналитика учун; эски клиент юбормайди → 'catalog').
     const origin = d.origin == null ? 'catalog' : d.origin;
@@ -1184,18 +1196,27 @@ function attachSupermarket(exportsObj, deps) {
 
     const { settings, feeConfig, user } = await loadGateContext(uid);
     if (!user) throw fail('not-found', 'USER_NOT_FOUND');
-    const role = String(user.data.role || 'user');
-    const gate = gateDecision(settings, { uid, role, districtId: address.districtId, requireDistrict: true });
+    const gate = await supermarketGate(db, { uid, districtId: address.districtId, requireDistrict: true, nowMs: now() });
     if (!gate.allowed) {
       log({ action: 'placeSupermarketOrder', result: 'refused', errorCode: gate.reason, userTail: uid.slice(-4) });
       throw fail('failed-precondition', gate.reason);
     }
-    const slotList = deliveryDate == null ? (availableSlots(settings, now())[day] || []) : hol().slotsForDate(settings, now(), deliveryDate);
-    const slot = slotList.find((s) => s.id === slotId);
-    if (!slot) throw fail('failed-precondition', 'SLOT_UNAVAILABLE');
-    const aheadDays = hol().daysBetween(tashkentParts(now()).dateKey, slot.date);
+    const todayKey = tashkentParts(now()).dateKey;
+    let slot;
+    if (slotId) {
+      const slotList = deliveryDate == null ? (availableSlots(settings, now())[day] || []) : hol().slotsForDate(settings, now(), deliveryDate);
+      slot = slotList.find((s) => s.id === slotId);
+      if (!slot) throw fail('failed-precondition', 'SLOT_UNAVAILABLE');
+    } else {
+      // Имкон қадар тез (бугун) ёки танланган кун; slot.date — статистика/эслатмалар/PII тозалаш асоси (ўзгармаган).
+      const date = deliveryDate || (day === 'tomorrow' ? hol().addDays(todayKey, 1) : todayKey);
+      const ahead = hol().daysBetween(todayKey, date);
+      if (ahead < 0 || ahead > hol().MAX_AHEAD_DAYS) throw fail('invalid-argument', 'INVALID_REQUEST', { field: 'deliveryDate' });
+      slot = { id: date === todayKey ? 'asap' : 'date', date, asap: date === todayKey };
+    }
+    const aheadDays = hol().daysBetween(todayKey, slot.date);
     const slotDay = DAYS[aheadDays] || 'scheduled';
-    const weighHoldPercent = Number.isInteger(settings.weighHoldPercent) ? settings.weighHoldPercent : 10;
+    const weighHoldPercent = Number.isInteger((settings || {}).weighHoldPercent) ? settings.weighHoldPercent : 10;
     if (!feeConfig) {
       console.error(JSON.stringify({ module: MODULE, action: 'placeSupermarketOrder', result: 'denied', errorCode: 'TARIFF_NOT_CONFIGURED' }));
       throw fail('failed-precondition', 'TARIFF_NOT_CONFIGURED');
@@ -1288,7 +1309,10 @@ function attachSupermarket(exportsObj, deps) {
           paidAmount: walletDebit,
           paidAt: ts(),
           fulfillmentMode: 'delivery',
-          slot: { id: slot.id, day: slotDay, date: slot.date, startMin: slot.startMin, endMin: slot.endMin, names: slot.names },
+          slot: slot.startMin != null
+            ? { id: slot.id, day: slotDay, date: slot.date, startMin: slot.startMin, endMin: slot.endMin, names: slot.names }
+            : { id: slot.id, day: slotDay, date: slot.date, asap: slot.asap === true },
+          deliveryDate: slot.date,
           smClientRequestId: clientRequestId,
           smOrigin: origin,
           ...(occasionId ? { smOccasionId: occasionId } : {}),
@@ -1312,12 +1336,12 @@ function attachSupermarket(exportsObj, deps) {
         // Курьер тўлови нусхаси (эга 2026-11-26) — ИЧКИ харажат (14-банд): мижоз ўқийдиган буюртма ҳужжатида эмас,
         // orders/{id}/private/courier_payout (фақат админ ўқийди, ёзиш фақат CF). Пул тизимда ЮРМАЙДИ.
         t.set(orderRef.collection('private').doc('courier_payout'), {
-          ...courierPayoutSnapshot(settings.courierPayout, priced.fee, settings.version), orderId: orderRef.id, createdAt: ts(),
+          ...courierPayoutSnapshot((settings || {}).courierPayout, priced.fee, (settings || {}).version), orderId: orderRef.id, createdAt: ts(),
         });
         const result = {
           ok: true, orderId: orderRef.id, itemsTotal: priced.goods, weighHold: priced.extras,
           deliveryFee: priced.fee, deliveryFeePercent: feePercent, deliveryFeeVersion: feeConfig.version, total: walletDebit, walletDebit,
-          paymentStatus: 'paid', tariffVersion: TARIFF_VERSION, slotDate: slot.date,
+          paymentStatus: 'paid', tariffVersion: TARIFF_VERSION, slotDate: slot.date, asap: slot.asap === true,
           ...(incentiveApplied > 0 ? { grossTotal: priced.hold, incentiveApplied } : {}),
           ...(gift ? { gift: true } : {}),
         };
@@ -1685,7 +1709,7 @@ function attachSupermarket(exportsObj, deps) {
       db.collectionGroup('sm_lists').where('remindNextAt', '<=', TS.fromMillis(nowMs)).orderBy('remindNextAt').limit(REMIND_BATCH).get(),
       db.collection(SETTINGS_DOC[0]).doc(SETTINGS_DOC[1]).get(),
     ]);
-    const settings = settingsSnap.exists ? (settingsSnap.data() || {}) : null;
+    void settingsSnap; // эски: stage/testerIds — энди модул созламаси (фойдаланувчи профил тумани)
     let sent = 0;
     let skipped = 0;
     for (const doc of snap.docs) {
@@ -1708,7 +1732,7 @@ function attachSupermarket(exportsObj, deps) {
       if (!userSnap.exists) { skipped += 1; continue; }
       const u = userSnap.data() || {};
       const uid = canonicalUid(userDocId);
-      if (!gateDecision(settings, { uid, role: String(u.role || 'user'), districtId: '', requireDistrict: false }).allowed) { skipped += 1; continue; }
+      if (!(await supermarketGate(db, { uid, districtId: '', requireDistrict: false, nowMs })).allowed) { skipped += 1; continue; }
       const m = REMIND_TEXT[normalizeLang(u.appLang)] || REMIND_TEXT.uz_Cyrl;
       try {
         await notifyUserInApp({
@@ -1821,7 +1845,7 @@ module.exports = {
   attachSupermarket,
   // тоза (тестлар)
   toMilli, fromMilli, lineTotalOf, holdExtraOf, feeBpOf, feeOf, feeConfigFromApp, computeCharge,
-  tashkentParts, availableSlots, gateDecision, validateSupermarketTaxonomy, validateSupermarketSettings,
+  tashkentParts, availableSlots, gateFromModuleStatus, supermarketGate, validateSupermarketTaxonomy, validateSupermarketSettings,
   validateOffer, validateCost, findGroup, offerSearchTokens, priceSupermarketOrder, applyWeights, adjustment,
   buildTaxonomyVersionDocs, isCancelled, trimDeep, messagesOf,
   // 2-босқич

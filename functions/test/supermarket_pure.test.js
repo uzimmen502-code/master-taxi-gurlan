@@ -124,18 +124,25 @@ check('P9 қаторни олиш: қатор + унинг ушлаши + fee у
   assert.strictEqual(sm.adjustment(r.hold, sm.computeCharge(removedBeef, 1100).target).refund, 171840 - (24000 + 2640));
 });
 
-check('P10 дарвоза: off / internal (тестер, админ) / pilot / public / ҳудуд', () => {
-  const s = { stage: 'internal', testerIds: ['998901112233'], districtIds: ['gurlan'] };
-  assert.strictEqual(sm.gateDecision(null, { uid: '998901112233', role: 'user', districtId: 'gurlan' }).reason, 'STAGE_OFF');
-  assert.strictEqual(sm.gateDecision({ ...s, stage: 'off' }, { uid: '998901112233', role: 'admin', districtId: 'gurlan' }).reason, 'STAGE_OFF');
-  assert.strictEqual(sm.gateDecision(s, { uid: '998900000000', role: 'user', districtId: 'gurlan' }).reason, 'NOT_TESTER');
-  assert.strictEqual(sm.gateDecision(s, { uid: '998901112233', role: 'user', districtId: 'gurlan' }).allowed, true);
-  assert.strictEqual(sm.gateDecision(s, { uid: '998900000000', role: 'admin', districtId: 'gurlan' }).allowed, true);
-  assert.strictEqual(sm.gateDecision({ ...s, stage: 'pilot' }, { uid: '998900000000', role: 'user', districtId: 'gurlan' }).reason, 'NOT_TESTER');
-  assert.strictEqual(sm.gateDecision({ ...s, stage: 'public' }, { uid: '998900000000', role: 'user', districtId: 'gurlan' }).allowed, true);
-  assert.strictEqual(sm.gateDecision({ ...s, stage: 'public' }, { uid: '998900000000', role: 'user', districtId: 'urganch' }).reason, 'DISTRICT_NOT_SERVED');
-  assert.strictEqual(sm.gateDecision({ ...s, stage: 'public' }, { uid: '9989', role: 'user', districtId: '', requireDistrict: true }).reason, 'DISTRICT_REQUIRED');
-  assert.strictEqual(sm.gateDecision({ ...s, stage: 'weird' }, { uid: '998901112233', role: 'admin', districtId: 'gurlan' }).reason, 'STAGE_OFF');
+// Эга 2026-11-28: дарвоза ФАҚАТ модул созламаси (module_gate ҳолати); settings stage/testers/districts йўқ.
+check('P10 дарвоза: enabled — очиқ; hidden/coming_soon/soon — MODULE_CLOSED; бўш туман — DISTRICT_REQUIRED; fail-open unknown', () => {
+  assert.deepStrictEqual(sm.gateFromModuleStatus('enabled', { districtId: 'gurlan', requireDistrict: true }).allowed, true);
+  for (const st of ['hidden', 'coming_soon', 'soon']) {
+    assert.strictEqual(sm.gateFromModuleStatus(st, { districtId: 'gurlan', requireDistrict: true }).reason, 'MODULE_CLOSED', st);
+  }
+  assert.strictEqual(sm.gateFromModuleStatus('enabled', { districtId: '', requireDistrict: true }).reason, 'DISTRICT_REQUIRED');
+  assert.strictEqual(sm.gateFromModuleStatus('enabled', { districtId: '', requireDistrict: false }).allowed, true);
+  assert.strictEqual(sm.gateFromModuleStatus('unknown', { districtId: 'gurlan', requireDistrict: true }).allowed, true);
+  assert.ok(sm.messagesOf ? sm.messagesOf('MODULE_CLOSED').uz_Latn : true);
+  assert.strictEqual(typeof sm.gateDecision, 'undefined', 'эски stage/testers дарвозаси олиб ташланди');
+});
+
+check('P10b созлама (эга 2026-11-28): stage/testerIds/districtIds/slots/cutoffMin ихтиёрий; юборилса — аввалгидек текширилади', () => {
+  assert.ok(sm.validateSupermarketSettings({ weighHoldPercent: 10 }).ok);
+  assert.ok(sm.validateSupermarketSettings({ weighHoldPercent: 10, courierPayout: { mode: 'percent', percent: 50 } }).ok);
+  assert.ok(!sm.validateSupermarketSettings({ weighHoldPercent: 10, stage: 'on' }).ok);
+  assert.ok(!sm.validateSupermarketSettings({ weighHoldPercent: 10, cutoffMin: 9999 }).ok);
+  assert.ok(!sm.validateSupermarketSettings({}).ok, 'weighHoldPercent шарт');
 });
 
 check('P11 вақт оралиқлари: Тошкент вақти, cutoff, эртага — ҳаммаси', () => {

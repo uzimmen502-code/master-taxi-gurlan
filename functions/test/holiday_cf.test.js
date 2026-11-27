@@ -293,6 +293,11 @@ async function main() {
 
   await check('C11 эслатмалар: туғилган кун (5 кун) + Наврўз; опт-аут; қайта ишга тушса — такрор йўқ', async () => {
     await call('adminUpsertHolidayOccasion', { occasion: { id: 'navruz', kind: 'holiday', names: N('Наврўз', 'Navröz', 'Навруз'), stage: 'public', order: 2, dateRule: { type: 'fixed', md: '03-21' } } }, ADMIN);
+    // Эга 2026-11-28: супермаркет кўриниши — модул созламаси: OTHER тумани (urganch) ёпиқ.
+    await db.doc('config/module_defaults').set({ enforce: true, modules: { supermarket: 'enabled' } });
+    await db.doc('geo_district_modules/urganch').set({ manualModules: ['supermarket'], modules: { supermarket: 'hidden' } });
+    await db.doc(`users/${OTHER}`).update({ districtId: 'urganch' });
+    require('../module_gate').resetCache();
     fakeNow = h.startOfKeyMs('2027-03-16') + 9 * 3600000;
     sent.length = 0;
     const r = await api.runHolidayRemindersAll();
@@ -301,13 +306,16 @@ async function main() {
     assert.ok(bd.every((m) => m.userId === USER && m.body.includes('5 kun')));
     assert.ok(bd.some((m) => m.body.startsWith('Лолаning')));
     const hol = sent.filter((m) => m.source === 'holiday_reminder');
-    assert.deepStrictEqual(hol.map((m) => m.userId), [USER, ADMIN]); // супермаркет internal: тестер + админ; OPTOUT — opt-out; OTHER — супермаркет тестери эмас
+    assert.deepStrictEqual(hol.map((m) => m.userId), [USER, RECIP, ADMIN]); // модул очиқ туманда ҳамма (тестер рўйхати йўқ); OPTOUT — opt-out; OTHER — тумани (urganch) ёпиқ
     assert.ok(hol[0].body.startsWith('Navröz'));
     assert.strictEqual(r.holidays.occasions, 1);
     sent.length = 0;
     await api.runHolidayRemindersAll();
     assert.strictEqual(sent.length, 0);
     fakeNow = Date.now();
+    await db.doc(`users/${OTHER}`).update({ districtId: 'gurlan' });
+    await db.doc('config/module_defaults').delete();
+    require('../module_gate').resetCache();
   });
 
   // ── эга 2026-11-27 ──

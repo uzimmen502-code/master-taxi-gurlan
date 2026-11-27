@@ -263,12 +263,15 @@ async function main() {
     assert.strictEqual((await news('sm_weekly_reminder')).length, 1);
     assert.strictEqual((await db.collection('orders').get()).size, ordersBefore);
     assert.strictEqual(await bal(), balBefore);
-    await db.doc('settings/supermarket').update({ stage: 'off' });
+    // Эга 2026-11-28: ёпиқлик — модул созламаси (settings stage эмас).
+    await db.doc('config/module_defaults').set({ enforce: true, modules: { supermarket: 'hidden' } });
+    require('../module_gate').resetCache();
     await listRef.update({ remindNextAt: admin.firestore.Timestamp.fromMillis(due) });
     await fns.smWeeklyReminder.run({});
     assert.strictEqual((await news('sm_weekly_reminder')).length, 1);
     assert.strictEqual((await get(listRef.path)).remindNextAt.toMillis(), due + 7 * 86400000);
-    await db.doc('settings/supermarket').update({ stage: SETTINGS.stage });
+    await db.doc('config/module_defaults').delete();
+    require('../module_gate').resetCache();
     assert.ok(USER_SUBCOLLECTIONS.includes('sm_lists'), 'ҳисоб ўчирилганда рўйхатлар ҳам ўчади');
   });
 

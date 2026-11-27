@@ -9,6 +9,7 @@ import '../../../core/theme/ava_tokens.dart';
 import '../../tv_market/models/tv_clip.dart';
 import '../../tv_market/repositories/tv_clips_repository.dart';
 import '../../tv_market/widgets/tv_clip_poster.dart';
+import 'home_info_ticker.dart' show kHomeBannerArtAsset;
 
 /// Бош саҳифа реклама каруселлари (эга 2026-11-28): «Бозорлар», «Эълон ва хизматлар»,
 /// «Транспорт ва логистика» бўлимларидан кейин.
@@ -19,6 +20,9 @@ import '../../tv_market/widgets/tv_clip_poster.dart';
 /// пуллик реклама (AVAGram `tv_clips`, `category == 'ad'`, тариф «Реклама жойлашуви:
 /// Home» — `adTier` `home`/`premium`/`pro_max`, [TvClip.showsOnHome]).
 enum HomeAdPlacement { markets, services, transport }
+
+/// «Реклама бериш» ўрни: мегафон расми эни (юқори баннер каби ~25%).
+const double kHomeAdPlaceholderArtFraction = 0.25;
 
 /// Битта слайд (UI маълумоти; манбадан мустақил — тестланади).
 @immutable
@@ -318,29 +322,67 @@ class _AdPlaceholder extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onAdvertise,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: Row(
-            children: [
-              Icon(Icons.campaign_rounded, size: 36, color: c.brandText),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  context.tr('home_ad_slot_title'),
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: AvaText.homeCardTitle.copyWith(color: c.ink),
+        child: LayoutBuilder(
+          builder: (context, box) {
+            // Эга 2026-11-28: юқори баннердаги мегафон расми ЧАПДА, кўзгули (ўнгга — матнга қараган), ~25% эн.
+            final artW = box.maxWidth * kHomeAdPlaceholderArtFraction;
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(
+                  width: artW,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 8, 0, 8),
+                    child: Transform.flip(
+                      key: const ValueKey('home_ad_placeholder_art'),
+                      flipX: true,
+                      child: Image.asset(
+                        kHomeBannerArtAsset,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => Icon(Icons.campaign_rounded, size: 36, color: c.brandText),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              FilledButton(
-                key: const ValueKey('home_ad_placeholder_cta'),
-                onPressed: onAdvertise,
-                style: FilledButton.styleFrom(backgroundColor: c.brand, foregroundColor: c.brandInk),
-                child: Text(context.tr('home_ad_slot_cta')),
-              ),
-            ],
-          ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(0, 8, 12, 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            context.tr('home_ad_slot_title'),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: AvaText.homeCardTitle.copyWith(color: c.ink),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: FilledButton(
+                            key: const ValueKey('home_ad_placeholder_cta'),
+                            onPressed: onAdvertise,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: c.brand,
+                              foregroundColor: c.brandInk,
+                              visualDensity: VisualDensity.compact,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: Text(context.tr('home_ad_slot_cta'), maxLines: 1),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );

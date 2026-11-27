@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:ava_gurlan/features/home/widgets/home_ad_carousel.dart';
+import 'package:ava_gurlan/features/home/widgets/home_info_ticker.dart' show kHomeBannerArtAsset;
 import 'package:ava_gurlan/features/tv_market/models/tv_clip.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -74,6 +75,39 @@ void main() {
     await t.tap(find.byKey(const ValueKey('home_ad_placeholder_cta')));
     expect(advertise, 1);
     expect(find.byKey(const ValueKey('home_ad_carousel_pages')), findsNothing);
+    await unmount(t);
+  });
+
+  testWidgets('«Реклама бериш» ўрни (эга 2026-11-28): юқори баннер мегафони чапда, кўзгули, ~25% эн; матн ва тугма ўнгда; 320 px × 1.5 — тошиш йўқ', (t) async {
+    await pump(t, const []);
+    final art = find.byKey(const ValueKey('home_ad_placeholder_art'));
+    expect(art, findsOneWidget);
+    expect(t.widget<Transform>(art).transform.storage[0], -1.0, reason: 'горизонтал кўзгу (flipX)');
+    final img = t.widget<Image>(find.descendant(of: art, matching: find.byType(Image)));
+    expect((img.image as AssetImage).assetName, kHomeBannerArtAsset);
+    final card = t.getRect(find.byKey(const ValueKey('home_ad_placeholder')));
+    final artRect = t.getRect(art);
+    final text = t.getRect(find.text('home_ad_slot_title'));
+    final cta = t.getRect(find.byKey(const ValueKey('home_ad_placeholder_cta')));
+    expect(artRect.left - card.left, lessThan(16), reason: 'чапда');
+    expect(artRect.right, lessThanOrEqualTo(text.left));
+    expect(artRect.right, lessThanOrEqualTo(cta.left));
+    expect(artRect.width, closeTo(card.width * kHomeAdPlaceholderArtFraction - 8, 1));
+    await unmount(t);
+    // Тор экран + катта шрифт.
+    await t.binding.setSurfaceSize(const Size(320, 640));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    await t.pumpWidget(MediaQuery(
+      data: const MediaQueryData(size: Size(320, 640), textScaler: TextScaler.linear(1.5)),
+      child: MaterialApp(
+        home: Scaffold(
+          body: HomeAdCarousel(placement: HomeAdPlacement.markets, slides: const [], onOpen: (_) {}, onAdvertise: () {}),
+        ),
+      ),
+    ));
+    await t.pump();
+    expect(t.takeException(), isNull, reason: 'RenderFlex тошиши йўқ');
+    expect(find.byKey(const ValueKey('home_ad_placeholder_cta')), findsOneWidget);
     await unmount(t);
   });
 

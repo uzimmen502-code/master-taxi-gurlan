@@ -3086,8 +3086,8 @@ function resolvePaymentMethod(lines) {
 /**
  * Платформа дўкони: нарх `platform_products` дан (клиент нархи эътиборсиз).
  *
- * Улгуржи поғоналари (`platform_pricing.js`, эга қарори 2026-10-06): базадаги
- * нарх 10–50 дона, 1–9 +5%, 50+ −5% (ёки админ поғоналари).
+ * ЯГОНА НАРХ (эга 2026-11-28: поғоналар бизнес қоида сифатида олиб ташланган) —
+ * `platformPricing.platformUnitPrice` = маҳсулот `price`, миқдордан қатъи назар.
  * T-3 (эга 2026-11-28): нарх версиясини СЕРВЕР танлайди
  * (`platformPricing.SERVER_PRICING_VERSION`); клиент `pricingVersion` эътиборсиз —
  * фақат диагностика логи. Натижада `pricingVersion` қайтади (буюртмага ёзилади).
@@ -3144,7 +3144,7 @@ async function repricePlatformOrderFromCatalog(itemsIn, clientPricingVersion) {
           });
     }
     // Каталогдаги барча маҳсулотлар буюртма қилиниши мумкин (active чекловсиз).
-    const unitPrice = platformPricing.unitPriceForQty(d, qty, pricingVersion);
+    const unitPrice = platformPricing.platformUnitPrice(d);
     if (!Number.isInteger(unitPrice) || unitPrice <= 0) {
       throw new functions.https.HttpsError(
           'failed-precondition', `Нарх йўқ: ${productId}`);

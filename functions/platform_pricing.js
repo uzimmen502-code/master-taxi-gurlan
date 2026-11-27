@@ -1,94 +1,43 @@
 'use strict';
 
 /**
- * AVA DO'KONI — ULGURJI NARX POG'ONALARI (ega qarori, 2026-10-06).
+ * NARX QOIDALARI — AVA DO'KONI (`platform_products`) va ULGURJI pog'ona yordamchilari.
  *
- * Bazadagi `platform_products.price` — O'RTA pog'ona (10–50 dona) narxi.
- * Admin o'zi pog'ona qo'ymagan tovar uchun pog'onalar shundan HISOBLANADI:
+ * AVA DO'KONI — YAGONA NARX (ega 2026-11-28): «narx pog'onalari biznes qoida sifatida olib
+ * tashlangan». Hisoblangan pog'onalar (2026-10-06 qarori: 1–9 dona +5 %, 50+ −5 %, eski tovarlar
+ * uchun `DERIVED_TIERS_CUTOFF_MS`) O'CHIRILDI. Buyurtma narxi = tovarning `price` maydoni,
+ * miqdordan qat'i nazar (`platformUnitPrice`). `platform_products.priceTiers` ham E'TIBORSIZ:
+ * prod'da (2026-11-28, faqat o'qish) 59 tovarning birortasida `priceTiers` yo'q.
  *
- *   1–9 dona   : price × 105%   (+5%)
- *   10–50 dona : price
- *   50+ dona   : price × 95%    (−5%)
+ * VERSIYA (9-qoida): buyurtmaga SERVER yozadi — `SERVER_PRICING_VERSION` (3 = yagona narx).
+ * Klient `pricingVersion` e'tiborsiz (18-qoida; T-3). Eski buyurtmalardagi 1/2 o'zgarmaydi.
+ *   1 — eski yagona narx (≤1.0.32 ilova), 2 — hisoblangan/admin pog'onalari (2026-10-06…11-28),
+ *   3 — yagona narx, pog'onasiz (ega 2026-11-28).
  *
- * Admin `priceTiers` qo'ygan bo'lsa — o'shalar ishlatiladi, hisoblanmaydi.
- * Hisoblash FAQAT ESKI tovarlarga (`DERIVED_TIERS_CUTOFF_MS`); yangi
- * tovarda pog'onani qo'shuvchining o'zi belgilaydi.
+ * ULGURJI (`wholesale_products` qadoqlari, boshqa domen): sotuvchi qo'ygan ANIQ pog'onalar —
+ * `cleanTiers` + `tierUnitPrice` / `unitPriceForQty` (wholesale_orders.js, price_search.js).
+ * Ular hisoblanmaydi (derived yo'q) va AVA do'koni narxiga ta'sir qilmaydi.
  *
- * PUL — BUTUN SO'M (8-qoida). Yaxlitlash: yuqoriga, butun so'mgacha
- * (taksi T-4 bilan bir xil: AVA o'ziga zarar qilmaydi, farq ≤ 1 so'm).
- * Faqat butun son arifmetikasi — float yo'q.
+ * PUL — BUTUN SO'M (8-qoida), faqat butun son arifmetikasi.
  *
- * YAGONA QOIDA ikki tilda: shu fayl va `lib/models/price_tier.dart`.
- * Paritet: `functions/test/fixtures/platform_price_vectors.json` — ikkala
- * test (Node va Dart) bir xil vektorlarni tekshiradi.
- *
- * VERSIYA (9-qoida, orqaga moslik 26-qoida): `pricingVersion`
- *   1 — eski: yagona `price` (Play'dagi 1.0.32 va undan eski ilova shu
- *       narxni ko'rsatadi; unga boshqa narx yechilmasin).
- *   2 — pog'onali (1.0.33+ ilova yuboradi).
- * Minimal versiya darvozasi (`config/app_version`) eski ilovalarni
- * yangilatgach, 1-versiya yo'li olib tashlanadi.
- *
- * T-3 (takrorlanishlar auditi 2026-11-28, ega 2026-11-28; 18-qoida «klientga ishonma»):
- * buyurtma narxining versiyasini SERVER hal qiladi — `SERVER_PRICING_VERSION`. Klient yuborgan
- * `pricingVersion` e'tiborsiz (o'zgartirilgan klient 1–9 dona +5 % yoki admin pog'onasini
- * chetlab o'tolmaydi). Pog'onasi bor tovarda pog'ona DOIM qo'llanadi. Eski ilova so'rovi rad
- * etilmaydi (maydon shunchaki e'tiborsiz). `unitPriceForQty` ning 3-argumenti paritet vektorlari
- * (Dart `price_tier.dart`) uchun saqlanadi; server buyurtma yo'li uni faqat shu konstanta bilan chaqiradi.
+ * Klient ko'zgusi `lib/models/price_tier.dart` / `platform_product.dart` hali hisoblangan
+ * pog'onalarni ko'rsatadi — klient tomonda olib tashlanishi kerak (server bu qoidani qo'llamaydi).
  */
 
 const PRICING_VERSION_LEGACY = 1;
 const PRICING_VERSION_TIERED = 2;
-/** T-3: server buyurtma/oldindan hisob yo'li ishlatadigan YAGONA versiya. */
-const SERVER_PRICING_VERSION = PRICING_VERSION_TIERED;
+/** Yagona narx, pog'onasiz (ega 2026-11-28). */
+const PRICING_VERSION_SINGLE = 3;
+/** Server AVA do'koni buyurtma/oldindan hisob yo'li ishlatadigan YAGONA versiya. */
+const SERVER_PRICING_VERSION = PRICING_VERSION_SINGLE;
 
-/**
- * Hisoblangan (+5% / −5%) pog'onalar FAQAT ESKI tovarlarga (ega qarori,
- * 2026-10-06): `createdAt` shu vaqtdan OLDIN (2026-10-07 00:00 Toshkent).
- * Yangi tovarda pog'onani qo'shayotgan odamning O'ZI belgilaydi (admin
- * formasi / Ulgurji sotuvchi formasi) — hisoblanmaydi. `createdAt` yo'q
- * yozuv — eski deb olinadi (eng eski hujjatlarda bo'lmasligi mumkin).
- * Prodakshn 2026-10-06: 59 ta tovar, hammasi 2026-07-27…08-06 da yaratilgan.
- */
-const DERIVED_TIERS_CUTOFF_MS = Date.parse('2026-10-06T19:00:00Z');
-
-function toMillis(v) {
-  if (v == null || v === '') return null;
-  if (typeof v.toMillis === 'function') return v.toMillis();
-  if (v instanceof Date) return v.getTime();
-  if (typeof v === 'string') { const t = Date.parse(v); return Number.isFinite(t) ? t : null; }
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
+/** AVA do'koni: bir dona narxi = `price` (butun so'm), miqdor va `priceTiers` e'tiborsiz. */
+function platformUnitPrice(product) {
+  const p = Math.trunc(Number((product || {}).price || 0));
+  return Number.isFinite(p) ? p : 0;
 }
 
-/** Eski tovarmi — hisoblangan pog'onalar faqat shunga. */
-function isLegacyProduct(product) {
-  const ms = toMillis((product || {}).createdAt);
-  return ms == null || ms < DERIVED_TIERS_CUTOFF_MS;
-}
-
-const MID_MIN_QTY = 10;
-const HIGH_MIN_QTY = 50;
-const LOW_MARKUP_PCT = 5;
-const HIGH_DISCOUNT_PCT = 5;
-
-/** ceil(a × num / den) — faqat butun sonlar bilan. */
-function ceilMulDiv(a, num, den) {
-  return Math.floor((a * num + den - 1) / den);
-}
-
-/** O'rta pog'ona narxidan 3 ta pog'ona. */
-function derivedTiers(midPrice) {
-  const p = Math.trunc(Number(midPrice));
-  if (!Number.isInteger(p) || p <= 0) return [];
-  return [
-    { minQty: 1, price: ceilMulDiv(p, 100 + LOW_MARKUP_PCT, 100) },
-    { minQty: MID_MIN_QTY, price: p },
-    { minQty: HIGH_MIN_QTY, price: ceilMulDiv(p, 100 - HIGH_DISCOUNT_PCT, 100) },
-  ];
-}
-
-/** Firestore `priceTiers` — to'g'ri yozuvlar, `minQty` bo'yicha o'sish tartibida. */
+/** Firestore `priceTiers` (ulgurji) — to'g'ri yozuvlar, `minQty` bo'yicha o'sish tartibida. */
 function cleanTiers(raw) {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -101,53 +50,38 @@ function cleanTiers(raw) {
     .sort((a, b) => a.minQty - b.minQty);
 }
 
-/**
- * Amaldagi pog'onalar: qo'yilgani; bo'lmasa ESKI tovarda `price` dan
- * hisoblangan; yangi tovarda — bo'sh (yagona `price` ishlatiladi).
- */
-function effectiveTiers(product) {
-  const d = product || {};
-  const explicit = cleanTiers(d.priceTiers);
-  if (explicit.length) return explicit;
-  return isLegacyProduct(d) ? derivedTiers(d.price) : [];
-}
-
-/**
- * Bir dona narxi — [qty] dan kichik yoki teng eng yuqori pog'ona.
- * `pricingVersion` 2 dan kichik bo'lsa — eski yagona `price`.
- */
-function unitPriceForQty(product, qty, pricingVersion) {
-  const d = product || {};
-  // `!(v >= 2)`: versiya yo'q (`undefined` → NaN) yoki noto'g'ri bo'lsa
-  // ham ESKI narx — `NaN < 2` false bo'lgani uchun oddiy taqqoslash
-  // eski ilovaga pog'onali narx qo'llab yuborardi (test ushlagan).
-  const v = Number(pricingVersion);
-  if (!(v >= PRICING_VERSION_TIERED)) {
-    return Math.trunc(Number(d.price || 0));
-  }
-  const tiers = effectiveTiers(d);
-  // Pog'onasiz (yangi) tovar — yagona narx; ilova ham shunday ko'rsatadi.
-  if (!tiers.length) return Math.trunc(Number(d.price || 0));
-  let result = tiers[0].price;
-  for (const t of tiers) {
-    if (qty >= t.minQty) result = t.price;
+/** Aniq pog'onalardan bir dona narxi: [qty] dan kichik/teng eng yuqori; qty birinchisidan kichik — birinchisi. */
+function tierUnitPrice(tiers, qty) {
+  const t = cleanTiers(tiers);
+  if (!t.length) return null;
+  let result = t[0].price;
+  for (const x of t) {
+    if (qty >= x.minQty) result = x.price;
     else break;
   }
   return result;
 }
 
+/**
+ * ULGURJI moslik (wholesale_orders.js): aniq `priceTiers` bo'lsa — pog'ona, bo'lmasa `price`.
+ * `pricingVersion` < 2 — `price`. Hisoblangan pog'ona YO'Q. AVA do'koni buni ISHLATMAYDI
+ * (`platformUnitPrice`).
+ */
+function unitPriceForQty(product, qty, pricingVersion) {
+  const d = product || {};
+  const v = Number(pricingVersion);
+  if (!(v >= PRICING_VERSION_TIERED)) return Math.trunc(Number(d.price || 0));
+  const p = tierUnitPrice(d.priceTiers, qty);
+  return p == null ? Math.trunc(Number(d.price || 0)) : p;
+}
+
 module.exports = {
   PRICING_VERSION_LEGACY,
   PRICING_VERSION_TIERED,
+  PRICING_VERSION_SINGLE,
   SERVER_PRICING_VERSION,
-  MID_MIN_QTY,
-  HIGH_MIN_QTY,
-  LOW_MARKUP_PCT,
-  HIGH_DISCOUNT_PCT,
-  DERIVED_TIERS_CUTOFF_MS,
-  isLegacyProduct,
-  derivedTiers,
+  platformUnitPrice,
   cleanTiers,
-  effectiveTiers,
+  tierUnitPrice,
   unitPriceForQty,
 };

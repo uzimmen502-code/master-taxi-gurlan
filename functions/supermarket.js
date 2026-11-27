@@ -118,6 +118,7 @@ const MSG = Object.freeze({
   INVALID_REQUEST: ['Маълумот нотўғри. Қайта уриниб кўринг.', "Ma'lumot notöğri. Qayta urinib köring.", 'Неверные данные. Попробуйте ещё раз.'],
   STAGE_OFF: ['Супермаркет ҳозир ёпиқ.', 'Supermarket hozir yopiq.', 'Супермаркет сейчас закрыт.'],
   // Эга 2026-11-28: кўриниш ФАҚАТ «Ҳудудлар ва хизматлар» модул созламаси (supermarket) бўйича.
+  GROUP_IN_USE: ['Бу гуруҳда фаол маҳсулотлар бор — аввал уларни бошқа гуруҳга ўтказинг ёки ўчиринг.', 'Bu guruhda faol mahsulotlar bor — avval ularni boşqa guruhga ötkazing yoki öçiring.', 'В этой группе есть активные товары — сначала перенесите или отключите их.'],
   MODULE_CLOSED: ['Супермаркет бу ҳудудда ҳозирча ишламайди.', 'Supermarket bu hududda hozirça işlamaydi.', 'Супермаркет пока не работает в этом районе.'],
   NOT_TESTER: ['Супермаркет ҳозир синов режимида.', 'Supermarket hozir sinov rejimida.', 'Супермаркет сейчас в тестовом режиме.'],
   DISTRICT_NOT_SERVED: ['Бу ҳудудга ҳозирча етказиб бермаймиз.', 'Bu hududga hozirça yetkazib bermaymiz.', 'В этот район пока не доставляем.'],
@@ -282,6 +283,13 @@ function availableSlots(settings, nowMs) {
     today: slots.filter((sl) => today.minutes <= sl.startMin - cutoff).map((sl) => view(sl, today.dateKey)),
     tomorrow: slots.map((sl) => view(sl, tomorrow.dateKey)),
   };
+}
+
+/** Таксономиядан олиб ташланаётган гуруҳ id'лари (соф; эга 2026-11-28 «Тоифалар ва гуруҳлар» таҳрирловчиси). */
+function removedGroupIds(curCategories, nextCategories) {
+  const ids = (cats) => new Set((Array.isArray(cats) ? cats : []).flatMap((c) => (Array.isArray(c && c.groups) ? c.groups : []).map((g) => g && g.id)).filter(Boolean));
+  const next = ids(nextCategories);
+  return [...ids(curCategories)].filter((id) => !next.has(id)).sort();
 }
 
 // ══════════════════════ ДАРВОЗА (gate) ══════════════════════
@@ -893,6 +901,18 @@ function attachSupermarket(exportsObj, deps) {
       throw fail('invalid-argument', 'TAXONOMY_INVALID', { errors: v.errors });
     }
     const ref = db.collection(TAXONOMY_DOC[0]).doc(TAXONOMY_DOC[1]);
+    // Фаол таклифи бор гуруҳни ўчириш мумкин эмас (эга 2026-11-28). Ҳар 30 тадан in сўрови.
+    const pre = await ref.get();
+    const removed = removedGroupIds(pre.exists ? (pre.data() || {}).categories : [], taxonomy.categories);
+    const inUse = [];
+    for (let i = 0; i < removed.length; i += 30) {
+      const q = await db.collection(PRODUCTS).where('smGroupId', 'in', removed.slice(i, i + 30)).get();
+      for (const d of q.docs) {
+        const x = d.data() || {};
+        if ((x.active === true || x.smStatus === 'active') && !inUse.includes(x.smGroupId)) inUse.push(x.smGroupId);
+      }
+    }
+    if (inUse.length) throw fail('failed-precondition', 'GROUP_IN_USE', { groupIds: inUse.sort() });
     let out;
     try {
       out = await db.runTransaction(async (t) => {
@@ -1845,7 +1865,7 @@ module.exports = {
   attachSupermarket,
   // тоза (тестлар)
   toMilli, fromMilli, lineTotalOf, holdExtraOf, feeBpOf, feeOf, feeConfigFromApp, computeCharge,
-  tashkentParts, availableSlots, gateFromModuleStatus, supermarketGate, validateSupermarketTaxonomy, validateSupermarketSettings,
+  tashkentParts, availableSlots, gateFromModuleStatus, supermarketGate, removedGroupIds, validateSupermarketTaxonomy, validateSupermarketSettings,
   validateOffer, validateCost, findGroup, offerSearchTokens, priceSupermarketOrder, applyWeights, adjustment,
   buildTaxonomyVersionDocs, isCancelled, trimDeep, messagesOf,
   // 2-босқич

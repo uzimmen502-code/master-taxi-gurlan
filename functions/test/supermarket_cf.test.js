@@ -311,6 +311,22 @@ async function main() {
     assert.deepStrictEqual([lo.slot.id, lo.slot.day, lo.slot.startMin], ['morning', 'tomorrow', 600]);
   });
 
+  await check('C14 таксономия (эга 2026-11-28): фаол таклифи бор гуруҳни ўчириш — GROUP_IN_USE; таклифсиз гуруҳ — ўчади; номни ўзгартириш — мумкин', async () => {
+    const cur = await get('taxonomy/supermarket');
+    const without = (id) => cur.categories.map((c) => ({ ...c, groups: c.groups.filter((g) => g.id !== id) })).map(({ ...c }) => c);
+    const strip = (cats) => cats.map((c) => { const { ...x } = c; return x; });
+    const e = await expectCode(call('adminSetSupermarketTaxonomy', { taxonomy: { categories: strip(without('beef')) }, expectedVersion: cur.version }, ADMIN), 'GROUP_IN_USE');
+    assert.deepStrictEqual(e.details.groupIds, ['beef']);
+    const used = new Set((await db.collection('platform_products').get()).docs.map((d) => d.data().smGroupId));
+    const free = cur.categories.flatMap((c) => c.groups.map((g) => g.id)).find((id) => !used.has(id));
+    const r = await call('adminSetSupermarketTaxonomy', { taxonomy: { categories: strip(without(free)) }, expectedVersion: cur.version }, ADMIN);
+    assert.deepStrictEqual([r.changed, r.version], [true, cur.version + 1]);
+    const renamed = JSON.parse(JSON.stringify((await get('taxonomy/supermarket')).categories));
+    renamed[0].groups[0].names.ru = 'Говядина (новое)';
+    const r2 = await call('adminSetSupermarketTaxonomy', { taxonomy: { categories: renamed }, expectedVersion: r.version }, ADMIN);
+    assert.strictEqual(r2.changed, true);
+  });
+
   const passed = results.filter(Boolean).length;
   console.log(`\n${passed}/${results.length} passed`);
   process.exit(passed === results.length ? 0 : 1);

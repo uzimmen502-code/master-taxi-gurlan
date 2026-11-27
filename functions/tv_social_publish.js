@@ -14,6 +14,7 @@
  * йўқ — алгоритм спам сифатида белгилаш хавфи туфайли).
  */
 const axios = require('axios');
+const sellerTg = require('./seller_tg_channel');
 const { stampTvClipActivation } = require('./tv_clip_activation');
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
@@ -52,9 +53,25 @@ function requestedNetworks(clip) {
   // Пуллик реклама — эга танловидан қатъи назар мажбурий 3 та тармоқ.
   if (clip.category === 'ad') return AD_FORCED_NETWORKS.slice();
   const raw = Array.isArray(clip.socialNetworks) ? clip.socialNetworks : [];
+  // Тармоқ танланган, лекин розилик белгиси йўқ — жойланмайди (7-босқич,
+  // 2026-10-25). Ҳар қандай илова (эски ҳам) тармоқ танланса
+  // `socialConsent: true` ёзади; `false` — ўзгартирилган клиент ёки эга
+  // розилигини қайтариб олган.
+  if (raw.length > 0 && clip.socialConsent !== true) return [];
+  const lower = raw.map((x) => String(x).toLowerCase());
   const picked = [];
   for (const id of ORDERED) {
-    if (raw.map((x) => String(x).toLowerCase()).includes(id)) picked.push(id);
+    if (lower.includes(id)) picked.push(id);
+  }
+  // Сотувчининг ЎЗ Telegram канали (2026-10-25, `seller_tg_channel.js`) — ўша розилик билан, фақат товар/хизмат
+  // видеоси (янгилик эмас). Эски сервер бу қийматни танимайди: фақат шу танланган бўлса ҳеч қаерга жойламайди.
+  // Фақат АНИҚ қиймат (катта-кичик ҳарф вариантлари rules'дан ўтиб кетарди — review M1) ва розилик матни канални
+  // айтган версия (≥ 2) билан — серверда ҳам, фақат rules'га ишонилмайди.
+  const cat = String(clip.category || 'product');
+  const v = clip.socialConsentVersion;
+  if (raw.includes(sellerTg.NET) && (cat === 'product' || cat === 'service')
+      && Number.isInteger(v) && v >= 2) {
+    picked.push(sellerTg.NET);
   }
   if (picked.length) return picked;
   // Эга тармоқ танлаган, лекин уларнинг бирортаси ҳозир қўллаб-
@@ -66,6 +83,26 @@ function requestedNetworks(clip) {
   if (raw.length > 0) return [];
   if (clip.socialConsent === true) return ORDERED.slice();
   return [];
+}
+
+/**
+ * Розилик асоси — биринчи жойлашда `socialPost.consent`га бир марта
+ * ёзилади (клиент `socialPost`га ёза олмайди, кейин ўзгармайди):
+ *   • `ad_terms` — пуллик реклама; `version` — тўловдан олдин кўрсатилган
+ *     огоҳлантириш версияси (эски иловада 0 — огоҳлантириш кўрилмаган);
+ *   • `explicit` — «Рухсат бераман» белгиси (`socialConsentVersion` ≥ 1,
+ *     вақти `socialConsentAt` — қоидада `request.time`га тенг);
+ *   • `legacy` — эски илова: тармоқ чипи танланган, алоҳида белги йўқ.
+ */
+function consentRecord(clip, networks) {
+  const ver = (v) => (Number.isInteger(v) && v > 0 && v < 100 ? v : 0);
+  const at = clip.socialConsentAt && typeof clip.socialConsentAt.toMillis === 'function'
+      ? clip.socialConsentAt : null;
+  if (clip.category === 'ad') {
+    return { basis: 'ad_terms', version: ver(clip.socialNoticeVersion), networks: networks.slice(), consentAt: null };
+  }
+  const v = ver(clip.socialConsentVersion);
+  return { basis: v ? 'explicit' : 'legacy', version: v, networks: networks.slice(), consentAt: v ? at : null };
 }
 
 function networkState(clip, net) {
@@ -118,6 +155,9 @@ const LINKABLE = ['facebook', 'youtube', 'telegram'];
 /// гапни тармоққа қараб мана шу ер қўшади.
 const IG_LINK_HINT = '🔗 Юклаб олиш ҳаволаси — профилда';
 
+/// Пуллик реклама постининг биринчи қатори.
+const AD_CAPTION_MARK = 'Реклама';
+
 /**
  * Тармоққа мосланган подпись.
  *
@@ -132,6 +172,9 @@ function buildCaption(clip, prefix, net, playUrl) {
   const max = CAPTION_MAX[net] || 2100;
 
   const head = [];
+  // Пуллик реклама AVA саҳифаларида ҳам очиқ белгиланади (8-босқич,
+  // 2026-10-25): биринчи қатор — «Реклама», лимитда ҳам кесилмайди.
+  if (clip.category === 'ad') head.push(AD_CAPTION_MARK);
   if (str(prefix, 200)) head.push(str(prefix, 200));
   if (str(clip.title, 180)) head.push(str(clip.title, 180));
 
@@ -171,6 +214,7 @@ function attachTvSocialPublish(exports, deps) {
   const { functions, db, admin, requireCallerRoles } = deps;
   const playUrl = str(deps.playUrl, 300);
   const heavy = functions.runWith({ timeoutSeconds: 540, memory: '512MB' });
+  const sellerPoster = sellerTg.createSellerChannelPoster({ db, admin, publicBase: deps.publicBase });
 
   async function loadSettings() {
     const snap = await db.collection(SETTINGS_PATH[0]).doc(SETTINGS_PATH[1]).get();
@@ -188,10 +232,9 @@ function attachTvSocialPublish(exports, deps) {
           || str(process.env.YOUTUBE_CLIENT_SECRET, 200),
       youtubeRefreshToken: str(s.youtubeRefreshToken, 800)
           || str(process.env.YOUTUBE_REFRESH_TOKEN, 800),
-      telegramBotToken: str(s.telegramBotToken, 200)
-          || str(process.env.TELEGRAM_CHANNEL_BOT_TOKEN, 200),
-      telegramChannelId: str(s.telegramChannelId, 80)
-          || str(process.env.TELEGRAM_CHANNEL_ID, 80),
+      // Бот созламаси — ягона манба (сотувчи канали ҳам шуни ишлатади).
+      telegramBotToken: sellerTg.telegramBotFromSettings(s).token,
+      telegramChannelId: sellerTg.telegramBotFromSettings(s).channelId,
     };
   }
 
@@ -434,10 +477,17 @@ function attachTvSocialPublish(exports, deps) {
       ) {
         return { skip: 'in_flight' };
       }
-      tx.update(ref, {
+      const upd = {
         'socialPost.status': 'posting',
         'socialPost.startedAt': admin.firestore.FieldValue.serverTimestamp(),
-      });
+      };
+      // Розилик асоси — фақат биринчи марта (қайта уриниш уни ўзгартирмайди).
+      if (!sp.consent || typeof sp.consent !== 'object') {
+        upd['socialPost.consent'] = Object.assign(consentRecord(d, nets), {
+          recordedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+      tx.update(ref, upd);
       return { clip: Object.assign({ id: clipId }, d), nets: pending, allNets: nets };
     });
   }
@@ -469,8 +519,10 @@ function attachTvSocialPublish(exports, deps) {
 
     for (const net of claimed.nets) {
       try {
-        const caption = buildCaption(clip, s.captionPrefix, net, playUrl);
-        const posted = await publishOne(net, videoUrl, caption, s);
+        // Сотувчи канали — ўз матни (сарлавҳа, нарх, тавсиф, дўкон ҳаволаси) ва ўз текширувлари.
+        const posted = net === sellerTg.NET
+            ? await sellerPoster.post(clip, videoUrl, s.telegramBotToken)
+            : await publishOne(net, videoUrl, buildCaption(clip, s.captionPrefix, net, playUrl), s);
         networks[net] = {
           status: 'posted',
           id: posted.id || '',
@@ -512,7 +564,14 @@ function attachTvSocialPublish(exports, deps) {
     }
     await ref.update(patch);
 
-    if (allPosted && str(clip.shopItemId, 80)) {
+    // Маҳсулотнинг «AVA саҳифаларига чиқди» белгиси — фақат AVA тармоқларидан (сотувчи канали хатоси/муваффақияти
+    // унга таъсир қилмайди). `socialPost.status` ва клипнинг `socialPostedAt`и — аввалгидек БАРЧА тармоқлардан
+    // (каналда хато бўлса админ «Қайта жойлаш» тугмасини кўраверади).
+    const avaNets = allNets.filter((n) => n !== sellerTg.NET);
+    const avaPosted = avaNets.length > 0 && avaNets.every((n) =>
+      networks[n] && networks[n].status === 'posted');
+    const avaThisRun = claimed.nets.some((n) => n !== sellerTg.NET);
+    if (avaPosted && avaThisRun && str(clip.shopItemId, 80)) {
       try {
         await db.collection('tv_shop_items').doc(clip.shopItemId).set(
             { socialPostedAt: admin.firestore.FieldValue.serverTimestamp() },
@@ -617,4 +676,4 @@ function attachTvSocialPublish(exports, deps) {
 
 // `buildCaption` / `socialVideoUrl` — тоза функциялар, тест учун
 // очиқ (қаранг: test/tv_social_caption.test.js).
-module.exports = { attachTvSocialPublish, buildCaption, socialVideoUrl, requestedNetworks };
+module.exports = { attachTvSocialPublish, buildCaption, socialVideoUrl, requestedNetworks, consentRecord };

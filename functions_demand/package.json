@@ -27,6 +27,8 @@
     "test:logistics-core": "node test/logistics_core.test.js",
     "test:logistics-api": "node test/logistics_api.test.js",
     "test:logistics-parity": "node test/logistics_parity.test.js",
+    "test:logistics-stage": "node test/logistics_stage.test.js",
+    "test:logistics-admin-stage": "node test/logistics_admin_stage.test.js",
     "test:maintenance": "node test/maintenance.test.js",
     "test:offers": "node test/offers.test.js",
     "test:dict": "node test/dictionary_fresh.test.js",
@@ -36,7 +38,9 @@
     "test:replan-tx": "firebase emulators:exec --only firestore --project demo-replan-tx \"node test/logistics_replan_emulator.test.js\"",
     "test:activate-tx": "firebase emulators:exec --only firestore --project demo-activate-tx \"node test/logistics_activate_emulator.test.js\"",
     "test:sweeper-tx": "firebase emulators:exec --only firestore --project demo-sweeper-tx \"node test/expire_sweeper_emulator.test.js\"",
-    "test:audit-tx": "firebase emulators:exec --only firestore --project demo-audit-tx \"node test/audit_expired_assignments_emulator.test.js\""
+    "test:audit-tx": "firebase emulators:exec --only firestore --project demo-audit-tx \"node test/audit_expired_assignments_emulator.test.js\"",
+    "test:logaudit-tx": "firebase emulators:exec --only firestore --project demo-logaudit-tx \"node test/logistics_audit_emulator.test.js\"",
+    "test:loss-tx": "firebase emulators:exec --only firestore --project demo-loss-tx \"node test/logistics_loss_emulator.test.js\""
   },
   "dependencies": {
     "ajv": "^8.17.1",

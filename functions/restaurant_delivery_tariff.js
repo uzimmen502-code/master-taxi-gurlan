@@ -51,25 +51,65 @@ function divRoundHalfUp(a, b) {
   return (a * 2n + b) / (2n * b);
 }
 
+/** AVA ulushi (bps) va tungi koeffitsient chegaralari — admin callable bilan BITTA manba. */
+const AVA_FEE_BPS_MIN = 0;
+const AVA_FEE_BPS_MAX = 10000;
+/** Tungi koeffitsient (×): 1 = tungi qo'shimcha yo'q; 3 — mavjud admin tarif muharriri chegarasi. */
+const NIGHT_COEF_MIN = 1;
+const NIGHT_COEF_MAX = 3;
+
+/**
+ * D9 (ega qarori 2026-10-16): AVA ulushi `settings/restaurant_delivery.avaFeeBps`
+ * (butun bps, 0..10000) — tarif hujjati bilan BITTA versiya (`version`), tarixi
+ * `restaurant_delivery_tariffs/v{n}`. Maydon yo'q / noto'g'ri → standart
+ * `AVA_FEE_RATE_BPS` (200): admin o'zgartirmaguncha hech narsa o'zgarmaydi.
+ * Faqat HAQIQIY butun son qabul qilinadi (satr `'300'` — standart).
+ * @return {{rateBps:number, source:'default'|'setting', settingsVersion:number}}
+ */
+function resolveAvaFeeSettings(tariffDoc) {
+  const d = tariffDoc && typeof tariffDoc === 'object' ? tariffDoc : {};
+  const v = d.avaFeeBps;
+  const valid = typeof v === 'number' && Number.isInteger(v) && v >= AVA_FEE_BPS_MIN && v <= AVA_FEE_BPS_MAX;
+  return {
+    rateBps: valid ? v : AVA_FEE_RATE_BPS,
+    source: valid ? 'setting' : 'default',
+    settingsVersion: intOr(d.version, 0, 0, 1000000),
+  };
+}
+
 /**
  * AVA ulushi — SOF, DETERMINISTIK, BUTUN SO'M (D-REST-2, 8-qoida).
- *   amount = ceil(itemsTotal × 200 / 10000)
- * `ceil`: AVA o'ziga zarar qilmaydi, farq eng ko'pi 1 so'm (taxi T-4 bilan
- * bir xil). Faqat HAQIQIY musbat butun son qabul qilinadi (18-qoida).
+ *   amount = ceil(itemsTotal × rateBps / 10000)
+ * `settings` — `resolveAvaFeeSettings` natijasi; berilmasa standart 200 bps
+ * (eski chaqiruvlar o'zgarmaydi). `ceil`: AVA o'ziga zarar qilmaydi, farq
+ * eng ko'pi 1 so'm (taxi T-4 bilan bir xil). Faqat HAQIQIY musbat butun son
+ * qabul qilinadi (18-qoida). `version` — hisob-kitob (ledger kalit) versiyasi,
+ * O'ZGARMAYDI; sozlama versiyasi `settingsVersion`da (buyurtmaga muhrlanadi).
  */
-function computeAvaFee(itemsTotal) {
+function computeAvaFee(itemsTotal, settings) {
   const basis = typeof itemsTotal === 'number' ? itemsTotal : Number.NaN;
   if (!Number.isInteger(basis) || basis <= 0) {
     const e = new Error('itemsTotal musbat butun son bo\'lishi kerak');
     e.code = 'invalid-argument';
     throw e;
   }
-  return {
-    rateBps: AVA_FEE_RATE_BPS,
+  const s = settings && typeof settings === 'object' ? settings : null;
+  const rateBps = s && Number.isInteger(s.rateBps) && s.rateBps >= AVA_FEE_BPS_MIN && s.rateBps <= AVA_FEE_BPS_MAX
+    ? s.rateBps : AVA_FEE_RATE_BPS;
+  const product = basis * rateBps;
+  const out = {
+    rateBps,
     basis,
-    amount: Math.ceil((basis * AVA_FEE_RATE_BPS) / 10000),
+    amount: Math.floor(product / 10000) + (product % 10000 === 0 ? 0 : 1),
     version: AVA_FEE_VERSION,
   };
+  // Muhr FAQAT admin sozlamasi ishlaganda: standart (sozlamasiz) buyurtma
+  // hujjati AVVALGIDEK bir xil shaklda qoladi (orqaga moslik, 26-qoida).
+  if (s && s.source === 'setting') {
+    out.rateSource = 'setting';
+    out.settingsVersion = Number.isInteger(s.settingsVersion) ? s.settingsVersion : 0;
+  }
+  return out;
 }
 
 /**
@@ -167,6 +207,11 @@ module.exports = {
   BASE_METERS,
   ROUND_TO,
   DEFAULT_MAX_KM,
+  AVA_FEE_BPS_MIN,
+  AVA_FEE_BPS_MAX,
+  NIGHT_COEF_MIN,
+  NIGHT_COEF_MAX,
+  resolveAvaFeeSettings,
   // Admin tarif muharriri (`adminSetRestaurantDeliveryPrices`) berilmagan
   // maydonlar uchun shu standartlarni yozadi — hisob bilan bitta manba.
   DEFAULT_NIGHT_COEF: DEFAULT_NIGHT_PERMILLE / 1000,

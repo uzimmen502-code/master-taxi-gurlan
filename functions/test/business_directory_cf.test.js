@@ -14,7 +14,9 @@ if (!/^demo-/.test(process.env.GCLOUD_PROJECT)) throw new Error('demo-* loyiha k
 
 const fns = require('../index');
 const admin = require('firebase-admin');
-const { normalizeInput, changedKeys, CATEGORIES, LIMITS, EDITABLE } = require('../business_directory');
+const {
+  normalizeInput, changedKeys, CATEGORIES, LEGACY_CATEGORIES, categoryOf, LIMITS, EDITABLE,
+} = require('../business_directory');
 const { encode } = require('../geo_hash');
 
 const db = admin.firestore();
@@ -86,10 +88,28 @@ async function main() {
     assert.strictEqual(code({ regionId: 'r1', districtId: 'd1' }), 'OK');
   });
 
-  await check('P3 kategoriyalar ro\'yxati: 14 ta, takrorsiz, "other" bor (Dart paritet testi shu ro\'yxatni qulflaydi)', () => {
-    assert.strictEqual(CATEGORIES.length, 14);
-    assert.strictEqual(new Set(CATEGORIES).size, 14);
-    assert.ok(CATEGORIES.includes('other'));
+  await check('P3 kategoriyalar ro\'yxati: 30 ta (ega, 2026-11-01), takrorsiz, "other" oxirida (Dart paritet testi shu ro\'yxatni qulflaydi)', () => {
+    assert.strictEqual(CATEGORIES.length, 30);
+    assert.strictEqual(new Set(CATEGORIES).size, 30);
+    assert.strictEqual(CATEGORIES[0], 'retail');
+    assert.strictEqual(CATEGORIES[29], 'other');
+  });
+
+  await check('P3b eski 14 talik qiymatlar (eski APK) yangisiga o\'giriladi; noma\'lum - rad', () => {
+    const cat = (c) => normalizeInput({ ...BASE, category: c }, fail).category;
+    assert.strictEqual(cat('wholesale'), 'retail');
+    assert.strictEqual(cat('home_services'), 'personal');
+    assert.strictEqual(cat('leisure'), 'sport');
+    assert.strictEqual(cat('it_media'), 'it');
+    for (const c of ['retail', 'food', 'auto', 'manufacturing', 'personal', 'health', 'education', 'logistics', 'professional', 'other']) {
+      assert.strictEqual(cat(c), c, c); // eski ro'yxatdan qolganlari o'zgarmaydi
+    }
+    for (const c of CATEGORIES) assert.strictEqual(cat(c), c, c);
+    for (const v of Object.values(LEGACY_CATEGORIES)) assert.ok(CATEGORIES.includes(v), v);
+    for (const k of Object.keys(LEGACY_CATEGORIES)) assert.ok(!CATEGORIES.includes(k), k);
+    assert.strictEqual(categoryOf('constructor'), null); // prototip kalitlari o'tmaydi
+    assert.strictEqual(categoryOf('__proto__'), null);
+    assert.strictEqual(categoryOf(['retail']), null);
   });
 
   await check('P4 changedKeys: faqat tahrirlanadigan maydonlar', () => {
@@ -326,12 +346,22 @@ async function main() {
     assert.strictEqual((await items.doc('p_biz').get()).data().status, 'active');
   });
 
-  await check('M5 oddiy vitrina hujjatiga (businessId yo\'q) bu yo\'l bilan tegib bo\'lmaydi; yo\'q hujjat — rad', async () => {
-    await expectCode(call('adminUpdateBusinessProduct', { itemId: 'p_plain', title: 'Hack', reason: 'sinov' }, ADMIN), 'PRODUCT_NOT_FOUND');
-    await expectCode(call('adminDeleteBusinessProduct', { itemId: 'p_plain', reason: 'sinov' }, ADMIN), 'PRODUCT_NOT_FOUND');
+  // 2026-10-25 (ega: «админ назорати барча кириш йўлларида»): ягона омбор — Aholi bozorining yangi mahsulotlari
+  // businessId'siz; admin ularni ham bloklay/tahrirlay/o'chira olishi SHART (avval PRODUCT_NOT_FOUND edi).
+  await check('M5 oddiy (businessId\'siz) mahsulot: admin tahrirlaydi/bloklaydi/ochadi, audit businessId=\'\'; yo\'q hujjat — rad', async () => {
+    const r = await call('adminUpdateBusinessProduct', { itemId: 'p_plain', title: 'Oddiy vitrina (tuzatildi)', reason: 'imlo' }, ADMIN);
+    assert.strictEqual(r.changed, true);
+    await call('adminUpdateBusinessProduct', { itemId: 'p_plain', status: 'blocked', reason: 'qoida buzilgan' }, ADMIN);
+    assert.strictEqual((await items.doc('p_plain').get()).data().status, 'blocked');
+    await call('adminUpdateBusinessProduct', { itemId: 'p_plain', status: 'active', reason: 'tekshirildi' }, ADMIN);
+    const d = (await items.doc('p_plain').get()).data();
+    assert.deepStrictEqual([d.status, d.title], ['active', 'Oddiy vitrina (tuzatildi)']);
+    const a = await auditOf('business_product_update', 'p_plain');
+    assert.strictEqual(a.length, 3);
+    assert.ok(a.every((x) => x.businessId === ''));
     await expectCode(call('adminDeleteBusinessProduct', { itemId: 'yoq_hujjat', reason: 'sinov' }, ADMIN), 'PRODUCT_NOT_FOUND');
     await expectCode(call('adminDeleteBusinessProduct', { itemId: '../x', reason: 'sinov' }, ADMIN), 'PRODUCT_NOT_FOUND');
-    assert.strictEqual((await items.doc('p_plain').get()).data().title, 'Oddiy vitrina');
+    await expectCode(call('adminUpdateBusinessProduct', { itemId: 'yoq_hujjat', title: 'Hack', reason: 'sinov' }, ADMIN), 'PRODUCT_NOT_FOUND');
   });
 
   await check('M6 admin o\'chiradi: yumshoq (status deleted), audit snapshot bilan; takror — deleted:false, audit ortmaydi; o\'chirilganni tahrirlab bo\'lmaydi', async () => {
@@ -407,6 +437,395 @@ async function main() {
     await call('adminDeleteBusiness', { businessId: admBiz.businessId, reason: 'sinov' }, ADMIN);
     await fns.businessProductsCascade.run({ data: () => ({ ownerId: OWN }) }, { params: { businessId: admBiz.businessId } });
     assert.strictEqual(await status('k_t2'), 'deleted');
+  });
+
+  // ───────── Блоклаш: йўналиш дўкони ва бутун онлайн дўкон (эга қарори 2026-10-25) ─────────
+  const SELLER = '998914000001';
+  const ALIEN2 = '998914000002';
+  const shopDoc = async () => (await db.collection('tv_shops').doc(SELLER).get()).data();
+  const item = async (id) => (await items.doc(id).get()).data();
+  const inCell = async (cell) => (await db.collection('businesses').where('geohash4', 'in', [cell]).get()).docs.map((d) => d.id);
+  const CELL = encode(BASE.lat, BASE.lng, 4);
+  const b1 = (await call('upsertMyBusiness', { ...BASE, name: 'Sidabilla Kiyim', clientRequestId: 'blk-00000001' }, SELLER)).businessId;
+  const b2 = (await call('upsertMyBusiness', { ...BASE, name: 'Sidabilla Texnika', clientRequestId: 'blk-00000002' }, SELLER)).businessId;
+  const seed = db.batch();
+  seed.set(items.doc('s_own'), { ownerPhone: SELLER, title: 'O\'z do\'kon', status: 'active' });
+  seed.set(items.doc('s_own9'), { ownerPhone: SELLER.slice(3), title: '9 xonali egasi', status: 'active' });
+  seed.set(items.doc('s_b1a'), { ownerPhone: SELLER, title: 'Ko\'ylak', status: 'active', businessId: b1 });
+  seed.set(items.doc('s_b1p'), { ownerPhone: SELLER, title: 'Kutilmoqda', status: 'pending', businessId: b1 });
+  seed.set(items.doc('s_b1x'), { ownerPhone: SELLER, title: 'Admin bloklagan', status: 'blocked', businessId: b1 });
+  seed.set(items.doc('s_b1alien'), { ownerPhone: ALIEN2, title: 'Spoof', status: 'active', businessId: b1 });
+  seed.set(items.doc('s_b2'), { ownerPhone: SELLER, title: 'Televizor', status: 'active', businessId: b2 });
+  await seed.commit();
+
+  await check('B1 adminSetBusinessStatus: faqat admin; sabab, holat, mavjud obyekt shart', async () => {
+    await assert.rejects(call('adminSetBusinessStatus', { businessId: b1, status: 'blocked', reason: 'sinov' }, SELLER));
+    await expectCode(call('adminSetBusinessStatus', { businessId: b1, status: 'blocked', reason: '' }, ADMIN), 'REASON_REQUIRED');
+    await expectCode(call('adminSetBusinessStatus', { businessId: b1, status: 'hidden', reason: 'sinov' }, ADMIN), 'BUSINESS_STATUS_INVALID');
+    await expectCode(call('adminSetBusinessStatus', { businessId: 'yoq_obyekt', status: 'blocked', reason: 'sinov' }, ADMIN), 'BUSINESS_NOT_FOUND');
+    assert.strictEqual((await biz(b1)).status, 'active');
+  });
+
+  await check('B2 yo\'nalishni bloklash: xaritadan yo\'qoladi (geohash yo\'q), faqat egasining FAOL mahsulotlari bloklanadi + belgi; audit', async () => {
+    assert.ok((await inCell(CELL)).includes(b1));
+    const r = await call('adminSetBusinessStatus', { businessId: b1, status: 'blocked', reason: 'soxta do\'kon' }, ADMIN);
+    assert.deepStrictEqual([r.changed, r.products], [true, 1]);
+    const d = await biz(b1);
+    assert.deepStrictEqual([d.status, d.blockReason, d.blockedBy, d.geohash4, d.geohash], ['blocked', 'soxta do\'kon', ADMIN, undefined, undefined]);
+    assert.deepStrictEqual([d.lat, d.lng, d.blockedGeo], [undefined, undefined, { lat: BASE.lat, lng: BASE.lng }],
+      'koordinatasiz hujjatni eski APK umumiy ko\'rinishda ham chizmaydi (Business.tryFromMap -> null); joyi saqlanadi');
+    assert.ok(!(await inCell(CELL)).includes(b1), 'xarita so\'rovi (eski APK ham) uni topmaydi');
+    assert.ok((await inCell(CELL)).includes(b2), 'boshqa yo\'nalish ko\'rinib turadi');
+    assert.deepStrictEqual([(await item('s_b1a')).status, (await item('s_b1a')).blockedByParent], ['blocked', `business:${b1}`]);
+    assert.strictEqual((await item('s_b1p')).status, 'pending');
+    assert.strictEqual((await item('s_b1x')).blockedByParent, undefined, 'admin alohida bloklagani belgisiz qoladi');
+    assert.strictEqual((await item('s_b1alien')).status, 'active', 'begona "spoof" hujjatga tegilmaydi');
+    assert.strictEqual((await item('s_b2')).status, 'active');
+    assert.strictEqual((await item('s_own')).status, 'active');
+    assert.strictEqual((await auditOf('business_block', b1)).length, 1);
+  });
+
+  await check('B3 takror bloklash: changed:false, audit ortmaydi, mahsulotlar qayta yozilmaydi (21-band)', async () => {
+    const r = await call('adminSetBusinessStatus', { businessId: b1, status: 'blocked', reason: 'soxta do\'kon' }, ADMIN);
+    assert.deepStrictEqual([r.changed, r.products], [false, 0]);
+    assert.strictEqual((await auditOf('business_block', b1)).length, 1);
+  });
+
+  await check('B4 bloklangan obyekt: egasi tahrirlasa ham xaritaga qaytmaydi; egasi o\'chira olmaydi', async () => {
+    const same = await call('upsertMyBusiness', { ...BASE, businessId: b1, name: 'Sidabilla Kiyim' }, SELLER);
+    assert.strictEqual(same.changed, false, 'blokda ham o\'zgarishsiz tahrir — changed:false (joy blockedGeo\'dan solishtiriladi)');
+    const e = await call('upsertMyBusiness', { ...BASE, businessId: b1, name: 'Yangi nom', lat: 41.3, lng: 69.2 }, SELLER);
+    assert.strictEqual(e.changed, true);
+    const d = await biz(b1);
+    assert.deepStrictEqual([d.name, d.status, d.geohash4, d.lat, d.blockedGeo], ['Yangi nom', 'blocked', undefined, undefined, { lat: 41.3, lng: 69.2 }]);
+    const a = await call('adminUpdateBusiness', { ...BASE, businessId: b1, name: 'Admin nomi', lat: 41.3, lng: 69.2, reason: 'imlo' }, ADMIN);
+    assert.strictEqual(a.changed, true);
+    assert.deepStrictEqual([(await biz(b1)).lat, (await biz(b1)).geohash4], [undefined, undefined], 'admin tahriri ham xaritaga qaytarmaydi');
+    await expectCode(call('deleteMyBusiness', { businessId: b1 }, SELLER), 'BUSINESS_BLOCKED');
+    assert.ok(await biz(b1));
+  });
+
+  await check('B5 mahsulotni ochish: yo\'nalishi bloklangan bo\'lsa — PARENT_BLOCKED; admin alohida bloklasa belgi olinadi', async () => {
+    await expectCode(call('adminUpdateBusinessProduct', { itemId: 's_b1a', status: 'active', reason: 'sinov' }, ADMIN), 'PARENT_BLOCKED');
+    assert.strictEqual((await item('s_b1a')).status, 'blocked');
+    await items.doc('s_b1b').set({ ownerPhone: SELLER, title: 'Shim', status: 'blocked', businessId: b1, blockedByParent: `business:${b1}` });
+    const r = await call('adminUpdateBusinessProduct', { itemId: 's_b1b', status: 'blocked', reason: 'o\'zi ham buzilgan' }, ADMIN);
+    assert.strictEqual(r.changed, true);
+    assert.strictEqual((await item('s_b1b')).blockedByParent, undefined);
+  });
+
+  await check('B6 yo\'nalishni ochish: geohash koordinatadan qaytadi, faqat shu belgili mahsulotlar ochiladi; audit', async () => {
+    const r = await call('adminSetBusinessStatus', { businessId: b1, status: 'active', reason: 'tekshirildi' }, ADMIN);
+    assert.deepStrictEqual([r.changed, r.products], [true, 1]);
+    const d = await biz(b1);
+    assert.deepStrictEqual([d.status, d.geohash4, d.blockReason, d.blockedBy], ['active', encode(41.3, 69.2, 4), undefined, undefined]);
+    assert.deepStrictEqual([d.lat, d.lng, d.blockedGeo, d.geohash], [41.3, 69.2, undefined, encode(41.3, 69.2, 9)]);
+    assert.deepStrictEqual([(await item('s_b1a')).status, (await item('s_b1a')).blockedByParent], ['active', undefined]);
+    assert.strictEqual((await item('s_b1x')).status, 'blocked', 'admin alohida bloklagani qoladi');
+    assert.strictEqual((await item('s_b1b')).status, 'blocked', 'alohida bloklangan (belgisi olingan) qoladi');
+    assert.strictEqual((await auditOf('business_unblock', b1)).length, 1);
+  });
+
+  await check('S1 adminSetShopStatus: faqat admin; telefon, sabab, holat shart; yo\'q do\'konni ochish — SHOP_NOT_FOUND', async () => {
+    await assert.rejects(call('adminSetShopStatus', { ownerPhone: SELLER, status: 'blocked', reason: 'sinov' }, SELLER));
+    await expectCode(call('adminSetShopStatus', { ownerPhone: '123', status: 'blocked', reason: 'sinov' }, ADMIN), 'SHOP_OWNER_INVALID');
+    await expectCode(call('adminSetShopStatus', { ownerPhone: SELLER, status: 'x', reason: 'sinov' }, ADMIN), 'BUSINESS_STATUS_INVALID');
+    await expectCode(call('adminSetShopStatus', { ownerPhone: SELLER, status: 'active', reason: 'sinov' }, ADMIN), 'SHOP_NOT_FOUND');
+    assert.strictEqual(await shopDoc(), undefined);
+  });
+
+  await check('S2 butun do\'konni bloklash: tv_shops yaratiladi (faqat yo\'nalishlari bor egaga ham), barcha yo\'nalish + mahsulot bloklanadi', async () => {
+    const r = await call('adminSetShopStatus', { ownerPhone: '+998 91 400-00-01', status: 'blocked', reason: 'firibgarlik' }, ADMIN);
+    assert.strictEqual(r.changed, true);
+    assert.strictEqual(r.businesses, 2);
+    const s = await shopDoc();
+    assert.deepStrictEqual([s.status, s.ownerPhone, s.blockReason], ['blocked', SELLER, 'firibgarlik']);
+    for (const id of [b1, b2]) {
+      const d = await biz(id);
+      assert.deepStrictEqual([d.status, d.blockedByParent, d.geohash4, d.lat], ['blocked', 'shop', undefined, undefined]);
+      assert.ok(d.blockedGeo && typeof d.blockedGeo.lat === 'number');
+    }
+    assert.deepStrictEqual([(await item('s_own')).status, (await item('s_own')).blockedByParent], ['blocked', 'shop']);
+    assert.strictEqual((await item('s_own9')).status, 'blocked', '9 xonali egasi yozuvi ham');
+    assert.strictEqual((await item('s_b2')).blockedByParent, 'shop');
+    assert.strictEqual((await item('s_b1x')).blockedByParent, undefined, 'avval bloklangani belgisiz qoladi');
+    assert.strictEqual((await item('s_b1alien')).status, 'active', 'begona egasi');
+    assert.strictEqual((await auditOf('shop_block', SELLER)).length, 1);
+  });
+
+  await check('S3 do\'kon bloklanganda: yangi yo\'nalish ochib bo\'lmaydi, yo\'nalish/mahsulotni alohida ochib bo\'lmaydi', async () => {
+    await expectCode(call('upsertMyBusiness', { ...BASE, clientRequestId: 'blk-00000003' }, SELLER), 'SHOP_BLOCKED');
+    await expectCode(call('adminSetBusinessStatus', { businessId: b2, status: 'active', reason: 'sinov' }, ADMIN), 'SHOP_BLOCKED');
+    await expectCode(call('adminUpdateBusinessProduct', { itemId: 's_own', status: 'active', reason: 'sinov' }, ADMIN), 'PARENT_BLOCKED');
+  });
+
+  await check('S4 do\'kon blokida yo\'nalishni admin alohida bloklasa, do\'kon ochilganda o\'sha yo\'nalish va uning mahsuloti bloklangan qoladi', async () => {
+    const x = await call('adminSetBusinessStatus', { businessId: b2, status: 'blocked', reason: 'alohida buzilish' }, ADMIN);
+    assert.strictEqual(x.changed, true);
+    assert.strictEqual((await biz(b2)).blockedByParent, undefined);
+    const r = await call('adminSetShopStatus', { ownerPhone: SELLER, status: 'active', reason: 'tekshirildi' }, ADMIN);
+    assert.strictEqual(r.changed, true);
+    assert.strictEqual((await shopDoc()).status, 'active');
+    const d1 = await biz(b1);
+    assert.deepStrictEqual([d1.status, d1.geohash4, d1.lat, d1.blockedGeo], ['active', encode(41.3, 69.2, 4), 41.3, undefined]);
+    assert.strictEqual((await biz(b2)).status, 'blocked');
+    assert.deepStrictEqual((await biz(b2)).blockedGeo, { lat: BASE.lat, lng: BASE.lng }, 'alohida bloklashda joyi yo\'qolmagan');
+    assert.deepStrictEqual([(await item('s_own')).status, (await item('s_own')).blockedByParent], ['active', undefined]);
+    assert.strictEqual((await item('s_own9')).status, 'active');
+    assert.deepStrictEqual([(await item('s_b2')).status, (await item('s_b2')).blockedByParent], ['blocked', `business:${b2}`]);
+    assert.strictEqual((await item('s_b1x')).status, 'blocked');
+    const y = await call('adminSetBusinessStatus', { businessId: b2, status: 'active', reason: 'tekshirildi' }, ADMIN);
+    assert.strictEqual(y.products, 1);
+    assert.strictEqual((await item('s_b2')).status, 'active');
+  });
+
+  await check('S5 takror ochish: changed:false, kaskad 0, audit ortmaydi', async () => {
+    const r = await call('adminSetShopStatus', { ownerPhone: SELLER, status: 'active', reason: 'tekshirildi' }, ADMIN);
+    assert.deepStrictEqual([r.changed, r.businesses, r.products], [false, 0, 0]);
+    assert.strictEqual((await auditOf('shop_unblock', SELLER)).length, 1);
+  });
+
+  // ───────── Харидор шикояти (submitShopComplaint) ─────────
+  const BUYER = '998914000009';
+  const reportsOf = async (who) => (await db.collection('reports').where('reporterId', '==', who).get()).docs.map((x) => x.data());
+  await items.doc('c_item').set({ ownerPhone: SELLER, title: 'Shikoyatli mahsulot', status: 'active', businessId: b1 });
+  await items.doc('c_gone').set({ ownerPhone: SELLER, title: 'O\'chgan', status: 'deleted' });
+
+  await check('R1 shikoyat tekshiruvi: tur, sabab, loginsiz, o\'ziga, yo\'q/o\'chgan mahsulot, noto\'g\'ri telefon', async () => {
+    await assert.rejects(fns.submitShopComplaint.run({ targetType: 'shop_item', targetId: 'c_item', reason: 'spam' }, {}));
+    await expectCode(call('submitShopComplaint', { targetType: 'ad', targetId: 'c_item', reason: 'spam' }, BUYER), 'COMPLAINT_TARGET_INVALID');
+    await expectCode(call('submitShopComplaint', { targetType: 'shop_item', targetId: 'c_item', reason: 'x' }, BUYER), 'REASON_REQUIRED');
+    await expectCode(call('submitShopComplaint', { targetType: 'shop_item', targetId: 'c_item', reason: 'spam' }, SELLER), 'COMPLAINT_OWN');
+    await expectCode(call('submitShopComplaint', { targetType: 'shop', targetId: SELLER, reason: 'spam' }, SELLER), 'COMPLAINT_OWN');
+    await expectCode(call('submitShopComplaint', { targetType: 'shop_item', targetId: 'yoq_hujjat', reason: 'spam' }, BUYER), 'PRODUCT_NOT_FOUND');
+    await expectCode(call('submitShopComplaint', { targetType: 'shop_item', targetId: 'c_gone', reason: 'spam' }, BUYER), 'PRODUCT_NOT_FOUND');
+    await expectCode(call('submitShopComplaint', { targetType: 'shop', targetId: '123', reason: 'spam' }, BUYER), 'SHOP_OWNER_INVALID');
+    assert.strictEqual((await reportsOf(BUYER)).length, 0);
+  });
+
+  await check('R2 mahsulot shikoyati: reports (shop_content) egasi/yo\'nalishi/nomi bilan; takror — duplicate, yangi hujjat yo\'q', async () => {
+    const r = await call('submitShopComplaint', { targetType: 'shop_item', targetId: 'c_item', reason: 'Aldamchi e\'lon' }, BUYER);
+    assert.strictEqual(r.ok, true);
+    const d = (await db.collection('reports').doc(r.reportId).get()).data();
+    assert.deepStrictEqual(
+      [d.type, d.targetType, d.targetId, d.ownerPhone, d.businessId, d.title, d.reporterId, d.status],
+      ['shop_content', 'shop_item', 'c_item', SELLER, b1, 'Shikoyatli mahsulot', BUYER, 'open'],
+    );
+    const again = await call('submitShopComplaint', { targetType: 'shop_item', targetId: 'c_item', reason: 'Spam' }, BUYER);
+    assert.deepStrictEqual([again.duplicate, again.reportId], [true, r.reportId]);
+    assert.strictEqual((await reportsOf(BUYER)).length, 1);
+  });
+
+  await check('R3 do\'kon shikoyati telefon bo\'yicha; kunlik chegara (20) — keyingisi COMPLAINT_LIMIT', async () => {
+    const r = await call('submitShopComplaint', { targetType: 'shop', targetId: '+998 91 400-00-01', reason: 'Firibgar' }, BUYER);
+    assert.strictEqual((await db.collection('reports').doc(r.reportId).get()).data().targetId, SELLER);
+    const { COMPLAINT_DAILY_LIMIT } = require('../business_directory');
+    for (let i = 2; i < COMPLAINT_DAILY_LIMIT; i += 1) {
+      await call('submitShopComplaint', { targetType: 'shop', targetId: `9989150000${String(i).padStart(2, '0')}`, reason: 'spam' }, BUYER);
+    }
+    assert.strictEqual((await reportsOf(BUYER)).length, COMPLAINT_DAILY_LIMIT);
+    await expectCode(call('submitShopComplaint', { targetType: 'shop', targetId: '998915000099', reason: 'spam' }, BUYER), 'COMPLAINT_LIMIT');
+  });
+
+  // ───────── Фақат онлайн йўналиш (жисмоний жойи йўқ) ─────────
+  const ONL = '998914000020';
+  const { lat: _l, lng: _g, ...NOLOC } = BASE; // eslint-disable-line no-unused-vars
+  await check('O1 online:true — koordinatasiz yaratiladi; lat/lng/geohash YO\'Q (xaritaga tushmaydi); yuborilgan koordinata e\'tiborsiz', async () => {
+    const r = await call('upsertMyBusiness', { ...NOLOC, online: true, clientRequestId: 'onl-00000001' }, ONL);
+    const d = await biz(r.businessId);
+    assert.deepStrictEqual([d.online, d.lat, d.lng, d.geohash, d.geohash4, d.status], [true, undefined, undefined, undefined, undefined, 'active']);
+    const r2 = await call('upsertMyBusiness', { ...BASE, online: true, clientRequestId: 'onl-00000002' }, ONL);
+    assert.strictEqual((await biz(r2.businessId)).lat, undefined, 'online — uy manzili nuqta bo\'lib qolmaydi');
+    await expectCode(call('upsertMyBusiness', { ...NOLOC, clientRequestId: 'onl-00000003' }, ONL), 'BUSINESS_LOCATION_INVALID');
+  });
+
+  await check('O2 online -> jismoniy: koordinata va geohash yoziladi, online o\'chadi; qaytib online: joy maydonlari o\'chadi', async () => {
+    const id = `${ONL}_onl-00000001`;
+    const same = await call('upsertMyBusiness', { ...NOLOC, online: true, businessId: id }, ONL);
+    assert.strictEqual(same.changed, false, 'o\'zgarishsiz');
+    await call('upsertMyBusiness', { ...BASE, businessId: id }, ONL);
+    let d = await biz(id);
+    assert.deepStrictEqual([d.online, d.lat, d.geohash4], [undefined, BASE.lat, encode(BASE.lat, BASE.lng, 4)]);
+    await call('upsertMyBusiness', { ...NOLOC, online: true, businessId: id }, ONL);
+    d = await biz(id);
+    assert.deepStrictEqual([d.online, d.lat, d.lng, d.geohash, d.geohash4], [true, undefined, undefined, undefined, undefined]);
+  });
+
+  await check('O3 online yo\'nalish bloklanadi/ochiladi (koordinatasiz ham); blokda online<->jismoniy almashmaydi', async () => {
+    const id = `${ONL}_onl-00000001`;
+    await call('adminSetBusinessStatus', { businessId: id, status: 'blocked', reason: 'sinov' }, ADMIN);
+    let d = await biz(id);
+    assert.deepStrictEqual([d.status, d.blockedGeo, d.online], ['blocked', undefined, true]);
+    const e = await call('upsertMyBusiness', { ...NOLOC, online: true, businessId: id, name: 'Yangi online' }, ONL);
+    assert.strictEqual(e.changed, true);
+    await expectCode(call('upsertMyBusiness', { ...BASE, businessId: id }, ONL), 'BUSINESS_BLOCKED');
+    await call('adminSetBusinessStatus', { businessId: id, status: 'active', reason: 'sinov' }, ADMIN);
+    d = await biz(id);
+    assert.deepStrictEqual([d.status, d.lat, d.geohash4, d.online, d.name], ['active', undefined, undefined, true, 'Yangi online']);
+  });
+
+  // ───────── Филиаллар (branchOf) ─────────
+  const BR = '998914000030';
+  const BR2 = '998914000031';
+  const main = (await call('upsertMyBusiness', { ...BASE, name: 'Asosiy', clientRequestId: 'brn-00000001' }, BR)).businessId;
+  const alienMain = (await call('upsertMyBusiness', { ...BASE, name: 'Begona', clientRequestId: 'brn-00000002' }, BR2)).businessId;
+  let branch;
+  await check('F1 filial: o\'z yo\'nalishiga — qabul; begona, filialning filiali, o\'zi, online, yo\'q ota — rad; filiali bor obyekt filial bo\'lolmaydi', async () => {
+    const r = await call('upsertMyBusiness', { ...BASE, name: 'Filial 1', lat: 41.5, lng: 60.5, branchOf: main, clientRequestId: 'brn-00000003' }, BR);
+    branch = r.businessId;
+    assert.strictEqual((await biz(branch)).branchOf, main);
+    await expectCode(call('upsertMyBusiness', { ...BASE, branchOf: alienMain, clientRequestId: 'brn-00000004' }, BR), 'BRANCH_INVALID');
+    await expectCode(call('upsertMyBusiness', { ...BASE, branchOf: branch, clientRequestId: 'brn-00000005' }, BR), 'BRANCH_INVALID');
+    await expectCode(call('upsertMyBusiness', { ...BASE, branchOf: 'yoq_obyekt', clientRequestId: 'brn-00000006' }, BR), 'BRANCH_INVALID');
+    await expectCode(call('upsertMyBusiness', { ...NOLOC, online: true, branchOf: main, clientRequestId: 'brn-00000007' }, BR), 'BRANCH_INVALID');
+    await expectCode(call('upsertMyBusiness', { ...BASE, name: 'Filial 1', branchOf: branch, businessId: branch }, BR), 'BRANCH_INVALID');
+    const other = (await call('upsertMyBusiness', { ...BASE, name: 'Boshqa', clientRequestId: 'brn-00000008' }, BR)).businessId;
+    await expectCode(call('upsertMyBusiness', { ...BASE, name: 'Asosiy', branchOf: other, businessId: main }, BR), 'BRANCH_NESTED');
+    // filiallikdan chiqarish: branchOf o'chadi
+    const solo = (await call('upsertMyBusiness', { ...BASE, name: 'Vaqtincha', branchOf: main, clientRequestId: 'brn-00000009' }, BR)).businessId;
+    await call('upsertMyBusiness', { ...BASE, name: 'Vaqtincha', businessId: solo }, BR);
+    assert.strictEqual((await biz(solo)).branchOf, undefined);
+  });
+
+  await check('F2 ota bloklansa filial ham (xaritadan yo\'qoladi); ota blokda filialni alohida ochib bo\'lmaydi; ota ochilsa filial qaytadi', async () => {
+    const r = await call('adminSetBusinessStatus', { businessId: main, status: 'blocked', reason: 'sinov' }, ADMIN);
+    assert.ok(r.branches >= 1);
+    let f = await biz(branch);
+    assert.deepStrictEqual([f.status, f.blockedByParent, f.geohash4, f.lat], ['blocked', `business:${main}`, undefined, undefined]);
+    await expectCode(call('adminSetBusinessStatus', { businessId: branch, status: 'active', reason: 'sinov' }, ADMIN), 'PARENT_BLOCKED');
+    await call('adminSetBusinessStatus', { businessId: main, status: 'active', reason: 'sinov' }, ADMIN);
+    f = await biz(branch);
+    assert.deepStrictEqual([f.status, f.blockedByParent, f.lat, f.geohash4], ['active', undefined, 41.5, encode(41.5, 60.5, 4)]);
+  });
+
+  await check('F3 do\'kon blokida ota alohida bloklansa: do\'kon ochilganda filial ota belgisiga o\'tadi; ota ochilsa qaytadi', async () => {
+    await call('adminSetShopStatus', { ownerPhone: BR, status: 'blocked', reason: 'sinov' }, ADMIN);
+    assert.strictEqual((await biz(branch)).blockedByParent, 'shop');
+    await call('adminSetBusinessStatus', { businessId: main, status: 'blocked', reason: 'alohida' }, ADMIN);
+    await call('adminSetShopStatus', { ownerPhone: BR, status: 'active', reason: 'sinov' }, ADMIN);
+    let f = await biz(branch);
+    assert.deepStrictEqual([f.status, f.blockedByParent], ['blocked', `business:${main}`]);
+    await call('adminSetBusinessStatus', { businessId: main, status: 'active', reason: 'sinov' }, ADMIN);
+    f = await biz(branch);
+    assert.strictEqual(f.status, 'active');
+  });
+
+  await check('F4 ota o\'chirilsa filiallar mustaqil yo\'nalish bo\'ladi (branchOf olinadi)', async () => {
+    const snapLike = { data: () => ({ ownerId: BR }) };
+    await call('deleteMyBusiness', { businessId: main }, BR);
+    await fns.businessProductsCascade.run(snapLike, { params: { businessId: main } });
+    const f = await biz(branch);
+    assert.deepStrictEqual([f.branchOf, f.status], [undefined, 'active']);
+  });
+
+  // ── «Менинг онлайн дўконим»ни ўчириш: БАРЧАСИ огоҳлантириш билан (эга, 2026-10-26) ──
+  const MS = '998912000077';
+  await db.collection('users').doc(MS).set({ role: 'user' });
+  const msItem = (id, over = {}) => db.collection('tv_shop_items').doc(id).set({
+    ownerPhone: MS, title: id, status: 'active', price: 0, ...over,
+  });
+  await db.collection('tv_shops').doc(MS).set({ ownerPhone: MS, name: 'Asosiy' });
+  const msShop = (await call('upsertMyBusiness', { ...BASE, category: 'retail', name: 'Ichki do‘kon', clientRequestId: 'ms-req-1' }, MS)).businessId;
+  const msCafe = (await call('upsertMyBusiness', { ...BASE, category: 'food', name: 'Kafe', clientRequestId: 'ms-req-2' }, MS)).businessId;
+  await msItem('ms_own1');
+  await msItem('ms_own2', { ownerPhone: MS.slice(3) }); // эски 9 рақамли ёзув ҳам эганики
+  await msItem('ms_inner', { businessId: msShop });
+  await msItem('ms_cafe', { businessId: msCafe });
+  await msItem('ms_other', { ownerPhone: OTHER });
+  const st = async (id) => (await db.collection('tv_shop_items').doc(id).get()).data();
+
+  await check('M1 hammasi o\'chadi: asosiy do\'kon + ichki do\'kon (+mahsulotlari), kafe va begona tegilmaydi', async () => {
+    const r = await call('deleteMyMainShop', {}, MS);
+    assert.deepStrictEqual([r.ok, r.deleted, r.innerShops, r.products], [true, true, 1, 2]);
+    assert.strictEqual((await db.collection('tv_shops').doc(MS).get()).exists, false);
+    assert.strictEqual(await biz(msShop), undefined, 'ichki do\'kon o\'chdi');
+    assert.ok(await biz(msCafe), 'do\'kon bo\'lmagan obyekt (kafe) qoladi');
+    assert.deepStrictEqual([(await st('ms_own1')).status, (await st('ms_own1')).deletedBy], ['deleted', 'system:main_shop_deleted']);
+    assert.strictEqual((await st('ms_own2')).status, 'deleted');
+    // Ichki do'kon mahsulotlari — o'chirish triggeri (bu yerda qo'lda chaqiriladi, F4 kabi).
+    await fns.businessProductsCascade.run({ data: () => ({ ownerId: MS }) }, { params: { businessId: msShop } });
+    assert.strictEqual((await st('ms_inner')).status, 'deleted', 'ichki do\'kon mahsuloti');
+    assert.strictEqual((await st('ms_cafe')).status, 'active', 'kafe mahsuloti tegilmaydi');
+    assert.strictEqual((await st('ms_other')).status, 'active', 'begona mahsulot tegilmaydi');
+  });
+
+  await check('M2 qayta chaqirish — zararsiz (idempotent)', async () => {
+    const r = await call('deleteMyMainShop', {}, MS);
+    assert.deepStrictEqual([r.deleted, r.innerShops, r.products], [false, 0, 0]);
+  });
+
+  await check('M3 ichki do\'kon bloklangan — SHOP_BLOCKED, HECH NARSA o\'chmaydi', async () => {
+    const IB = '998912000079';
+    await db.collection('users').doc(IB).set({ role: 'user' });
+    await db.collection('tv_shops').doc(IB).set({ ownerPhone: IB, name: 'Asosiy2' });
+    const inner = (await call('upsertMyBusiness', { ...BASE, category: 'wholesale', name: 'Ombor', clientRequestId: 'ib-req-1' }, IB)).businessId;
+    await call('adminSetBusinessStatus', { businessId: inner, status: 'blocked', reason: 'sinov' }, ADMIN);
+    await expectCode(call('deleteMyMainShop', {}, IB), 'SHOP_BLOCKED');
+    assert.ok((await db.collection('tv_shops').doc(IB).get()).exists);
+    assert.ok(await biz(inner));
+  });
+
+  await check('M4 asosiy do\'kon bloklangan — SHOP_BLOCKED; telefonsiz — unauthenticated', async () => {
+    const BL = '998912000078';
+    await db.collection('users').doc(BL).set({ role: 'user' });
+    await db.collection('tv_shops').doc(BL).set({ ownerPhone: BL, name: 'Blok', status: 'blocked' });
+    await expectCode(call('deleteMyMainShop', {}, BL), 'SHOP_BLOCKED');
+    assert.ok((await db.collection('tv_shops').doc(BL).get()).exists);
+    await assert.rejects(fns.deleteMyMainShop.run({}, { auth: null }), /Authentication required/);
+  });
+
+  // ── L: овқатланиш объекти ↔ ресторан бўлими (эга, 2026-11-03: занжир + битта белги) ──
+  const FOOD = { ...BASE, category: 'food', subtype: 'Кафе', name: 'Gurlan Kafe' };
+  const L_OWN = '998912000061';
+  const L_OTH = '998912000062';
+  await db.collection('users').doc(L_OWN).set({ role: 'user' });
+  await db.collection('users').doc(L_OTH).set({ role: 'user' });
+  const lFood = (await call('upsertMyBusiness', { ...FOOD, clientRequestId: 'link-food-1' }, L_OWN)).businessId;
+  const lFood2 = (await call('upsertMyBusiness', { ...FOOD, name: 'Kafe 2', clientRequestId: 'link-food-2' }, L_OWN)).businessId;
+  const lAuto = (await call('upsertMyBusiness', { ...BASE, clientRequestId: 'link-auto-1' }, L_OWN)).businessId;
+  const lOnline = (await call('upsertMyBusiness', { ...FOOD, online: true, clientRequestId: 'link-onl-1' }, L_OWN)).businessId;
+  await db.collection('restaurants').doc('rst_own_1').set({ ownerUid: L_OWN, name: 'Gurlan Kafe', status: 'approved' });
+  await db.collection('restaurants').doc('rst_oth_1').set({ ownerUid: L_OTH, name: 'Begona', status: 'approved' });
+
+  await check('L1 egasi o\'z food obyektini o\'z restoraniga ulaydi; qayta — changed:false (idempotent)', async () => {
+    const r1 = await call('linkBusinessRestaurant', { businessId: lFood, restaurantId: 'rst_own_1' }, L_OWN);
+    assert.deepStrictEqual([r1.ok, r1.changed], [true, true]);
+    assert.strictEqual((await biz(lFood)).restaurantId, 'rst_own_1');
+    const r2 = await call('linkBusinessRestaurant', { businessId: lFood, restaurantId: 'rst_own_1' }, L_OWN);
+    assert.strictEqual(r2.changed, false);
+  });
+
+  await check('L2 egasi tahrir qilsa (upsertMyBusiness) restaurantId saqlanadi', async () => {
+    await call('upsertMyBusiness', { ...FOOD, businessId: lFood, description: 'yangi tavsif' }, L_OWN);
+    const b = await biz(lFood);
+    assert.strictEqual(b.description, 'yangi tavsif');
+    assert.strictEqual(b.restaurantId, 'rst_own_1');
+  });
+
+  await check('L3 begona restoran — RESTAURANT_NOT_FOUND; begona obyekt — BUSINESS_NOT_FOUND', async () => {
+    await expectCode(call('linkBusinessRestaurant', { businessId: lFood2, restaurantId: 'rst_oth_1' }, L_OWN), 'RESTAURANT_NOT_FOUND');
+    await expectCode(call('linkBusinessRestaurant', { businessId: lFood2, restaurantId: 'rst_own_1' }, L_OTH), 'BUSINESS_NOT_FOUND');
+    await expectCode(call('linkBusinessRestaurant', { businessId: lFood2, restaurantId: 'yoq_rst' }, L_OWN), 'RESTAURANT_NOT_FOUND');
+    assert.strictEqual((await biz(lFood2)).restaurantId, undefined);
+  });
+
+  await check('L4 bitta menyu ikki obyektga ulanmaydi — RESTAURANT_ALREADY_LINKED', async () => {
+    await expectCode(call('linkBusinessRestaurant', { businessId: lFood2, restaurantId: 'rst_own_1' }, L_OWN), 'RESTAURANT_ALREADY_LINKED');
+  });
+
+  await check('L5 food bo\'lmagan / online / bloklangan obyekt — rad', async () => {
+    await db.collection('restaurants').doc('rst_own_2').set({ ownerUid: L_OWN, name: 'Ikkinchi', status: 'approved' });
+    await expectCode(call('linkBusinessRestaurant', { businessId: lAuto, restaurantId: 'rst_own_2' }, L_OWN), 'BUSINESS_NOT_FOOD');
+    await expectCode(call('linkBusinessRestaurant', { businessId: lOnline, restaurantId: 'rst_own_2' }, L_OWN), 'BUSINESS_ONLINE');
+    await call('adminSetBusinessStatus', { businessId: lFood2, status: 'blocked', reason: 'sinov' }, ADMIN);
+    await expectCode(call('linkBusinessRestaurant', { businessId: lFood2, restaurantId: 'rst_own_2' }, L_OWN), 'BUSINESS_BLOCKED');
+  });
+
+  await check('L6 noto\'g\'ri ID / telefonsiz — rad', async () => {
+    await expectCode(call('linkBusinessRestaurant', { businessId: '../x', restaurantId: 'rst_own_2' }, L_OWN), 'BUSINESS_NOT_FOUND');
+    await expectCode(call('linkBusinessRestaurant', { businessId: lFood, restaurantId: 'a/b' }, L_OWN), 'RESTAURANT_NOT_FOUND');
+    await assert.rejects(fns.linkBusinessRestaurant.run({ businessId: lFood, restaurantId: 'rst_own_2' }, { auth: null }),
+      /Authentication required/);
   });
 
   const failed = results.filter((r) => !r).length;

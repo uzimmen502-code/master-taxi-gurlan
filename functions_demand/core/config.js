@@ -49,13 +49,6 @@ const DEFAULTS = {
   /** dispatch | quote | alert | recurring */
   mode: 'quote',
 
-  /**
-   * Hududni yoqish uchun KAMIDA nechta ishlay oladigan taklifchi kerak
-   * (variant A, ega 2026-10-20: N = 5). Admin «Talab yadrosi» shuni SERVERDA
-   * tekshiradi — ekran emas.
-   */
-  enableMinProviders: 5,
-
   // ─── Matching (Т-18) ────────────────────────────────────────────────
   /** Mos hisoblanish chegarasi. Bundan past nomzod MOS EMAS. */
   minScore: 0.35,
@@ -125,23 +118,6 @@ const DEFAULTS = {
    * o'chiradi. KO'RINISHGA tegilmaydi (inbox limitsiz), faqat PUSH chegaralanadi.
    */
   push: {
-    /**
-     * HAR MOSLIK UCHUN PUSH CHEGARASI (ega 2026-10-20, variant 3).
-     *
-     * «Push faqat talab taklifchiga mantiqan ~90 % mos bo'lsa ketsin.»
-     * `score` formula (kategoriya 40 % + yaqinlik 40 % + manba 20 %), «necha
-     * foiz mantiqan mos» EMAS: xizmat modulida eng yuqori score ≈ 0.85, ya'ni
-     * 0.90 ni to'g'ridan-to'g'ri qo'yib bo'lmaydi (hech qachon push ketmasdi).
-     * Shuning uchun chegara 50 moslikni qo'lda baholashdan O'LCHAB tanlanadi
-     * (`tools/calibrate_push_threshold.js`): qaysi score'dan yuqorisi «mantiqan
-     * mos» aniqligi >= 90 % bergan bo'lsa, shu qiymat.
-     *
-     *   null  — KALIBROVKA YO'Q: quote/alert/recurring push UMUMAN ketmaydi
-     *           (`score_not_calibrated`); dispatch (kuryer) ta'sirlanmaydi.
-     *   0..1  — score shundan past bo'lsa push YO'Q (`below_min_score`), lekin
-     *           moslik `demand_matches`da KO'RINADI (ko'rinish va push alohida).
-     */
-    minScore: null,
     quote: { perHour: 5, perDay: 20 },
     alert: { perHour: 3, perDay: 10 },
     /** dispatch — bitta kuryer kerak, har soniya muhim. Limit yo'q. */
@@ -203,13 +179,21 @@ const DEFAULTS = {
      */
     openNextLegOn: 'in_progress',
     /**
-     * Ishga tushirish bosqichi (CLAUDE.md 42): `internal` — faqat
-     * `testerIds` jo'natadi va LEG oladi; `public` — hamma. Standart —
-     * `internal` (yopiq): hujjatda yozilmasa ham xizmat ommaga ochilmaydi.
+     * Ishga tushirish bosqichi (CLAUDE.md 42; lug'at `core/logistics.js` STAGE):
+     * `off` — hech kim; `internal` / `pilot` — faqat `testerIds` jo'natadi va
+     * LEG oladi; `public` — hamma. Standart — `internal` (yopiq): hujjatda
+     * yozilmasa ham xizmat ommaga ochilmaydi.
      */
     stage: 'internal',
     /** Kanonik telefon ID'lari (ids.toCanonicalId) — jo'natuvchi VA ijrochi. */
     testerIds: [],
+    /**
+     * Topshirish/yetkazish kodini terib topishdan himoya (audit S4/L7): bitta
+     * (jo'natma, LEG, ijrochi) uchun shuncha XATO urinishdan keyin ...
+     */
+    codeMaxFailedAttempts: 5,
+    /** ... shuncha daqiqa qulf. Bu NARX EMAS — xavfsizlik sozlamasi. */
+    codeLockMinutes: 15,
   },
 
   // ─── Javobgarlik shifti (Т-10, Қ-2) ─────────────────────────────────
@@ -233,8 +217,6 @@ const GLOBAL_DEFAULTS = {
 
 const GLOBAL_DOC_ID = 'global';
 const COLLECTION = 'module_config';
-/** «Butun respublika» hududi — `module_config/{module}_all` (zaxira qatlam). */
-const ALL_REGION = 'all';
 
 /** @type {Map<string, {at: number, value: object}>} */
 const cache = new Map();
@@ -292,19 +274,6 @@ function validateConfig(cfg) {
       }
     }
   }
-  if (!Number.isInteger(cfg.enableMinProviders) || cfg.enableMinProviders < 1) {
-    errors.push(
-      `enableMinProviders butun son >= 1 bo'lishi kerak, hozir ${String(cfg.enableMinProviders)}`,
-    );
-  }
-  const pm = (cfg.push || {}).minScore;
-  if (pm !== null && pm !== undefined) {
-    if (typeof pm !== 'number' || !Number.isFinite(pm) || pm <= 0 || pm > 1) {
-      errors.push(
-        `push.minScore null yoki (0, 1] oralig'ida bo'lishi kerak, hozir ${String(pm)}`,
-      );
-    }
-  }
   const q = (cfg.push || {}).quietHours || {};
   if (q.from === q.to) {
     errors.push('push.quietHours.from va .to teng — tinch soatlar 24/7 bo\'lib qoladi');
@@ -334,26 +303,10 @@ async function getModuleConfig(db, module, regionId, opts = {}) {
     if (hit && now - hit.at < CACHE_TTL_MS) return hit.value;
   }
 
-  /**
-   * RESPUBLIKA BO'YICHA ZAXIRA (ega 2026-10-20: qoidalar butun respublikada).
-   *
-   * Qatlamlar (kuchsizdan kuchliga): DEFAULTS < `{module}_all` < `{module}_{hudud}`.
-   * Shunda bitta `{module}_all` hujjati 14 viloyatni ham yoqadi, alohida viloyat
-   * esa o'z hujjati bilan o'zgartiriladi yoki o'chiriladi (`enabled: false`).
-   * Hujjatlarning ikkalasi yo'q bo'lsa modul O'CHIQ qoladi (DEFAULTS.enabled).
-   * `all` hududining o'zi uchun zaxira yo'q (masalan `logistics_all`).
-   */
-  const sharedKey = regionId === ALL_REGION ? null : moduleRegionKey(module, ALL_REGION);
-
   let override = {};
   try {
-    const [own, shared] = await Promise.all([
-      db.collection(COLLECTION).doc(key).get(),
-      sharedKey ? db.collection(COLLECTION).doc(sharedKey).get() : null,
-    ]);
-    const base = shared && shared.exists ? (shared.data() || {}) : {};
-    const mine = own.exists ? (own.data() || {}) : {};
-    override = deepMerge(base, mine);
+    const snap = await db.collection(COLLECTION).doc(key).get();
+    if (snap.exists) override = snap.data() || {};
   } catch (e) {
     // Konfig o'qilmasa standart qiymatlar bilan davom etamiz, lekin
     // `pushEnabled` ni MAJBURAN o'chiramiz: noma'lum holatda push yubormaslik
@@ -430,7 +383,6 @@ function clearCache() {
 
 module.exports = {
   COLLECTION,
-  ALL_REGION,
   GLOBAL_DOC_ID,
   CACHE_TTL_MS,
   DEFAULTS,

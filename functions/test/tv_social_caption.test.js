@@ -11,7 +11,7 @@
  */
 'use strict';
 const assert = require('assert');
-const { buildCaption, socialVideoUrl, requestedNetworks } = require('../tv_social_publish');
+const { buildCaption, socialVideoUrl, requestedNetworks, consentRecord } = require('../tv_social_publish');
 
 const results = [];
 function check(name, fn) {
@@ -85,6 +85,23 @@ check('podpis tartibi — CTA birinchi, #AVA oxirgi', () => {
   assert.strictEqual(lines[lines.length - 1], '#AVA');
 });
 
+check('pullik reklama — birinchi qator «Реклама» (barcha tarmoq, uzun tavsifda ham)', () => {
+  for (const net of ['instagram', 'facebook', 'youtube', 'telegram']) {
+    const c = buildCaption(clip({ category: 'ad', description: 'x'.repeat(5000) }), PREFIX, net, PLAY);
+    const lines = c.split('\n');
+    assert.strictEqual(lines[0], 'Реклама', `${net}: belgi yo'q`);
+    assert.strictEqual(lines[1], PREFIX);
+    assert.strictEqual(lines[lines.length - 1], '#AVA');
+  }
+});
+
+check('oddiy klipda «Реклама» belgisi YO\'Q', () => {
+  for (const cat of [undefined, 'product', 'service', 'news']) {
+    const c = buildCaption(clip({ category: cat }), PREFIX, 'telegram', PLAY);
+    assert.ok(!c.split('\n').includes('Реклама'), `${cat}: ortiqcha belgi`);
+  }
+});
+
 check('playUrl berilmasa — havola qatori umuman bo\'lmaydi', () => {
   const c = buildCaption(clip(), PREFIX, 'telegram', '');
   assert.ok(!c.includes('play.google.com'));
@@ -145,6 +162,35 @@ check('requestedNetworks — pullik reklama — majburiy 3 tarmoq', () => {
   assert.deepStrictEqual(
     requestedNetworks({ category: 'ad', socialNetworks: ['tiktok'] }),
     ['instagram', 'facebook', 'telegram']);
+});
+
+// ── 7-bosqich (2026-10-25): rozilik belgisi va uning asosi ──
+check('requestedNetworks — tarmoq tanlangan, lekin socialConsent yo\'q/false → hech qayer', () => {
+  assert.deepStrictEqual(requestedNetworks({ socialNetworks: ['telegram'] }), []);
+  assert.deepStrictEqual(requestedNetworks({ socialNetworks: ['telegram'], socialConsent: false }), []);
+});
+check('requestedNetworks — eski ilova (chip + socialConsent:true, versiyasiz) — o\'zgarmagan', () => {
+  assert.deepStrictEqual(
+    requestedNetworks({ socialNetworks: ['youtube'], socialConsent: true }), ['youtube']);
+});
+const ts = { toMillis: () => 1761400000000 };
+check('consentRecord — «Рухсат бераман»: explicit, versiya, vaqt', () => {
+  const r = consentRecord({ socialConsent: true, socialConsentVersion: 1, socialConsentAt: ts }, ['telegram']);
+  assert.deepStrictEqual(r, { basis: 'explicit', version: 1, networks: ['telegram'], consentAt: ts });
+});
+check('consentRecord — eski ilova: legacy, vaqt yozilmaydi', () => {
+  const r = consentRecord({ socialConsent: true, socialConsentAt: ts }, ['instagram']);
+  assert.deepStrictEqual(r, { basis: 'legacy', version: 0, networks: ['instagram'], consentAt: null });
+});
+check('consentRecord — reklama: ad_terms + ogohlantirish versiyasi (eski ilovada 0)', () => {
+  assert.strictEqual(consentRecord({ category: 'ad', socialNoticeVersion: 1 }, ['facebook']).version, 1);
+  const old = consentRecord({ category: 'ad' }, ['facebook']);
+  assert.deepStrictEqual([old.basis, old.version], ['ad_terms', 0]);
+});
+check('consentRecord — noto\'g\'ri versiya (matn, 0, 500) → 0', () => {
+  for (const v of ['1', 0, 500, 1.5]) {
+    assert.strictEqual(consentRecord({ socialConsentVersion: v }, []).basis, 'legacy');
+  }
 });
 
 const failed = results.filter((r) => !r.pass).length;

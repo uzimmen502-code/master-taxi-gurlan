@@ -270,17 +270,17 @@ async function main() {
   // 7) paket: noma'lum id / idempotencyKey yo'q / balans yetmaydi
   await expectError(handlers.assistantBuyPackage({ packageId: 'x', idempotencyKey: 'k1' }, ctx(UID)), 'invalid-argument', 'unknown_package');
   await expectError(handlers.assistantBuyPackage({ packageId: 'd7' }, ctx(UID)), 'invalid-argument');
-  const ins = await expectError(handlers.assistantBuyPackage({ packageId: 'd30', idempotencyKey: 'k2' }, ctx(UID)), 'failed-precondition', 'insufficient_balance');
+  const ins = await expectError(handlers.assistantBuyPackage({ packageId: 'd30', idempotencyKey: 'k2', pricingAck: 'pass_v2' }, ctx(UID)), 'failed-precondition', 'insufficient_balance');
   assert.strictEqual(ins.details.balance, 20000);
 
   // 8) d7 sotib olish — balans 5000, Pro 7 kun; idempotent
   const t0 = Date.now();
-  const buy = await handlers.assistantBuyPackage({ packageId: 'd7', idempotencyKey: 'k3' }, ctx(UID));
+  const buy = await handlers.assistantBuyPackage({ packageId: 'd7', idempotencyKey: 'k3', pricingAck: 'pass_v2' }, ctx(UID));
   assert.strictEqual(buy.balance, 5000);
   assert.ok(buy.paidUntil >= t0 + 7 * 86400000 - 5);
   assert.strictEqual(ledgerCalls.length, 1);
   assert.strictEqual(ledgerCalls[0].refType, 'assistant_package');
-  const dup = await handlers.assistantBuyPackage({ packageId: 'd7', idempotencyKey: 'k3' }, ctx(UID));
+  const dup = await handlers.assistantBuyPackage({ packageId: 'd7', idempotencyKey: 'k3', pricingAck: 'pass_v2' }, ctx(UID));
   assert.strictEqual(dup.balance, 5000);
   assert.strictEqual(ledgerCalls.length, 1);
 
@@ -304,10 +304,49 @@ async function main() {
   delete process.env.OPENAI_API_KEY;
   await expectError(handlers.assistantChat({ text: 'x' }, ctx(UID)), 'failed-precondition', 'api_key_missing');
 
-  // 12a) default paket — bir martalik 25 000 (once, 3650 kun)
+  // 12a) default paket — 24 soatlik Plus 25 000 (ega 2026-11-17; doimiy `once` sotilmaydi)
   db._store.set('settings/assistant', {});
   const dst = await handlers.assistantGetStatus({}, ctx(UID));
-  assert.deepStrictEqual(dst.packages, [{ id: 'once', days: 3650, price: 25000, promo: false, oneTime: true }]);
+  assert.deepStrictEqual(dst.packages, [{ id: 'd10', days: 10, price: 25000, promo: false, oneTime: false }]);
+  assert.deepStrictEqual(dst.priceSearch, { enabled: false, dailyLimit: 30, usedToday: 0 }, 'priceSearchStage yo\'q = off');
+
+  // 12b) 10 kunlik pass (ega 2026-11-17): eski ilova (pricingAck yo'q / noma'lum) — rad; pass_v3 (yangi) va pass_v2 (o'tish) — 10 kun; faol paytda +10 kun
+  const P2 = '998901112233';
+  db._store.set(`users/${P2}`, { phone: P2, bonusBalance: 60000 });
+  const old = await expectError(handlers.assistantBuyPackage({ packageId: 'd10', idempotencyKey: 'p2a' }, ctx(P2)), 'failed-precondition', 'app_update_required');
+  await expectError(handlers.assistantBuyPackage({ packageId: 'd10', idempotencyKey: 'p2x', pricingAck: 'pass_v1' }, ctx(P2)), 'failed-precondition', 'app_update_required');
+  assert.strictEqual(old.details.reason, 'app_update_required');
+  assert.strictEqual(db._store.get(`users/${P2}`).bonusBalance, 60000, 'eski ilovada pul yechilmaydi');
+  const tb = Date.now();
+  const b1 = await handlers.assistantBuyPackage({ packageId: 'd10', idempotencyKey: 'p2b', pricingAck: 'pass_v3' }, ctx(P2));
+  assert.strictEqual(b1.debited, 25000);
+  assert.strictEqual(b1.balance, 35000);
+  assert.ok(b1.paidUntil >= tb + 10 * 86400000 - 5 && b1.paidUntil <= Date.now() + 10 * 86400000, '10 kun to\'lov paytidan');
+  const b2 = await handlers.assistantBuyPackage({ packageId: 'd10', idempotencyKey: 'p2c', pricingAck: 'pass_v2' }, ctx(P2));
+  assert.strictEqual(b2.paidUntil, b1.paidUntil + 10 * 86400000, 'faol bo\'lsa joriy tugash vaqtidan +10 kun (pass_v2 ham qabul)');
+  assert.strictEqual(b2.balance, 10000);
+  const b2dup = await handlers.assistantBuyPackage({ packageId: 'd10', idempotencyKey: 'p2c', pricingAck: 'pass_v2' }, ctx(P2));
+  assert.strictEqual(b2dup.balance, 10000, 'idempotent — ikki marta yechilmaydi');
+  // muddat o'tgan — Pro emas (chegara: aynan hozir tugagan)
+  db._store.set(`users/${P2}`, { ...db._store.get(`users/${P2}`), assistantPaidUntil: new FakeTs(Date.now()) });
+  assert.strictEqual((await handlers.assistantGetStatus({}, ctx(P2))).pro, false, 'tugagan pass — Pro emas');
+
+  // 12c) Нарх қидириш darvozalari (emulator kerak bo'lmagan qismi)
+  await expectError(handlers.assistantPriceSearch({ query: 'olma', districtId: 'gurlan' }, ctx(P2)), 'failed-precondition', 'price_search_off');
+  db._store.set('settings/assistant', { priceSearchStage: 'INTERNAL', priceSearchTesterIds: ['+998 90 111 22 33'] });
+  const ist = await handlers.assistantGetStatus({}, ctx(P2));
+  assert.strictEqual(ist.priceSearch.enabled, true, 'internal: tester');
+  assert.strictEqual((await handlers.assistantGetStatus({}, ctx(UID))).priceSearch.enabled, false, 'internal: tester emas');
+  const np = await expectError(handlers.assistantPriceSearch({ query: 'olma', districtId: 'gurlan' }, ctx(P2)), 'permission-denied', 'plus_required');
+  assert.ok(np.details.requestId, 'requestId');
+  await expectError(handlers.assistantPriceSearch({ query: 'o', districtId: 'gurlan' }, ctx(P2)), 'invalid-argument', 'query_too_short');
+  await expectError(handlers.assistantPriceSearch({ query: 'olma', districtId: '' }, ctx(P2)), 'invalid-argument', 'location_required');
+  db._store.set('settings/assistant', { priceSearchStage: 'public', priceSearchDailyLimit: 0 });
+  db._store.set(`users/${P2}`, { ...db._store.get(`users/${P2}`), assistantPaidUntil: new FakeTs(Date.now() + 3600000) });
+  await expectError(handlers.assistantPriceSearch({ query: 'olma', districtId: 'gurlan' }, ctx(P2)), 'resource-exhausted', 'price_search_limit');
+  db._store.set('settings/assistant', { priceSearchStage: 'bogus' });
+  assert.strictEqual((await handlers.assistantGetStatus({}, ctx(P2))).priceSearch.enabled, false, 'noto\'g\'ri qiymat = off');
+  db._store.set('settings/assistant', {});
 
   // 12) freeProPhones — paketsiz doimiy Pro
   const OWNER = '998912778777';
@@ -328,7 +367,7 @@ async function main() {
   assert.strictEqual(needsCyrillicFix('Python ва JavaScript фарқи?', 'Python ва JavaScript фарқлари:\n```js\nconst a = 1;\n```\n- Python динамик'), false, 'kod bloki hisobga olinmaydi');
   assert.strictEqual(needsCyrillicFix('Salom, qanday?', 'Salom! Yaxshi.'), false, 'lotin savol — tegilmaydi');
 
-  console.log('assistant_chat.test.js: OK (13 bo\'lim)');
+  console.log('assistant_chat.test.js: OK (15 bo\'lim)');
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

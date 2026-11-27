@@ -249,6 +249,46 @@ ok('2 ta LEG: line_haul yo\'q — ulush mavjudlar orasida normallashadi', () => 
   assert.deepStrictEqual(r.legPayouts.map((l) => l.amount), [32000, 32000]);
 });
 
+// ─── Audit L15 (2026-10-16): e'lon qiymati haqi butun son chegarasidan chiqmasin ───
+ok('L15: faol qilish — haq sozlangan bo\'lsa declaredValue.maxValue SHART (musbat butun)', () => {
+  const base = JSON.parse(JSON.stringify(T));
+  assert.deepStrictEqual(tariff.validateTariff(base, { forActivation: true }), [], 'asos tarif yaroqli');
+  // maxValue yo'q + feeBps>0 -> rad
+  const noMax = JSON.parse(JSON.stringify(base));
+  delete noMax.declaredValue.maxValue;
+  const e1 = tariff.validateTariff(noMax, { forActivation: true });
+  assert.ok(e1.some((m) => /declaredValue\.maxValue/.test(m)), `maxValue talab qilinishi kerak: ${e1}`);
+  // QORALAMA (forActivation:false) maxValue'siz ham yaroqli (ega hali to'ldirmagan)
+  assert.deepStrictEqual(tariff.validateTariff(noMax), []);
+  // float / 0 / manfiy / satr -> rad
+  for (const bad of [1.5, 0, -5, '50000000']) {
+    const t2 = JSON.parse(JSON.stringify(base));
+    t2.declaredValue.maxValue = bad;
+    assert.ok(tariff.validateTariff(t2, { forActivation: true }).some((m) => /declaredValue\.maxValue/.test(m)), `rad: ${bad}`);
+  }
+  // maxValue × feeBps xavfsiz butun sondan oshsa -> rad
+  const big = JSON.parse(JSON.stringify(base));
+  big.declaredValue.maxValue = Number.MAX_SAFE_INTEGER;
+  big.declaredValue.feeBps = 100;
+  assert.ok(tariff.validateTariff(big, { forActivation: true }).some((m) => /declaredValue/.test(m)), 'maxValue*feeBps > MAX_SAFE_INTEGER rad');
+  // haq sozlanmagan (feeBps yo'q yoki 0) -> maxValue shart emas
+  const noFee = JSON.parse(JSON.stringify(base));
+  noFee.declaredValue = {};
+  assert.deepStrictEqual(tariff.validateTariff(noFee, { forActivation: true }), []);
+  const zeroFee = JSON.parse(JSON.stringify(base));
+  zeroFee.declaredValue = { feeBps: 0 };
+  assert.deepStrictEqual(tariff.validateTariff(zeroFee, { forActivation: true }), []);
+});
+
+ok('L15: declaredValueFee — v × bps xavfsiz butun sondan oshsa jim noto\'g\'ri son EMAS, aniq xato', () => {
+  const t = { declaredValue: { feeBps: 100 } }; // maxValue yo'q (eski/qo'lda yozilgan hujjat)
+  assert.strictEqual(tariff.declaredValueFee(t, 1234567), 12346, 'oddiy qiymat o\'zgarmaydi');
+  const edge = Math.floor(Number.MAX_SAFE_INTEGER / 100);
+  assert.ok(Number.isSafeInteger(tariff.declaredValueFee(t, edge)), 'chegarada hisoblanadi');
+  assert.throws(() => tariff.declaredValueFee(t, edge + 1),
+    (e) => e.code === 'failed-precondition' && e.details.reason === 'over_declared_value');
+});
+
 (async () => {
   for (const t of tests) {
     try { await t.fn(); passed += 1; console.log(`  OK  ${t.name}`); } catch (e) {

@@ -862,9 +862,16 @@ async function main() {
     d = await replaceVideo('cv3', { status: 'active', category: 'ad', ...vid(1) },
       { status: 'active', category: 'ad', ...vid(2) });
     assert.strictEqual(d.status, 'active');
+    // Video o'zgarmagan, faqat hisoblagich — status o'zgarmaydi.
     d = await replaceVideo('cv4', { status: 'active', category: 'news', ...vid(1) },
-      { status: 'active', category: 'news', ...vid(1), title: 'yangi sarlavha' });
+      { status: 'active', category: 'news', ...vid(1), likeCount: 3 });
     assert.strictEqual(d.status, 'active');
+    // Audit 2026-10-31 (MEDIUM-2/5): video o'zgarmagan, lekin NOM o'zgardi — QO'LDA rejimda
+    // endi qayta moderatsiya (`content_edited`). Avval bu holat `active` qolardi.
+    d = await replaceVideo('cv5', { status: 'active', category: 'news', ...vid(1) },
+      { status: 'active', category: 'news', ...vid(1), title: 'yangi sarlavha' });
+    assert.strictEqual(d.status, 'pending');
+    assert.strictEqual(d.moderationReason, 'content_edited');
   });
 
   // ── W. Umumiy maxfiy kod bilan kirish o'chirildi (D-5) ──────────────

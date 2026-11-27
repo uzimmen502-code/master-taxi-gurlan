@@ -1412,6 +1412,32 @@ Hosting — фақат `master-taxi-gurlan`, 03:12 UTC, `deploy/hosting-logistic
 `module_config/logistics_{вилоят}` ни ўқийди, `logistics_all`ни эмас — бундай
 ҳужжат йўқ, демак логистика учун у ишламайди (ёпиқ томонда).
 
+### 10.4 Посилка ЙЎҚОЛДИ (D1, эга қарори 2026-10-16, ветв `fix/courier-audit-2026-10`)
+
+**What:** (1) `declaredValue` МАЖБУРИЙ — `quote`/`create` да йўқ ёки ≤ 0 бўлса
+`declared_value_required`. (2) Админ (`admin`/`superadmin`, `dispatcher` ЭМАС)
+`adminMarkShipmentLost` (demand, europe-west1): жўнатма `in_transit|disputed` →
+`lost`, `paymentStatus` `escrow_funded|escrow_frozen` → `loss_pending`, йўқотган
+LEG `in_progress` → `disputed`, кейинги LEG'лар `cancelled`, `logistics_incidents/
+{shipmentId}` + `logistics_audit`. (3) Пулни default codebase ҳисоблайди
+(`settleLoss`, триггер + reconcile): мижозга **фақат G** = `priceSnapshot.declaredValue`
+(етказиш ҳақи ҚАЙТМАЙДИ) — **йўқотган курьернинг AVA ҳамёнидан** дарҳол, ҳамёни
+етгунча (манфий бўлмайди); етмагани курьер ҚАРЗИ: `provider_capabilities.debt.logistics`
++ incident. (4) Курьер қарзни ўзи тўлайди, АДМИН `adminRecordLostParcelPayment`
+(default, us-central1) билан ёзади: нақд → мижоз ҳамёни, қарз ва incident бир
+транзакцияда камаяди. (5) Эскроу одатдагидек ёпилади (`relayRelease:{id}`); ишланмаган
+LEG улуши U = providerPool − Σ EARNED AVA даромадига (`relayLostUnearned:{id}`).
+Олдинги LEG ижрочилари ҳақи сақланади. Жарима = G (қўшимча тўлов ЭМАС — **INFERRED**).
+**Why:** эга қарори (1–6-банд): AVA ўз чўнтагидан тўламайди ва қарзни ундирмайди;
+7.6 даги эски «AVA зарарни кўтаради, `demand_penalties` орқали ундиради» режаси
+шу қарор билан **алмаштирилди** (шу қисм учун).
+**Impact:** янги `paymentStatus` қийматлари (`loss_pending`, `loss_settled`) — Dart
+`PaymentStatus` ва паритет тести янгиланиши керак; `logistics_incidents` — фақат
+сервер (қоида қўшилмади, default-deny); қарз `debt.logistics` match/eligibility'га
+ТАЪСИР ҚИЛМАЙДИ (`provider_stats.debtBlocked` ва `debt.taxi` алоҳида).
+**Журнал калитлари:** `relayRelease:{id}` · `relayEarned:{id}:{leg}` ·
+`relayLostUnearned:{id}` · `relayLostRefund:{id}` · `relayLostPayment:{id}:{opId}`.
+
 ---
 
 ## 11. Очиқ саволлар

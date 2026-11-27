@@ -32,9 +32,13 @@
  *   users/{uid}/assistant_packages/{idem}               — сотиб олинган пакетлар
  *   wallet_idempotency/{idem}                           — debitForOrder билан бир хил
  *
+ * Plus (эга 2026-11-17, иккинчи қарор): 25 000 сўм = тўлов пайтидан 10 КУН (`d10` пакети);
+ * доимий Plus сотилмайди. Plus'га «Нарх қидириш» ҳам киради (price_search.js).
+ *
  * Callables: assistantGetStatus, assistantChat, assistantBuyPackage,
- *   assistantDeleteConversation, assistantRenameConversation,
- *   assistantDeleteMemory. Trigger: onAssistantMessageCreated.
+ *   assistantPriceSearch, assistantDeleteConversation,
+ *   assistantRenameConversation, assistantDeleteMemory.
+ *   Trigger: onAssistantMessageCreated.
  *
  * API калити: Secret Manager → `OPENAI_API_KEY`, функцияга `runWith({
  * secrets })` орқали боғланади ва `process.env` дан ўқилади. Илгари у
@@ -76,13 +80,30 @@ const ASSISTANT_DEFAULTS = {
   // Пакетсиз доимий Pro (эга/синов рақамлари). `settings/assistant.freeProPhones`
   // массиви билан кенгайтирилади (998… рақамли формат).
   freeProPhones: ['998912778777'],
-  // Эга қарори (2026-09-22): бир марталик тўлов 25 000 сўм → доимий Plus
-  // (10 йил). Кунлик пакетлар керак бўлса — settings/assistant.packages:
-  // [{id:'d7',days:7,price:15000},{id:'d15',days:15,price:25000},{id:'d30',days:30,price:30000,promo:true}]
+  // Эга қарори (2026-11-17, CONFIRMED; шу куннинг ўзида 24 соат → 10 кун): БУТУН AVA AI Plus
+  // (чат + нарх қидируви) = 25 000 сўм тўлов пайтидан 10 КУН; фаол бўлганда сотиб олинса — жорий тугаш
+  // вақтидан узаяди (assistantBuyPackage мантиғи ўзгармаган). Доимий Plus
+  // (аввалги `once`, 3650 кун, 2026-09-22) ЭНДИ СОТИЛМАЙДИ. settings/assistant.packages
+  // бўлса — у устун (2026-11-17 prod'да ҳужжат йўқ эди).
   packages: [
-    { id: 'once', days: 3650, price: 25000, promo: false, oneTime: true },
+    // Янги id (day эмас): 24 соатлик пакет билан адаштирилмасин (ledger refId/assistant_packages да аниқ).
+    { id: 'd10', days: 10, price: 25000, promo: false, oneTime: false },
   ],
+  // «Нарх қидириш» (эга 2026-11-17): settings/assistant.priceSearchStage
+  // off | internal (priceSearchTesterIds + freeProPhones) | public; йўқ → off.
+  priceSearchStage: 'off',
+  priceSearchDailyLimit: 30,
+  priceSearchFetchLimit: 60,
 };
+
+/**
+ * Янги илова муддатли пакет матнини (кунлар сервердаги пакетдан) кўрсатади — pass_v3. Ўтиш даврида
+ * pass_v2 (24 соат матнли веб) ҳам қабул: харидор кўпроқ олади (10 кун), зарарсиз. Ack ЙЎҚ («доимий»
+ * матнли эски APK) — рад.
+ */
+const PRICING_ACK = 'pass_v3';
+const PRICING_ACKS_ACCEPTED = ['pass_v2', 'pass_v3'];
+const PRICE_SEARCH_STAGES = ['off', 'internal', 'public'];
 
 /** Тошкент вақти бўйича кун калити (`YYYY-MM-DD`). */
 function tashkentDayKey(nowMs = Date.now()) {
@@ -255,6 +276,13 @@ function attachAssistant(exportsObj, deps) {
           ? raw.freeProPhones.map((p) => String(p || '').replace(/\D/g, '')).filter(Boolean)
           : []),
       ]),
+      priceSearchStage: PRICE_SEARCH_STAGES.includes(String(raw.priceSearchStage || '').trim().toLowerCase())
+        ? String(raw.priceSearchStage).trim().toLowerCase() : D.priceSearchStage,
+      priceSearchTesterIds: new Set(Array.isArray(raw.priceSearchTesterIds)
+        ? raw.priceSearchTesterIds.map((p) => canonicalUid(String(p || '').replace(/\D/g, ''))).filter(Boolean)
+        : []),
+      priceSearchDailyLimit: intOr(raw.priceSearchDailyLimit, D.priceSearchDailyLimit),
+      priceSearchFetchLimit: intOr(raw.priceSearchFetchLimit, D.priceSearchFetchLimit) || D.priceSearchFetchLimit,
       systemPrompt: String(raw.systemPrompt || '').trim() || DEFAULT_SYSTEM_PROMPT,
       extraKnowledge: String(raw.extraKnowledge || '').trim(),
     };
@@ -277,12 +305,26 @@ function attachAssistant(exportsObj, deps) {
     return tsToMs((userData || {}).assistantPaidUntil) > nowMs;
   }
 
+  /** «Нарх қидириш» босқичи шу фойдаланувчига очиқми (Plus алоҳида текширилади). */
+  function priceSearchStageAllows(cfg, uid) {
+    if (cfg.priceSearchStage === 'public') return true;
+    if (cfg.priceSearchStage === 'internal') {
+      return cfg.priceSearchTesterIds.has(uid) || cfg.freeProPhones.has(uid);
+    }
+    return false;
+  }
+
   /** Клиентга қайтариладиган ҳолат (лимит/Pro/пакетлар/баланс). */
   function buildStatus(cfg, uid, userData, usageData, nowMs) {
     const paidUntilMs = tsToMs((userData || {}).assistantPaidUntil);
     const pro = isPro(cfg, uid, userData, nowMs);
     const u = usageData || {};
     return {
+      priceSearch: {
+        enabled: priceSearchStageAllows(cfg, uid),
+        dailyLimit: cfg.priceSearchDailyLimit,
+        usedToday: intOr(u.priceSearches, 0),
+      },
       enabled: cfg.enabled,
       pro,
       // Доимий Pro (freeProPhones) — муддат йўқ, клиент "Pro фаол" деб кўрсатади.
@@ -728,6 +770,11 @@ function attachAssistant(exportsObj, deps) {
     if (!pkg) {
       throw new HttpsError('invalid-argument', 'unknown_package');
     }
+    // Эски илова (2026-11-17 гача) варақасида «бир марталик / доимий Plus» матни бор — у муддатли (10 кунлик)
+    // пакетни нотўғри матн билан сотиб олмасин (истеъмолчи алданмасин). Янги илова `pricingAck` юборади.
+    if (!pkg.oneTime && !PRICING_ACKS_ACCEPTED.includes(String((data && data.pricingAck) || ''))) {
+      throw new HttpsError('failed-precondition', 'app_update_required', { reason: 'app_update_required' });
+    }
 
     const idemKey = `assistant_pkg_${uid}_${idempotencyKey}`;
     const idemRef = db.collection('wallet_idempotency').doc(idemKey);
@@ -826,6 +873,79 @@ function attachAssistant(exportsObj, deps) {
   });
 
   // ---------------------------------------------------------------------
+  // assistantPriceSearch — «Ақлли нарх қидируви» (эга 2026-11-17). Фақат Plus;
+  // босқич settings/assistant.priceSearchStage; кунлик чегара. Ҳисоб — price_search.js.
+  // data: { query, districtId, lat?, lng? } → { offers, partial, counts, … }
+  // ---------------------------------------------------------------------
+  const priceSearchLib = require('./price_search');
+  const priceSearch = priceSearchLib.createPriceSearch({ db });
+  exportsObj.assistantPriceSearch = functions
+    .runWith({ timeoutSeconds: 60, memory: '256MB' })
+    .https.onCall(async (data, context) => {
+      const t0 = Date.now();
+      const requestId = require('crypto').randomUUID();
+      const uid = requireUid(context);
+      const log = (fields) => console.log(JSON.stringify({
+        module: 'price_search', action: 'assistantPriceSearch', requestId,
+        uidHash: priceSearchLib.uidHash(uid), durationMs: Date.now() - t0, ...fields,
+      }));
+      const deny = (code, reason, details = {}) => {
+        log({ result: 'denied', errorCode: reason });
+        return new HttpsError(code, reason, { reason, requestId, ...details });
+      };
+      const cfg = await loadConfig();
+      if (!cfg.enabled || !priceSearchStageAllows(cfg, uid)) {
+        throw deny('failed-precondition', 'price_search_off');
+      }
+      const query = String((data && data.query) || '').trim();
+      if (query.length < 2 || query.length > priceSearchLib.MAX_QUERY_CHARS) {
+        throw deny('invalid-argument', 'query_too_short');
+      }
+      const districtId = String((data && data.districtId) || '').trim();
+      if (!/^[A-Za-z0-9_-]{1,64}$/.test(districtId)) {
+        throw deny('invalid-argument', 'location_required');
+      }
+      const lat = typeof (data && data.lat) === 'number' ? data.lat : null;
+      const lng = typeof (data && data.lng) === 'number' ? data.lng : null;
+
+      const nowMs = Date.now();
+      const uRef = usageRef(uid, tashkentDayKey(nowMs));
+      // Plus + кунлик чегара — транзакцияда (параллел сўровлар чегарадан ошмасин, 22-қоида).
+      await db.runTransaction(async (t) => {
+        const [userSnap, usageSnap] = await Promise.all([t.get(userRef(uid)), t.get(uRef)]);
+        const userData = userSnap.exists ? (userSnap.data() || {}) : {};
+        if (!isPro(cfg, uid, userData, nowMs)) {
+          throw deny('permission-denied', 'plus_required');
+        }
+        const used = intOr((usageSnap.exists ? usageSnap.data() : {}).priceSearches, 0);
+        if (used >= cfg.priceSearchDailyLimit) {
+          throw deny('resource-exhausted', 'price_search_limit', { dailyLimit: cfg.priceSearchDailyLimit });
+        }
+        t.set(uRef, { priceSearches: used + 1, lastAt: FieldValue.serverTimestamp() }, { merge: true });
+      });
+
+      try {
+        const r = await priceSearch.search({
+          query,
+          buyer: { districtId, lat, lng },
+          fetchLimit: cfg.priceSearchFetchLimit,
+        });
+        log({
+          result: 'ok', errorCode: null, partial: r.partial, ...r.counts,
+          zoneTariffVersion: r.zoneTariffVersion, zoneTariffActive: r.zoneTariffActive,
+        });
+        return { ok: true, requestId, ...r };
+      } catch (e) {
+        // Ҳисоблагич қайтарилади — фойдаланувчи хатоси учун сўров «сарфланмасин».
+        await uRef.set({ priceSearches: FieldValue.increment(-1) }, { merge: true })
+          .catch((err) => console.error('price_search: usage refund failed', err && err.message));
+        if (e && e.reason && e.code === 'invalid-argument') throw deny('invalid-argument', e.reason);
+        log({ result: 'error', errorCode: 'PRICE_SEARCH_FAILED', message: String((e && e.message) || e).slice(0, 160) });
+        throw new HttpsError('unavailable', 'price_search_failed', { reason: 'price_search_failed', requestId });
+      }
+    });
+
+  // ---------------------------------------------------------------------
   // Суҳбатни бошқариш — фақат эга, атайлаб (ChatGPT каби).
   // ---------------------------------------------------------------------
   function requireConvId(data) {
@@ -891,6 +1011,8 @@ function attachAssistant(exportsObj, deps) {
 module.exports = {
   attachAssistant,
   ASSISTANT_DEFAULTS,
+  PRICING_ACK,
+  PRICING_ACKS_ACCEPTED,
   tashkentDayKey,
   parseResponsesOutput,
   normalizePackages,

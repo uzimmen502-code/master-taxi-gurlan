@@ -135,41 +135,6 @@ ok('fairness juda kuchli bo`lsa xato', () => {
   assert.ok(cfg.validateConfig(bad).some((e) => /maxShift/.test(e)));
 });
 
-console.log('validateConfig — push.minScore (har moslik uchun push chegarasi)');
-ok('standart minScore = null (kalibrovka yo`q) — xato emas', () => {
-  assert.strictEqual(cfg.DEFAULTS.push.minScore, null);
-  assert.deepStrictEqual(cfg.validateConfig(cfg.DEFAULTS), []);
-});
-ok('to`g`ri qiymatlar: 0.01, 0.7, 1 — xato emas', () => {
-  for (const v of [0.01, 0.7, 1]) {
-    const c = cfg.deepMerge(cfg.DEFAULTS, { push: { minScore: v } });
-    assert.deepStrictEqual(cfg.validateConfig(c), [], `minScore=${v}`);
-  }
-});
-ok('noto`g`ri qiymatlar xato beradi: 0, manfiy, >1, matn, NaN', () => {
-  for (const v of [0, -0.1, 1.01, 'yuqori', NaN, Infinity]) {
-    const c = JSON.parse(JSON.stringify(cfg.DEFAULTS));
-    c.push.minScore = v;
-    assert.ok(
-      cfg.validateConfig(c).some((e) => /minScore/.test(e)),
-      `minScore=${String(v)} rad etilishi kerak`,
-    );
-  }
-});
-
-console.log('validateConfig — enableMinProviders (hududni yoqish uchun taklifchi soni)');
-ok('standart N = 5; noto`g`ri qiymatlar xato: 0, kasr, matn, NaN', () => {
-  assert.strictEqual(cfg.DEFAULTS.enableMinProviders, 5);
-  for (const v of [0, 1.5, '5', NaN, null]) {
-    const c = JSON.parse(JSON.stringify(cfg.DEFAULTS));
-    c.enableMinProviders = v;
-    assert.ok(
-      cfg.validateConfig(c).some((e) => /enableMinProviders/.test(e)),
-      `enableMinProviders=${String(v)} rad etilishi kerak`,
-    );
-  }
-});
-
 console.log('getModuleConfig');
 okAsync('hujjat yo`q -> standart qiymatlar', async () => {
   cfg.clearCache();
@@ -202,67 +167,7 @@ okAsync('skipCache keshni chetlab o`tadi', async () => {
   await cfg.getModuleConfig(db, 'service', 'xorazm');
   const after1 = db.reads;
   await cfg.getModuleConfig(db, 'service', 'xorazm', { skipCache: true });
-  // Bitta hal qilish = hudud hujjati + `_all` hujjati (ikkalasi parallel).
-  assert.strictEqual(db.reads, after1 * 2);
-});
-
-console.log('getModuleConfig — respublika bo`yicha `_all` zaxirasi');
-okAsync('hudud hujjati yo`q, `_all` bor -> `_all` qo`llanadi (butun respublika)', async () => {
-  cfg.clearCache();
-  const db = fakeDb({ 'module_config/service_all': { enabled: true, matchingEnabled: true, pushEnabled: false } });
-  const c = await cfg.getModuleConfig(db, 'service', 'toshkent_shahri');
-  assert.strictEqual(c.enabled, true);
-  assert.strictEqual(c.pushEnabled, false);
-  assert.strictEqual(c.regionId, 'toshkent_shahri');
-  assert.strictEqual(c.configKey, 'service__toshkent_shahri');
-});
-okAsync('hudud hujjati `_all` ustidan ustun (hududni alohida o`chirish mumkin)', async () => {
-  cfg.clearCache();
-  const db = fakeDb({
-    'module_config/service_all': { enabled: true, pushEnabled: true },
-    'module_config/service_qoraqalpogiston': { enabled: false },
-  });
-  const f = await cfg.getModuleConfig(db, 'service', 'qoraqalpogiston');
-  assert.strictEqual(f.enabled, false, 'hududdagi aniq `false` umumiy `true` ni bekor qiladi');
-  assert.strictEqual(f.pushEnabled, true, 'aytilmagan maydon `_all` dan keladi');
-});
-okAsync('hudud hujjati `_all` da yo`q maydonni qo`shadi, qolgani `_all` da qoladi', async () => {
-  cfg.clearCache();
-  const db = fakeDb({
-    'module_config/service_all': { enabled: true, minScore: 0.4 },
-    'module_config/service_xorazm': { pushEnabled: true },
-  });
-  const c = await cfg.getModuleConfig(db, 'service', 'xorazm');
-  assert.strictEqual(c.enabled, true);
-  assert.strictEqual(c.minScore, 0.4);
-  assert.strictEqual(c.pushEnabled, true);
-});
-okAsync('ikkala hujjat yo`q -> O`CHIQ (zaxira o`zidan yoqmaydi)', async () => {
-  cfg.clearCache();
-  const f = await cfg.resolveFlags(fakeDb({}), 'service', 'andijon');
-  assert.strictEqual(f.enabled, false);
-});
-okAsync('`all` hududi uchun ikkinchi o`qish yo`q (logistika `logistics_all`)', async () => {
-  cfg.clearCache();
-  const db = fakeDb({ 'module_config/logistics_all': { enabled: true } });
-  const c = await cfg.getModuleConfig(db, 'logistics', 'all');
-  assert.strictEqual(c.enabled, true);
-  assert.strictEqual(db.reads, 1, '`all` o`zi uchun zaxira emas — bitta o`qish');
-});
-okAsync('`_all` o`qilmasa push MAJBURAN o`chadi (noma`lum holat)', async () => {
-  cfg.clearCache();
-  const db = fakeDb({ 'module_config/service_xorazm': { enabled: true, pushEnabled: true } }, { throwOn: 'service_all' });
-  const c = await cfg.getModuleConfig(db, 'service', 'xorazm');
-  assert.strictEqual(c.pushEnabled, false);
-});
-okAsync('global `enabled: false` `_all` da `enabled: true` bo`lsa ham ustun', async () => {
-  cfg.clearCache();
-  const db = fakeDb({
-    'module_config/global': { enabled: false, reason: 'incident' },
-    'module_config/service_all': { enabled: true, pushEnabled: true },
-  });
-  const f = await cfg.resolveFlags(db, 'service', 'samarqand');
-  assert.strictEqual(f.enabled, false);
+  assert.strictEqual(db.reads, after1 + 1);
 });
 okAsync('kesh muddati 60 soniya (13.1.4 qabul mezoni)', async () => {
   assert.strictEqual(cfg.CACHE_TTL_MS, 60000);

@@ -37,6 +37,7 @@ const offersApi = require('../api/offers');
 const logisticsApi = require('../api/logistics');
 const config = require('../core/config');
 const sm = require('../core/state_machine');
+const { capDoc } = require('./helpers/logistics_harness');
 
 const OWNER = '998901110001';
 const USTA_A = '998902220002';
@@ -98,7 +99,7 @@ const relayLeg = (idx, dependsOnLegId, nextLegId) => ({
   module: 'logistics',
   mode: 'dispatch',
   status: sm.STATUS.ACTIVE,
-  location: { lat: 41.55, lng: 60.63, addressText: 'Gurlan' },
+  location: { lat: 41.55, lng: 60.63, regionId: 'xorazm', districtId: 'gurlan', addressText: 'Gurlan' },
   timeWindow: { expiresAt: new Date(NOW.getTime() + 3600 * 1000) },
   assignment: { providerId: null, offerId: null, acceptedAt: null },
   attributes: { shipmentId: SHIP, orderId: 'ordRelay001', legIndex: idx, legCount: 2, dependsOnLegId, nextLegId, payout: 10000 },
@@ -113,8 +114,14 @@ async function resetRelay() {
       currentCustodian: { kind: 'sender', id: OWNER, since: NOW },
     },
   };
+  // acceptLeg ijrochini QAYTA tekshiradi (audit L6): modul yoqiq + ijrochi capability'si.
+  extra['module_config/logistics_all'] = { enabled: true, matchingEnabled: true, pushEnabled: false, logistics: { stage: 'public' } };
   for (const k of [K1, K2, K3]) {
     for (const l of ['LEG1', 'LEG2']) extra[`demand_matches/${l}_${k}`] = { demandId: l, providerId: k, status: 'new' };
+    extra[`users/${k}`] = { accountId: `acc${k}` };
+    extra[`provider_capabilities/acc${k}`] = capDoc(k, 'courier', {
+      active: true, regionIds: ['xorazm'], districtIds: ['gurlan'], acceptsParcels: true,
+    }, 'approved');
   }
   await reset(extra);
 }

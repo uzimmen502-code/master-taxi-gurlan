@@ -16,8 +16,10 @@
  *   - suspended kuryer qo'lidagini tugatadi
  *   - `courierListReadyOrders`: faqat ishlaydigan kuryer, faqat id/MFY/
  *     koordinata (telefon, ism, manzil, savat — yo'q), o'z buyurtmasi yo'q
- *   - ikki parallel submit → bitta to'lov, bitta yechim, bitta jurnal,
- *     qaytim BIR marta; qayta urinish saqlangan natijani oladi
+ *   - ikki parallel submit → bitta to'lov, bitta yechim, bitta jurnal;
+ *     qayta urinish saqlangan natijani oladi
+ *   - P-1 (ega, 2026-10-31): ortiqcha naqd/karta → CASH_OVERPAY (hamyonga qaytim YO'Q)
+ *   - P-2: courier_cash yozuvi yiqilsa, qayta urinish uni tiklaydi (bir marta)
  *   - sverka: Σdr == Σcr, aktiv == passiv, ledger == bonusBalance
  */
 'use strict';
@@ -273,6 +275,34 @@ async function main() {
     assert.strictEqual(r.count, ids.length, 'ko\'ringan hammasi qabul qilindi');
     assert.deepStrictEqual((await listReady(A)).orders, [], 'olingandan keyin ro\'yxat bo\'sh');
   });
+  // Bug 2026-11-03: Symptom — olib ketish (pickup) / POS buyurtmasi kuryer
+  // ro'yxatida chiqib, marshrutga olinardi. Root cause — `sellerMarkPickupReady`
+  // ham `status:'ready'` qo'yadi, list/route `fulfillmentMode`ni tekshirmasdi.
+  // Fix — `isCourierExcludedFulfillment` (yagona predikat) ikkala joyda.
+  await check('pickup/pos: ro\'yxatda YO\'Q, marshrutga OLINMAYDI; delivery va eski (maydonsiz) — oladi', async () => {
+    const base = { userPhone: CUSTOMER, status: 'ready', total: 10000, mfy: 'Navoiy' };
+    await db.collection('orders').doc('fmPickup').set({ ...base, fulfillmentMode: 'pickup', fulfillmentStatus: 'ready' });
+    await db.collection('orders').doc('fmPos').set({ ...base, fulfillmentMode: 'pos' });
+    await db.collection('orders').doc('fmDelivery').set({ ...base, fulfillmentMode: 'delivery' });
+    await db.collection('orders').doc('fmLegacy').set({ ...base });
+    const ids = (await listReady(A)).orders.map((o) => o.id).sort();
+    assert.deepStrictEqual(ids, ['fmDelivery', 'fmLegacy']);
+    // faqat pickup/pos — marshrut YO'Q (avvalgi `no_ready_orders`)
+    await assert.rejects(call('courierCreateRoute', { courierPhone: A, orderedOrderIds: ['fmPickup', 'fmPos'] }, A),
+      (e) => e.code === 'failed-precondition' && e.message === 'no_ready_orders');
+    const r = await call('courierCreateRoute', {
+      courierPhone: A, orderedOrderIds: ['fmPickup', 'fmPos', 'fmDelivery', 'fmLegacy'],
+    }, A);
+    assert.strictEqual(r.count, 2);
+    const route = (await db.collection('delivery_routes').doc(r.routeId).get()).data();
+    assert.deepStrictEqual([...route.orders].sort(), ['fmDelivery', 'fmLegacy']);
+    for (const id of ['fmPickup', 'fmPos']) {
+      const od = await order(id);
+      assert.strictEqual(od.status, 'ready', `${id} tegilmadi`);
+      assert.strictEqual(od.courierId, undefined, `${id}: kuryer yozilmadi`);
+    }
+    assert.strictEqual((await order('fmDelivery')).courierId, A);
+  });
 
   // ── parallel submit / idempotentlik ──────────────────────────────────
   await reset();
@@ -296,32 +326,268 @@ async function main() {
     const cc = await db.collection(settlementLedger.COL_ACCOUNTS).doc(settlementLedger.courierCashAccount(A)).get();
     assert.strictEqual(cc.data().balance, 20000, 'courier_cash BIR marta');
   });
-  await check('PARALLEL submit (naqd 50 000, qaytim 20 000): qaytim BIR marta', async () => {
+  // P-1 (ega, 2026-10-31): ortiqcha NAQD/KARTA mijoz hamyoniga qaytim bo'lib tushmaydi — rad.
+  const expectOverpay = async (promise, maxCash) => {
+    await assert.rejects(promise, (e) => {
+      assert.strictEqual(e.code, 'failed-precondition', `kod ${e.code}: ${e.message}`);
+      assert.strictEqual(e.details && e.details.reason, 'CASH_OVERPAY', JSON.stringify(e.details));
+      assert.strictEqual(e.details.maxCash, maxCash);
+      return true;
+    });
+  };
+  await check('P-1: PARALLEL ortiqcha naqd (50 000, qarz 30 000) — ikkalasi RAD, hamyon/buyurtma o\'zgarmaydi', async () => {
     await seedOrder('p2');
     const before = await bonus();
     const lines = [{ kind: 'cash', amount: 50000 }];
     const rs = await Promise.allSettled([submit('p2', A, lines), submit('p2', A, lines)]);
-    assert.strictEqual(rs.filter((r) => r.status === 'rejected').length, 0);
-    assert.strictEqual(await bonus(), before + 20000, 'qaytim ikki marta yozilmasin');
-    assert.strictEqual(await pcBalance(), before + 20000);
-    assert.strictEqual(await walletLedger('change_accrued'), 1);
+    assert.strictEqual(rs.filter((r) => r.status === 'rejected').length, 2, 'ikkalasi rad');
+    for (const r of rs) await expectOverpay(Promise.reject(r.reason), 30000);
+    assert.strictEqual(await bonus(), before, 'hamyonga qaytim tushmadi');
+    assert.strictEqual(await walletLedger('change_accrued'), 0);
+    assert.strictEqual((await order('p2')).paymentStatus, 'unpaid');
+    assert.strictEqual((await sub('p2', 'payment_lines')).length, 0);
+  });
+  await check('P-1: ortiqcha KARTA ham rad (30 001 > 30 000 + 1 tolerans)', async () => {
+    await expectOverpay(submit('p2', A, [{ kind: 'card', amount: 30002 }]), 30000);
+  });
+  await check('P-1: hamyon 10 000 + naqd 25 000 (qarz 30 000) — rad, maxCash 20 000', async () => {
+    await expectOverpay(submit('p2', A, [{ kind: 'wallet', amount: 10000 }, { kind: 'cash', amount: 25000 }]), 20000);
+    assert.strictEqual((await order('p2')).paymentStatus, 'unpaid');
+  });
+  await check('P-1: aniq naqd (30 000) — o\'tadi, qaytim 0', async () => {
+    const before = await bonus();
+    const r = await submit('p2', A, [{ kind: 'cash', amount: 30000 }]);
+    assert.strictEqual(r.ok, true); assert.strictEqual(r.changeCredit, 0);
+    assert.strictEqual(await bonus(), before);
   });
   await check('qayta urinish (javob yo\'qolgan): saqlangan natija, yangi harakat yo\'q', async () => {
     const before = await bonus();
-    const r = await submit('p2', A, [{ kind: 'cash', amount: 50000 }]);
-    assert.strictEqual(r.ok, true); assert.strictEqual(r.idempotent, true); assert.strictEqual(r.changeCredit, 20000);
+    const r = await submit('p2', A, [{ kind: 'cash', amount: 30000 }]);
+    assert.strictEqual(r.ok, true); assert.strictEqual(r.idempotent, true); assert.strictEqual(r.changeCredit, 0);
     assert.strictEqual(await bonus(), before);
     assert.strictEqual((await sub('p2', 'payment_lines')).length, 1);
   });
   await check('takror javobni BOSHQA kuryer ololmaydi (marshrutda bo\'lsa ham)', async () => {
     await db.collection('delivery_routes').doc('r_p2_B').set({ courierId: B, status: 'active', orders: ['p2'] });
-    await expectDenied(submit('p2', B, [{ kind: 'cash', amount: 50000 }]), 'COURIER_ASSIGNMENT_CONFLICT');
+    await expectDenied(submit('p2', B, [{ kind: 'cash', amount: 30000 }]), 'COURIER_ASSIGNMENT_CONFLICT');
+  });
+
+  // P-2: courier_cash yozuvi yiqilsa, qayta urinish uni TIKLAYDI (avval yo'qolib ketardi).
+  const courierCash = async () => ((await db.collection(settlementLedger.COL_ACCOUNTS)
+    .doc(settlementLedger.courierCashAccount(A)).get()).data() || {}).balance || 0;
+  await check('P-2: courier_cash yozuvi yiqildi → qayta urinishda tiklandi, ikki marta yozilmadi', async () => {
+    await seedOrder('p3');
+    const before = await courierCash();
+    const realPost = settlementLedger.postEntry;
+    let failOnce = true;
+    settlementLedger.postEntry = async (d, entry, opts) => {
+      if (failOnce && entry.kind === 'courier_field_cash') { failOnce = false; throw new Error('simulyatsiya: ledger yiqildi'); }
+      return realPost(d, entry, opts);
+    };
+    try {
+      const r1 = await submit('p3', A, [{ kind: 'cash', amount: 30000 }]);
+      assert.strictEqual(r1.ok, true, 'to\'lov saqlandi');
+      assert.strictEqual(await courierCash(), before, 'birinchi chaqiruvda courier_cash yozilmadi (simulyatsiya)');
+      // R1 (jonli, 2026-10-16): niyat to'lov tranzaksiyasida `courier_cash_pending` ga yoziladi.
+      const pend = await db.collection('courier_cash_pending').doc('p3').get();
+      assert.ok(pend.exists, 'niyat hujjati saqlangan');
+      assert.strictEqual(pend.data().cashSum, 30000);
+      const r2 = await submit('p3', A, [{ kind: 'cash', amount: 30000 }]);
+      assert.strictEqual(r2.idempotent, true);
+      assert.strictEqual(await courierCash(), before + 30000, 'qayta urinishda tiklandi');
+      assert.ok(!(await db.collection('courier_cash_pending').doc('p3').get()).exists, 'niyat o\'chdi');
+      await submit('p3', A, [{ kind: 'cash', amount: 30000 }]);
+      assert.strictEqual(await courierCash(), before + 30000, 'ikki marta yozilmadi');
+    } finally {
+      settlementLedger.postEntry = realPost;
+    }
+  });
+  await check('C-8 (jonli): submit — courierPhone 9 xonali, token 12 xonali — ishlaydi', async () => {
+    await seedOrder('p4');
+    const r = await call('courierSubmitPayment', { orderId: 'p4', courierPhone: A.slice(3), lines: [{ kind: 'cash', amount: 30000 }] }, A);
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual((await order('p4')).paymentStatus, 'paid');
   });
   await check('sverka: Σdr == Σcr, aktiv == passiv, passenger_credit == bonusBalance', async () => {
     const rec = await settlementLedger.reconcile(db);
     assert.strictEqual(rec.balanced, true, `dr ${rec.totalDr} cr ${rec.totalCr}`);
     assert.strictEqual(rec.identityOk, true, `aktiv ${rec.assets} passiv ${rec.liabilities}`);
     assert.strictEqual(rec.projectionOk, true, JSON.stringify(rec.mismatches));
+  });
+
+  // R1 (C-1): courier_field_cash ledger posti yiqilsa, «naqd qo'lda» yozuvi
+  // YO'QOLMASLIGI kerak: niyat tranzaksiyada saqlanadi, sweeper/takror chaqiruv tiklaydi.
+  await check('naqd ledger posti yiqilsa: niyat saqlanadi, sweeper BIR marta tiklaydi, takror ikkilamaydi', async () => {
+    await reset({ wallet: 0 });
+    await seedOrder('fc1', { total: 30000 });
+    const realPost = settlementLedger.postEntry;
+    settlementLedger.postEntry = async (d, entry, opts) => {
+      if (String(entry.idempotencyKey).startsWith('courierCash:')) throw new Error('boom');
+      return realPost(d, entry, opts);
+    };
+    try {
+      const r = await submit('fc1', A, [{ kind: 'cash', amount: 30000 }]);
+      assert.strictEqual(r.ok, true);
+    } finally { settlementLedger.postEntry = realPost; }
+    const jRef = db.collection(settlementLedger.COL_JOURNAL).doc('courierCash:fc1');
+    assert.strictEqual((await jRef.get()).exists, false, 'post yiqilgan edi');
+    assert.strictEqual((await db.collection('courier_cash_pending').doc('fc1').get()).exists, true, 'niyat saqlanmagan');
+    await fns.courierCashPendingSweep.run({});
+    assert.strictEqual((await jRef.get()).exists, false, 'sweeper yangi niyatga tegmasligi kerak (60 s kutish)');
+    await db.collection('courier_cash_pending').doc('fc1').update({
+      createdAt: admin.firestore.Timestamp.fromMillis(Date.now() - 10 * 60 * 1000),
+    });
+    await fns.courierCashPendingSweep.run({});
+    assert.strictEqual((await jRef.get()).exists, true, 'sweeper tiklamadi');
+    assert.strictEqual((await db.collection('courier_cash_pending').doc('fc1').get()).exists, false, 'niyat o\'chmagan');
+    const cashAcc = () => db.collection(settlementLedger.COL_ACCOUNTS)
+      .doc(settlementLedger.courierCashAccount(`998${A.slice(3)}`)).get();
+    assert.strictEqual(Math.abs(((await cashAcc()).data() || {}).balance || 0), 30000, 'kuryer naqd balansi');
+    // takror chaqiruv va takror sweeper — ikkilanmaydi
+    const again = await submit('fc1', A, [{ kind: 'cash', amount: 30000 }]);
+    assert.strictEqual(again.idempotent, true);
+    await fns.courierCashPendingSweep.run({});
+    assert.strictEqual(Math.abs(((await cashAcc()).data() || {}).balance || 0), 30000, 'ikkilandi');
+  });
+
+  // ── C-9: courierMarkPicked orqaga qaytarmaydi (audit 2026-10-16) ──────────
+  await check('C-9: arrived / payment_pending_confirm / courier_picked holatda picked — ok, holat ORQAGA qaytmaydi', async () => {
+    await reset({ wallet: 0 });
+    const t0 = admin.firestore.Timestamp.fromMillis(1000);
+    for (const fs of ['arrived', 'payment_pending_confirm', 'courier_picked']) {
+      await seedOrder(`c9_${fs}`, { fulfillmentStatus: fs, status: 'in_delivery', pickedAt: t0 });
+      const r = await picked(`c9_${fs}`, A);
+      assert.strictEqual(r.ok, true, `${fs}: ok`);
+      const od = await order(`c9_${fs}`);
+      assert.strictEqual(od.fulfillmentStatus, fs, `${fs} -> ${od.fulfillmentStatus}`);
+      assert.strictEqual(od.pickedAt.toMillis(), 1000, `${fs}: pickedAt qayta yozilgan`);
+      const ev = (await sub(`c9_${fs}`, 'payment_events')).filter((e) => e.action === 'courier_picked');
+      assert.strictEqual(ev.length, 0, `${fs}: ortiqcha audit yozuvi`);
+    }
+    // oddiy birinchi olish avvalgidek ishlaydi
+    await seedOrder('c9_ready', { status: 'ready', fulfillmentStatus: 'ready' });
+    await picked('c9_ready', A);
+    assert.strictEqual((await order('c9_ready')).fulfillmentStatus, 'courier_picked');
+  });
+
+  // ── C-8: 9 xonali (eski) mijoz raqami ishlaydi, begona rad (audit) ─────────
+  await check('C-8: courierPhone 9 xonali, token 12 xonali — picked/arrived/submit ishlaydi; begona rad', async () => {
+    await reset({ wallet: 0 });
+    const A9 = A.slice(3);
+    await seedOrder('c8', { status: 'ready', fulfillmentStatus: 'ready' });
+    const viaA9 = (name, extra) => call(name, { orderId: 'c8', courierPhone: A9, ...extra }, A);
+    await expectDenied(call('courierMarkPicked', { orderId: 'c8', courierPhone: A9 }, B));
+    await expectDenied(call('courierMarkArrived', { orderId: 'c8', courierPhone: A9 }, B));
+    await expectDenied(call('courierSubmitPayment', { orderId: 'c8', courierPhone: A9, lines: [{ kind: 'cash', amount: 30000 }] }, B));
+    assert.deepStrictEqual(await viaA9('courierMarkPicked'), { ok: true });
+    assert.deepStrictEqual(await viaA9('courierMarkArrived'), { ok: true });
+    const r = await viaA9('courierSubmitPayment', { lines: [{ kind: 'cash', amount: 30000 }] });
+    assert.strictEqual(r.ok, true);
+    const od = await order('c8');
+    assert.strictEqual(od.paymentStatus, 'paid');
+    assert.strictEqual(od.courierId, A, 'kanon (12 xonali) ID yoziladi');
+  });
+
+  // ── C-3/C-4: courierRecoverOrphanRoute (audit 2026-10-16) ─────────────────
+  const FS = require('@google-cloud/firestore');
+  const activeRoutesOf = async (cid) => (await db.collection('delivery_routes')
+    .where('courierId', '==', cid).where('status', '==', 'active').get()).docs;
+  const seedLoose = (id, over = {}) => db.collection('orders').doc(id).set({
+    type: 'bread', userPhone: CUSTOMER, total: 30000, balanceApplied: 0,
+    paymentStatus: 'unpaid', status: 'in_delivery', fulfillmentStatus: 'courier_picked',
+    courierId: A, ...over,
+  });
+  await check('C-3/C-4: faqat O\'Z (9 va 12 xonali) in_delivery buyurtmalar; restoran, to\'langan, begona yo\'q; boshqa kuryer hujjati O\'QILMAYDI', async () => {
+    await reset({ wallet: 0 });
+    await seedLoose('lo1');
+    await seedLoose('lo2', { courierId: A.slice(3) }); // eski 9 xonali
+    await seedLoose('lo_rest', { type: 'restaurant', restaurantStatus: 'on_the_way' });
+    await seedLoose('lo_paid', { paymentStatus: 'paid' });
+    await seedLoose('lo_B', { courierId: B });
+    await seedLoose('lo_B2', { courierId: B });
+    const seen = [];
+    const origQ = FS.Query.prototype.get;
+    const origT = FS.Transaction.prototype.get;
+    const rec = (res) => { for (const d of (res && res.docs) || []) if (d.ref.parent.id === 'orders') seen.push(d.id); return res; };
+    FS.Query.prototype.get = async function qget(...a) { return rec(await origQ.apply(this, a)); };
+    FS.Transaction.prototype.get = async function tget(r, ...a) { return rec(await origT.call(this, r, ...a)); };
+    let r;
+    try { r = await call('courierRecoverOrphanRoute', { courierPhone: A }, A); } finally {
+      FS.Query.prototype.get = origQ; FS.Transaction.prototype.get = origT;
+    }
+    assert.strictEqual(r.revived, true);
+    assert.strictEqual(r.count, 2, JSON.stringify(r));
+    const route = (await db.collection('delivery_routes').doc(r.routeId).get()).data();
+    assert.deepStrictEqual([...route.orders].sort(), ['lo1', 'lo2']);
+    assert.strictEqual((await order('lo_rest')).deliveryRouteId, undefined, 'restoran buyurtmasi marshrutga tushmadi');
+    assert.strictEqual((await order('lo_B')).deliveryRouteId, undefined);
+    assert.strictEqual((await order('lo1')).deliveryRouteId, r.routeId);
+    assert.strictEqual((await order('lo2')).courierId, A, '9 xonali ID kanonga keltirildi');
+    assert.ok(!seen.includes('lo_B') && !seen.includes('lo_B2'), `begona kuryer buyurtmalari o'qildi: ${seen}`);
+    const again = await call('courierRecoverOrphanRoute', { courierPhone: A }, A);
+    assert.strictEqual(again.revived, false);
+    assert.strictEqual(again.reason, 'has_active');
+  });
+  await check('C-3: ikki/besh PARALLEL chaqiruv — BITTA faol marshrut, buyurtmalar bitta marshrutda', async () => {
+    await reset({ wallet: 0 });
+    await seedLoose('pr1'); await seedLoose('pr2'); await seedLoose('pr3');
+    const rs = await Promise.all([1, 2, 3, 4, 5].map(() => call('courierRecoverOrphanRoute', { courierPhone: A }, A)));
+    assert.strictEqual(rs.filter((x) => x.revived === true).length, 1, JSON.stringify(rs));
+    const routes = await activeRoutesOf(A);
+    assert.strictEqual(routes.length, 1, `faol marshrutlar: ${routes.length}`);
+    for (const id of ['pr1', 'pr2', 'pr3']) assert.strictEqual((await order(id)).deliveryRouteId, routes[0].id);
+    assert.deepStrictEqual([...routes[0].data().orders].sort(), ['pr1', 'pr2', 'pr3']);
+  });
+  await check('C-3: tranzaksiyada buyurtma boshqa kuryerga o\'tgan bo\'lsa marshrutga QO\'SHILMAYDI', async () => {
+    await reset({ wallet: 0 });
+    await seedLoose('mv1'); await seedLoose('mv2');
+    // so'rovdan keyin, tranzaksiyadan oldin mv2 boshqa kuryerga o'tadi
+    const origQ = FS.Query.prototype.get;
+    let moved = false;
+    FS.Query.prototype.get = async function qget(...a) {
+      const res = await origQ.apply(this, a);
+      if (!moved && (res.docs || []).some((d) => d.id === 'mv2')) {
+        moved = true;
+        await db.collection('orders').doc('mv2').update({ courierId: B });
+      }
+      return res;
+    };
+    let r;
+    try { r = await call('courierRecoverOrphanRoute', { courierPhone: A }, A); } finally { FS.Query.prototype.get = origQ; }
+    assert.ok(moved, 'hook ishladi');
+    const route = (await db.collection('delivery_routes').doc(r.routeId).get()).data();
+    assert.deepStrictEqual(route.orders, ['mv1']);
+    assert.strictEqual((await order('mv2')).courierId, B);
+    assert.strictEqual((await order('mv2')).deliveryRouteId, undefined);
+  });
+
+  // ── C-10: route push xatosi jim yutilmaydi (audit 2026-10-16) ─────────────
+  await check('C-10: onDeliveryRouteCreate/Assign push xatosi bitta qatorli JSON log (COURIER_PUSH_FAILED)', async () => {
+    await reset({ wallet: 0 });
+    await db.collection('users').doc(A).update({ fcmToken: 'tok-A-0123456789-abcdef' });
+    const msgr = admin.messaging(); // keshlangan nusxa — index.js ham shuni oladi
+    const origSend = msgr.send;
+    msgr.send = async () => { throw new Error('fcm down'); };
+    const lines = [];
+    const origErr = console.error; const origWarn = console.warn; const origLog = console.log;
+    const grab = (...a) => lines.push(a.join(' '));
+    console.error = grab; console.warn = grab; console.log = grab;
+    try {
+      await fns.onDeliveryRouteCreate.run({ data: () => ({ courierId: A, orders: ['x'] }), id: 'rt1' }, {});
+      await fns.onDeliveryRouteAssign.run({
+        before: { data: () => ({ courierId: '' }) },
+        after: { data: () => ({ courierId: A, orders: ['x'] }), id: 'rt2' },
+      }, {});
+    } finally {
+      msgr.send = origSend; console.error = origErr; console.warn = origWarn; console.log = origLog;
+    }
+    const logs = lines.map((l) => { try { return JSON.parse(l); } catch (_) { return null; } })
+      .filter((j) => j && j.errorCode === 'COURIER_PUSH_FAILED');
+    assert.deepStrictEqual(logs.map((j) => j.routeId).sort(), ['rt1', 'rt2']);
+    for (const j of logs) {
+      assert.strictEqual(j.result, 'push_failed');
+      assert.ok(j.action && j.message);
+    }
   });
 
   const failed = results.filter((r) => !r.pass);

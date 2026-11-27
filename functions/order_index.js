@@ -292,6 +292,23 @@ function normalize(sourceCollection, d, extra = {}) {
         ctx: { prepTimeMin: d.prepTimeMin },
       };
     }
+    if (type === 'business') {
+      // «Менинг бизнесим» маҳсулот буюртмаси (business_orders.js): ҳолат номлари ресторан жадвали билан бир хил
+      // (business_order_states.js). «Тиқилиб қолган» чегаралари ҳали йўқ (DEFAULT_RULES да модул йўқ → stuckAt null).
+      const raw = String(d.businessStatus || '');
+      const [norm, stage] = pick(RESTAURANT_STATUS, raw);
+      return {
+        module: 'business', normStatus: norm, stage, rawStatus: raw,
+        courierId: d.courierId || null,
+        amount: intOrNull(d.total),
+        regionId: d.regionId || null, districtId: d.districtId || null,
+        customerTail: tail(d.userPhone || d.phone),
+        title: String(d.businessName || '').slice(0, 80),
+        createdAtMs: ms(d.createdAt),
+        statusTsMs: ms(d.statusUpdatedAt) || ms(d.updatedAt),
+        ctx: {},
+      };
+    }
     const raw = String(d.status || '');
     let [norm, stage] = pick(ORDER_STATUS, raw);
     const mode = String(d.fulfillmentMode || 'delivery');
@@ -535,7 +552,7 @@ async function syncOne(db, admin, { sourceCollection, sourceId, data, updateMs, 
   const ids = n
     ? [indexDocId(n.module, sourceId)]
     : (sourceCollection === 'orders'
-        ? ['bread', 'wholesale', 'restaurant'].map((m) => indexDocId(m, sourceId))
+        ? ['bread', 'wholesale', 'restaurant', 'business'].map((m) => indexDocId(m, sourceId))
         : []);
   if (!n && sourceCollection !== 'orders') {
     // carpet/milk/shipments/courier — модул маълум.

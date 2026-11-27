@@ -1,0 +1,31 @@
+{
+  "_comment": "«Менинг бизнесим» буюртмаси (functions/business_orders.js, эга 2026-11-03) учун композит индекслар. Асосий firestore.indexes.json га ҚЎЛДА қўшилади (--force ИШЛАТИЛМАЙДИ: prod'да қўлда яратилган индекслар бор). 1) listNearbyBusinessOrders; 2) expireUnacceptedBusinessOrders; 3) сотувчи иловаси рўйхати: where sellerUid == <телефон> orderBy createdAt desc. Харидор рўйхати — мавжуд (userPhone, createdAt DESC). Тенглик-фақат сўровлар (adminListStaleTasks business_orders, listDeliveryFailedPending sellerUid+deliveryFailedOpen) композит индекс талаб қилмайди.",
+  "indexes": [
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "type", "order": "ASCENDING" },
+        { "fieldPath": "courierId", "order": "ASCENDING" },
+        { "fieldPath": "businessStatus", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "type", "order": "ASCENDING" },
+        { "fieldPath": "businessStatus", "order": "ASCENDING" },
+        { "fieldPath": "acceptDeadlineAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sellerUid", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    }
+  ]
+}

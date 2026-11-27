@@ -37,14 +37,30 @@ function fresh(extra) {
 }
 
 // ── sof funksiya ─────────────────────────────────────────────────────
-ok('stageOf: yo\'q / noma\'lum / pilot → internal (yopiq); faqat «public» ochadi', () => {
+ok('stageOf: yo\'q / noma\'lum → internal (yopiq); lug\'at: off | internal | pilot | public (42-band, D8)', () => {
   assert.strictEqual(L.stageOf({}), 'internal');
   assert.strictEqual(L.stageOf({ logistics: {} }), 'internal');
-  assert.strictEqual(L.stageOf({ logistics: { stage: 'pilot' } }), 'internal');
+  assert.strictEqual(L.stageOf({ logistics: { stage: 'beta' } }), 'internal', 'noma\'lum qiymat — yopiq tomonga');
   assert.strictEqual(L.stageOf({ logistics: { stage: 'PUBLIC' } }), 'internal', 'katta harf — noma\'lum');
   assert.strictEqual(L.stageOf({ logistics: { stage: 'public' } }), 'public');
+  assert.strictEqual(L.stageOf({ logistics: { stage: 'pilot' } }), 'pilot');
+  assert.strictEqual(L.stageOf({ logistics: { stage: 'off' } }), 'off');
+  assert.deepStrictEqual(Object.values(L.STAGE), ['off', 'internal', 'pilot', 'public']);
   assert.strictEqual(config.DEFAULTS.logistics.stage, 'internal');
   assert.deepStrictEqual(config.DEFAULTS.logistics.testerIds, []);
+});
+
+ok('isStageAllowed: OFF — hech kim (sinovchi ham); PILOT — INTERNAL kabi faqat ro\'yxat (PILOT qoidasi UNKNOWN); PUBLIC — hamma', () => {
+  const list = ['+998 90 111 00 01'];
+  const at = (stage) => ({ logistics: { stage, testerIds: list } });
+  assert.strictEqual(L.isStageAllowed(at('off'), OWNER), false, 'off: sinovchi ham yo\'q');
+  assert.strictEqual(L.isStageAllowed({ logistics: { stage: 'off', testerIds: list } }, STRANGER), false);
+  assert.strictEqual(L.isStageAllowed(at('pilot'), OWNER), true);
+  assert.strictEqual(L.isStageAllowed(at('pilot'), STRANGER), false);
+  assert.strictEqual(L.isStageAllowed(at('internal'), OWNER), true);
+  assert.strictEqual(L.isStageAllowed(at('internal'), STRANGER), false);
+  assert.strictEqual(L.isStageAllowed(at('public'), STRANGER), true);
+  assert.strictEqual(L.isStageAllowed({ logistics: { stage: 'off' } }, ''), false);
 });
 
 ok('isStageAllowed: kanonik solishtirish (+998…, 9 xonali); bo\'sh ID / ro\'yxat emas — rad', () => {
@@ -108,6 +124,18 @@ ok('PUBLIC: hamma narx oladi; LEG ro\'yxatsiz ijrochilarga ham mos', async () =>
   await fund(db, r.shipmentIds[0]);
   const matches = db.dump('demand_matches');
   assert.ok(matches[`${legId}_${K1}`] && matches[`${legId}_${F1}`]);
+});
+
+ok('OFF: sinovchi ham narx ololmaydi (module_internal_only), getLogisticsAccess false; PILOT: sinovchi oladi', async () => {
+  const off = fresh(cfg({ stage: 'off', testerIds: [OWNER] }));
+  await assert.rejects(() => api.makeQuoteLogisticsOrder({ db: off })(orderPayload(), ctx(OWNER)),
+    (e) => e.code === 'unavailable' && e.details.reason === 'module_internal_only');
+  assert.deepStrictEqual(await api.makeGetLogisticsAccess({ db: off })({}, ctx(OWNER)), { allowed: false, stage: 'off' });
+  const pilot = fresh(cfg({ stage: 'pilot', testerIds: [OWNER] }));
+  assert.strictEqual((await api.makeQuoteLogisticsOrder({ db: pilot })(orderPayload(), ctx(OWNER))).total, 10000);
+  await assert.rejects(() => api.makeQuoteLogisticsOrder({ db: pilot })(orderPayload(), ctx(STRANGER)),
+    (e) => e.details.reason === 'module_internal_only');
+  assert.deepStrictEqual(await api.makeGetLogisticsAccess({ db: pilot })({}, ctx(OWNER)), { allowed: true, stage: 'pilot' });
 });
 
 // ── ilova kirishi ────────────────────────────────────────────────────

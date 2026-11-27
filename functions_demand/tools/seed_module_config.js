@@ -6,8 +6,8 @@
  *   node functions_demand/tools/seed_module_config.js --kill      # kill switch
  *   node functions_demand/tools/seed_module_config.js --status    # фақат ўқиш
  *
- * НИМА ҚИЛАДИ: `module_config/global` ва `module_config/service_all`
- * (бутун республика; алоҳида вилоят: `--region xorazm`) ҳужжатларини ёзади. Кодда стандарт қиймат `enabled: false`, шунинг
+ * НИМА ҚИЛАДИ: `module_config/global` ва `module_config/service_xorazm`
+ * ҳужжатларини ёзади. Кодда стандарт қиймат `enabled: false`, шунинг
  * учун деплойдан кейин ҳеч нарса ўзидан ишга тушмайди — модул
  * АЙНИ ШУ СКРИПТ билан ёқилади.
  *
@@ -24,22 +24,7 @@
 const path = require('path');
 
 const MODULE = 'service';
-// Standart — `all` (butun respublika, `module_config/service_all`); alohida
-// viloyat uchun: `--region xorazm`. Eski qat'iy `xorazm` olib tashlandi
-// (ega 2026-10-20: qoidalar butun respublikada).
-const { moduleRegionKey } = require('../core/ids');
-const { parseMinScoreArg } = require('../core/calibration');
-
-const regionIdx = process.argv.indexOf('--region');
-// `--region` berilgan, lekin noto'g'ri bo'lsa JIM `all`ga tushmaydi: xato yozilgan
-// viloyat butun respublikani yoqib yuborishi mumkin edi.
-if (regionIdx >= 0 && !/^[a-z][a-z0-9_]{0,40}$/.test(process.argv[regionIdx + 1] || '')) {
-  console.error('XATO: --region noto\'g\'ri (masalan: xorazm, toshkent_shahri). Hech narsa yozilmadi.');
-  process.exit(1);
-}
-const REGION = regionIdx >= 0 ? process.argv[regionIdx + 1] : 'all';
-// Hujjat ID'si yadro bilan BIR XIL qoida (`_`li hudud: `service__toshkent_shahri`).
-const MODULE_KEY = moduleRegionKey(MODULE, REGION);
+const REGION = 'xorazm';
 
 const admin = require(path.join(__dirname, '..', 'node_modules', 'firebase-admin'));
 
@@ -78,22 +63,16 @@ const PRESETS = {
 
 async function status(db) {
   const g = await db.collection('module_config').doc('global').get();
-  const m = await db.collection('module_config').doc(MODULE_KEY).get();
-  // Zaxira qatlam: `{module}_all` (core/config.getModuleConfig bilan bir xil).
-  const a = REGION === 'all' ? null : await db.collection('module_config').doc(moduleRegionKey(MODULE, 'all')).get();
+  const m = await db.collection('module_config').doc(`${MODULE}_${REGION}`).get();
 
   console.log('module_config/global:');
   console.log(g.exists ? JSON.stringify(g.data(), null, 2) : '  (hujjat yo\'q — standart: ruxsat beruvchi)');
-  console.log(`\nmodule_config/${MODULE_KEY}:`);
+  console.log(`\nmodule_config/${MODULE}_${REGION}:`);
   console.log(m.exists ? JSON.stringify(m.data(), null, 2) : '  (hujjat yo\'q — standart: enabled=false, ya\'ni O\'CHIQ)');
-  if (a) {
-    console.log(`\nmodule_config/${moduleRegionKey(MODULE, 'all')} (zaxira):`);
-    console.log(a.exists ? JSON.stringify(a.data(), null, 2) : '  (hujjat yo\'q)');
-  }
 
-  // Yakuniy holat — `resolveFlags` mantiqi bilan bir xil (AND); hudud hujjati `_all` ustidan ustun.
+  // Yakuniy holat — `resolveFlags` mantiqi bilan bir xil (AND).
   const gd = g.exists ? g.data() : {};
-  const md = { ...(a && a.exists ? a.data() : {}), ...(m.exists ? m.data() : {}) };
+  const md = m.exists ? m.data() : {};
   const enabled = gd.enabled !== false && md.enabled === true;
   const matching = gd.matchingEnabled !== false && md.matchingEnabled !== false;
   const push = gd.pushEnabled !== false && md.pushEnabled === true;
@@ -106,41 +85,6 @@ async function status(db) {
     !enabled ? 'O\'CHIQ'
       : (matching && !push ? 'SHADOW MODE' : (matching && push ? 'TO\'LIQ' : 'noma\'lum'))
   }`);
-
-  // Har moslik uchun push chegarasi — core/config.deepMerge bilan BIR XIL qoida:
-  // hudud hujjatidagi son `_all` dagidan ustun; `null` hech narsani bekor qilmaydi.
-  const pmOf = (doc) => {
-    const v = doc && doc.exists ? ((doc.data() || {}).push || {}).minScore : undefined;
-    return typeof v === 'number' ? v : null;
-  };
-  const minScore = pmOf(m) !== null ? pmOf(m) : pmOf(a);
-  console.log(`  push.minScore   : ${minScore === null ? 'null (KALIBROVKA YO\'Q)' : minScore}`);
-  if (minScore === null) {
-    console.log(
-      '  DIQQAT: chegara o\'lchab tanlanmaguncha quote/alert/recurring push ketmaydi'
-      + ' (`score_not_calibrated`).\n'
-      + '          Tartib: review_matches.js --csv -> `relevant` to\'ldirish -> '
-      + 'calibrate_push_threshold.js -> --min-score.',
-    );
-  }
-}
-
-/** `--min-score <0.01..1>` (yoki `off`): faqat `push.minScore` yoziladi (boshqa maydonlarga tegmaydi). */
-async function setMinScore(db, raw) {
-  const value = parseMinScoreArg(raw);
-  await db.collection('module_config').doc(MODULE_KEY).set({
-    push: { minScore: value },
-    module: MODULE,
-    regionId: REGION,
-    updatedAt: new Date(),
-    updatedBy: 'seed_module_config.js',
-  }, { merge: true });
-  console.log(`  yozildi: module_config/${MODULE_KEY}  push.minScore = ${value === null ? 'null (o\'chirildi)' : value}`);
-  if (value === null && REGION !== 'all') {
-    console.log('  Eslatma: `null` faqat shu hujjatning o\'z qiymatini tozalaydi; `_all` dagi son baribir amal qiladi.');
-  }
-  console.log('');
-  await status(db);
 }
 
 async function apply(db, presetName) {
@@ -157,14 +101,14 @@ async function apply(db, presetName) {
   console.log('  yozildi: module_config/global');
 
   if (preset.module) {
-    await db.collection('module_config').doc(MODULE_KEY).set({
+    await db.collection('module_config').doc(`${MODULE}_${REGION}`).set({
       ...preset.module,
       module: MODULE,
       regionId: REGION,
       updatedAt: new Date(),
       updatedBy: 'seed_module_config.js',
     }, { merge: true });
-    console.log(`  yozildi: module_config/${MODULE_KEY}`);
+    console.log(`  yozildi: module_config/${MODULE}_${REGION}`);
   } else {
     console.log('  modul hujjati tegilmadi (kill switch global darajada)');
   }
@@ -179,15 +123,12 @@ async function apply(db, presetName) {
 
   if (arg === 'status') {
     await status(db);
-  } else if (arg === 'min-score') {
-    await setMinScore(db, process.argv[3]);
   } else if (PRESETS[arg]) {
     await apply(db, arg);
   } else {
     console.error(
       'Ishlatish:\n'
       + '  node tools/seed_module_config.js --status   # faqat o\'qish\n'
-      + '  node tools/seed_module_config.js --min-score 0.75 [--region xorazm]   # har moslik uchun push chegarasi (o\'lchab tanlangan)\n'
       + '  node tools/seed_module_config.js --shadow   # matching ON, push OFF\n'
       + '  node tools/seed_module_config.js --push     # push ON (darvozadan keyin)\n'
       + '  node tools/seed_module_config.js --kill     # butun yadroni to\'xtatish',

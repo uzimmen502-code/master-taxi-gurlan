@@ -35,6 +35,50 @@ check('2 %: satr / manfiy / 0 / float rad etiladi', () => {
   }
 });
 
+// ── AVA ulushi: versiyalangan sozlama (D9, ega qarori 2026-10-16) ──────
+check('D9 resolveAvaFeeSettings: hujjat/maydon yo\'q → standart 200 bps (hech narsa o\'zgarmaydi)', () => {
+  for (const d of [null, undefined, {}, { base: 5000, perKm: 1500, version: 3 }]) {
+    const s = t.resolveAvaFeeSettings(d);
+    assert.strictEqual(s.rateBps, 200);
+    assert.strictEqual(s.source, 'default');
+  }
+  assert.strictEqual(t.resolveAvaFeeSettings({ version: 3 }).settingsVersion, 3);
+  assert.strictEqual(t.resolveAvaFeeSettings(null).settingsVersion, 0);
+});
+check('D9 resolveAvaFeeSettings: avaFeeBps butun 0..10000 → sozlama', () => {
+  const s = t.resolveAvaFeeSettings({ avaFeeBps: 300, version: 4 });
+  assert.deepStrictEqual({ r: s.rateBps, src: s.source, v: s.settingsVersion }, { r: 300, src: 'setting', v: 4 });
+  assert.strictEqual(t.resolveAvaFeeSettings({ avaFeeBps: 0 }).rateBps, 0, '0 — qonuniy (ulush yo\'q)');
+  assert.strictEqual(t.resolveAvaFeeSettings({ avaFeeBps: 10000 }).rateBps, 10000);
+});
+check('D9 resolveAvaFeeSettings: noto\'g\'ri qiymat (satr / float / manfiy / >10000) → standart', () => {
+  for (const bad of ['300', 2.5, -1, 10001, NaN, null, true]) {
+    const s = t.resolveAvaFeeSettings({ avaFeeBps: bad });
+    assert.strictEqual(s.rateBps, 200, String(bad));
+    assert.strictEqual(s.source, 'default', String(bad));
+  }
+});
+check('D9 computeAvaFee(basis, settings): 3 % — 60 000 → 1 800; 0 bps → 0; ceil saqlanadi', () => {
+  const f = t.computeAvaFee(60000, { rateBps: 300, settingsVersion: 4, source: 'setting' });
+  assert.deepStrictEqual({ r: f.rateBps, a: f.amount, v: f.version }, { r: 300, a: 1800, v: 1 });
+  assert.strictEqual(f.settingsVersion, 4);
+  assert.strictEqual(f.rateSource, 'setting');
+  assert.strictEqual(t.computeAvaFee(60000, { rateBps: 0, settingsVersion: 4, source: 'setting' }).amount, 0);
+  assert.strictEqual(t.computeAvaFee(33333, { rateBps: 300, settingsVersion: 1, source: 'setting' }).amount, 1000, 'ceil(999.99)');
+});
+check('D9 computeAvaFee(basis) sozlamasiz — AVVALGIDEK 200 bps, version 1', () => {
+  const f = t.computeAvaFee(60000);
+  assert.deepStrictEqual(f, { rateBps: 200, basis: 60000, amount: 1200, version: 1 }, 'eski shakl AYNAN saqlanadi');
+  const g = t.computeAvaFee(60000, t.resolveAvaFeeSettings({ base: 5000 }));
+  assert.deepStrictEqual(g, f, 'standart sozlama ham eski shaklda (muhrsiz)');
+});
+check('D9 chegaralar eksport qilinadi (admin callable bilan bitta manba)', () => {
+  assert.strictEqual(t.AVA_FEE_BPS_MIN, 0);
+  assert.strictEqual(t.AVA_FEE_BPS_MAX, 10000);
+  assert.strictEqual(t.NIGHT_COEF_MIN, 1);
+  assert.strictEqual(t.NIGHT_COEF_MAX, 3);
+});
+
 // ── Tarif hujjati ──────────────────────────────────────────────────────
 const doc = { base: 5000, perKm: 1500, nightCoef: 1.5, nightStart: 23, nightEnd: 6, roadFactor: 1.3, maxKm: 12, version: 3,
   regions: { xorazm: { base: 4000 } } };

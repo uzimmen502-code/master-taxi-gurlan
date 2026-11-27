@@ -247,6 +247,131 @@ async function main() {
     assert.ok(!ids(await agroList('active', A)).includes('m1'));
   });
 
+  // ── F4: Mark* callable'lar tranzaksiyada (audit 2026-10-16) ───────────────
+  // Muammo: read → tekshiruv → update orasida admin/boshqa yozuv bekor qilsa, eski
+  // kod `picked_up`/`completed` bilan "tiriltirardi"; ikki parallel «yetib keldim»
+  // mijozga ikki xabar yuborardi.
+  const FS = require('@google-cloud/firestore');
+  /** Hujjat o'qilgach BIR MARTA tashqi yozuv: status → cancelled (admin bekori). */
+  const armConcurrentCancel = (collection, id) => {
+    const path = `${collection}/${id}`;
+    const ref = db.collection(collection).doc(id);
+    const origRef = FS.DocumentReference.prototype.get;
+    const origTx = FS.Transaction.prototype.get;
+    let fired = false;
+    let pending = null;
+    const cancel = () => ref.update({ status: 'cancelled' });
+    FS.DocumentReference.prototype.get = async function patchedGet(...a) {
+      const snap = await origRef.apply(this, a);
+      if (!fired && this.path === path) { fired = true; await cancel(); }
+      return snap;
+    };
+    FS.Transaction.prototype.get = async function patchedTxGet(r, ...a) {
+      const snap = await origTx.call(this, r, ...a);
+      // tranzaksiya ichida kutmaymiz (qulf): yozuv commit'dan keyin yoki retry'ni keltirib chiqaradi
+      if (!fired && r && r.path === path) { fired = true; pending = cancel(); }
+      return snap;
+    };
+    return {
+      done: async () => {
+        FS.DocumentReference.prototype.get = origRef;
+        FS.Transaction.prototype.get = origTx;
+        if (pending) await pending;
+        return fired;
+      },
+    };
+  };
+  const settle = (p) => p.then(() => 'ok', (e) => `err:${e.code}`);
+  const newsCount = async (orderId) => (await db.collection('admin_news')
+    .where('source', '==', 'courier_arrived').where('orderId', '==', orderId).get()).size;
+
+  await reset();
+  const racy = [
+    ['courierMarkCarpetPickedUp', 'carpet_wash_orders', { status: 'pickup_in_delivery', pickupCourierId: A, pickupArrivedAt: at(1) },
+      { courierPhone: A, orderId: 'race1' }],
+    ['courierMarkCarpetDelivered', 'carpet_wash_orders', { status: 'return_in_delivery', returnCourierId: A, returnArrivedAt: at(1) },
+      { courierPhone: A, orderId: 'race1' }],
+    ['courierMarkAgroPickedUp', 'agro_pickup_orders', { status: 'pickup_in_delivery', pickupCourierId: A, arrivedAt: at(1) },
+      { courierPhone: A, orderId: 'race1' }],
+  ];
+  for (const [fn, coll, seed, args] of racy) {
+    await check(`F4 ${fn}: o'qishdan keyingi bekor "tiriltirilmaydi" (cancelled qoladi)`, async () => {
+      await db.collection(coll).doc('race1').set({ customerPhone: CUSTOMER, createdAt: at(1000), ...seed });
+      const arm = armConcurrentCancel(coll, 'race1');
+      let r;
+      try { r = await settle(call(fn, args, A)); } finally { assert.ok(await arm.done(), 'hook ishladi'); }
+      const st = (await db.collection(coll).doc('race1').get()).data().status;
+      assert.strictEqual(st, 'cancelled', `natija ${r}, status ${st}`);
+    });
+  }
+
+  await check('F4 carpet: parallel ikki «yetib keldim» — mijozga BITTA xabar, ikkalasi ok', async () => {
+    await carpet('par1', { status: 'pickup_in_delivery', pickupCourierId: A });
+    const args = { courierPhone: A, orderId: 'par1', leg: 'pickup' };
+    const rs = await Promise.all([1, 2, 3, 4].map(() => settle(call('courierMarkCarpetArrived', args, A))));
+    assert.deepStrictEqual(rs, ['ok', 'ok', 'ok', 'ok']);
+    assert.strictEqual(await newsCount('par1'), 1);
+    // keyingi takror chaqiruv ham ok, xabar ko'paymaydi
+    const again = await call('courierMarkCarpetArrived', args, A);
+    assert.strictEqual(again.idempotent, true);
+    assert.strictEqual(await newsCount('par1'), 1);
+  });
+  await check('F4 agro: parallel ikki «yetib keldim» — mijozga BITTA xabar', async () => {
+    await agro('par2', { status: 'pickup_in_delivery', pickupCourierId: A });
+    const args = { courierPhone: A, orderId: 'par2' };
+    const rs = await Promise.all([1, 2, 3, 4].map(() => settle(call('courierMarkAgroPickupArrived', args, A))));
+    assert.deepStrictEqual(rs, ['ok', 'ok', 'ok', 'ok']);
+    assert.strictEqual(await newsCount('par2'), 1);
+  });
+  await check('F4: begona kuryer va noto\'g\'ri status — avvalgidek rad', async () => {
+    await carpet('own1', { status: 'pickup_in_delivery', pickupCourierId: A });
+    await rejectsWith(call('courierMarkCarpetArrived', { courierPhone: B, orderId: 'own1', leg: 'pickup' }, B), 'permission-denied');
+    await rejectsWith(call('courierMarkCarpetPickedUp', { courierPhone: A, orderId: 'own1' }, A), 'failed-precondition'); // arrived first
+    await rejectsWith(call('courierMarkCarpetArrived', { courierPhone: A, orderId: 'own1', leg: 'return' }, A), 'failed-precondition');
+    await rejectsWith(call('courierMarkAgroPickupArrived', { courierPhone: A, orderId: 'nope' }, A), 'not-found');
+  });
+
+  // ── F5: place* idempotentligi atomik; agro koordinata tekshiruvi ─────────
+  await reset();
+  await check('F5 placeCarpetWashOrder: parallel bir xil idempotencyKey — BITTA buyurtma, bir xil orderId', async () => {
+    const d = { idempotencyKey: 'k-carpet-1', carpetCount: 2, pickupAddress: 'Gurlan, Navoiy 7' };
+    const rs = await Promise.all([1, 2, 3, 4, 5].map(() => call('placeCarpetWashOrder', d, CUSTOMER)));
+    assert.strictEqual(new Set(rs.map((r) => r.orderId)).size, 1, 'orderId lar har xil');
+    const all = await db.collection('carpet_wash_orders').get();
+    assert.strictEqual(all.size, 1, `buyurtmalar: ${all.size}`);
+    const idem = (await db.collection('wallet_idempotency').doc('carpet_k-carpet-1').get()).data();
+    assert.strictEqual(idem.orderId, rs[0].orderId);
+  });
+  await check('F5 placeAgroPickupOrder: parallel bir xil idempotencyKey — BITTA buyurtma, bir xil orderId', async () => {
+    const d = { idempotencyKey: 'k-agro-1', productType: 'milk', literCount: 10, pickupAddress: 'Gurlan, Navoiy 7' };
+    const rs = await Promise.all([1, 2, 3, 4, 5].map(() => call('placeAgroPickupOrder', d, CUSTOMER)));
+    assert.strictEqual(new Set(rs.map((r) => r.orderId)).size, 1, 'orderId lar har xil');
+    const all = await db.collection('agro_pickup_orders').get();
+    assert.strictEqual(all.size, 1, `buyurtmalar: ${all.size}`);
+  });
+  await check('F5: kalitsiz chaqiruvlar alohida buyurtma beradi (cheklov YO\'Q); takror kalit idempotent', async () => {
+    const d = { productType: 'milk', literCount: 10, pickupAddress: 'Gurlan, Navoiy 7' };
+    const a = await call('placeAgroPickupOrder', d, CUSTOMER);
+    const b = await call('placeAgroPickupOrder', d, CUSTOMER);
+    assert.notStrictEqual(a.orderId, b.orderId);
+    const k = { ...d, idempotencyKey: 'k-agro-2' };
+    const r1 = await call('placeAgroPickupOrder', k, CUSTOMER);
+    const r2 = await call('placeAgroPickupOrder', k, CUSTOMER);
+    assert.strictEqual(r2.orderId, r1.orderId);
+    assert.strictEqual(r2.idempotent, true);
+  });
+  await check('F5 agro: koordinata diapazoni (|lat|<=90, |lng|<=180, chekli) tekshiriladi', async () => {
+    const base = { productType: 'milk', literCount: 10, pickupAddress: 'Gurlan, Navoiy 7' };
+    for (const bad of [{ pickupLat: 91, pickupLng: 60 }, { pickupLat: 41, pickupLng: 181 },
+      { pickupLat: -90.5, pickupLng: 0 }, { pickupLat: 'abc', pickupLng: 60 }, { pickupLat: 41, pickupLng: Infinity }]) {
+      await rejectsWith(call('placeAgroPickupOrder', { ...base, ...bad }, CUSTOMER), 'invalid-argument');
+    }
+    const ok = await call('placeAgroPickupOrder', { ...base, pickupLat: 90, pickupLng: -180 }, CUSTOMER);
+    const doc = (await db.collection('agro_pickup_orders').doc(ok.orderId).get()).data();
+    assert.strictEqual(doc.pickupLat, 90);
+    await call('placeAgroPickupOrder', base, CUSTOMER); // koordinatasiz ham mumkin
+  });
+
   const failed = results.filter((r) => !r.pass);
   console.log(`\n${results.length - failed.length}/${results.length} o'tdi.`);
   process.exit(failed.length ? 1 : 0);

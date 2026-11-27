@@ -122,32 +122,16 @@ function pushLogKey(demandId, providerId) {
  * etiladi va buni topish qiyin bo'ladi.
  */
 
-/**
- * Kalit bo'lagi: harf/raqam/`-` bo'laklari BITTA `_` bilan ulangan. Bosh/oxirgi
- * `_`, `__` va `/` YO'Q (shu sabab ikki bo'lakni `__` bilan ajratish noaniq emas).
- */
-const KEY_PART = /^[A-Za-z0-9-]+(?:_[A-Za-z0-9-]+)*$/;
-
-/**
- * `module_config/{module}_{regionId}` va `module_tariffs/{module}_{regionId}` kaliti.
- *
- * RESPUBLIKA: haqiqiy hudud ID'lari `_` ni o'z ichiga oladi (`toshkent_shahri`,
- * `toshkent_viloyati` — geo_regions 14 tadan 2 tasi), ba'zi modullar ham
- * (`intercity_taxi`). Avval `_` rad etilardi => shu hududlarda `createDemand`
- * yiqilardi. Endi:
- *   - ikkala bo'lakda `_` yo'q  -> `{m}_{r}`   (eski kalitlar O'ZGARMAYDI:
- *                                  `logistics_all`, `restaurants_all`, ...);
- *   - aks holda                  -> `{m}__{r}`  (ikki chiziq — noaniq emas).
- */
+/** `module_config/{module}_{regionId}` va `module_tariffs/{module}_{regionId}` kaliti. */
 function moduleRegionKey(module, regionId) {
   const m = String(module || '');
   const r = String(regionId || '');
-  if (!KEY_PART.test(m) || !KEY_PART.test(r) || m.length > 60 || r.length > 60) {
+  if (!isSafeForCompositeKey(m) || !isSafeForCompositeKey(r)) {
     const err = new Error(`module/regionId composite kalit uchun xavfsiz emas: «${m}_${r}»`);
     err.code = 'invalid-argument';
     throw err;
   }
-  return m.includes('_') || r.includes('_') ? `${m}__${r}` : `${m}_${r}`;
+  return `${m}_${r}`;
 }
 
 /**

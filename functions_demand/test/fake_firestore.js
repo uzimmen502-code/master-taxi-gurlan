@@ -156,11 +156,24 @@ class FakeFirestore {
     const self = this;
     return {
       set(ref, data, opts) { ops.push({ kind: 'set', ref, data, opts }); return this; },
+      /** Haqiqiy SDK kabi: hujjat bor bo'lsa BUTUN batch rad (ALREADY_EXISTS, gRPC 6). */
+      create(ref, data) { ops.push({ kind: 'create', ref, data }); return this; },
       update(ref, data) { ops.push({ kind: 'update', ref, data }); return this; },
       delete(ref) { ops.push({ kind: 'delete', ref }); return this; },
       async commit() {
         if (ops.length > 500) throw new Error('fake: batch 500 dan ortiq operatsiya');
         for (const op of ops) {
+          if (op.kind === 'create' && self.docs.has(op.ref.path)) {
+            const e = new Error(`fake: hujjat allaqachon bor — ${op.ref.path}`);
+            e.code = 6;
+            throw e;
+          }
+        }
+        // `create` hujjatlari DARHOL (sinxron) band qilinadi: tekshiruv va
+        // yozuv orasida boshqa commit kira olmasin (parallel chaqiruvlar testi).
+        for (const op of ops) if (op.kind === 'create') op.ref.set(op.data);
+        for (const op of ops) {
+          if (op.kind === 'create') continue;
           if (op.kind === 'set') await op.ref.set(op.data, op.opts);
           else if (op.kind === 'update') await op.ref.update(op.data);
           else self.docs.delete(op.ref.path);
@@ -189,6 +202,8 @@ class FakeCollection {
     this.name = name;
     this.filters = [];
     this.limitN = null;
+    this.byName = false;
+    this.afterId = null;
   }
 
   doc(id) {
@@ -200,14 +215,36 @@ class FakeCollection {
     const next = new FakeCollection(this.store, this.name);
     next.filters = [...this.filters, { field, op, value }];
     next.limitN = this.limitN;
+    next.byName = this.byName;
+    next.afterId = this.afterId;
     return next;
   }
 
-  orderBy() { return this; }
+  /** Faqat `__name__` (hujjat ID) tartibi modellashtiriladi; boshqa maydonlar e'tiborsiz. */
+  orderBy(field) {
+    if (field !== '__name__') return this;
+    const next = this._clone();
+    next.byName = true;
+    return next;
+  }
 
-  limit(n) {
+  startAfter(snap) {
+    const next = this._clone();
+    next.afterId = snap.id;
+    return next;
+  }
+
+  _clone() {
     const next = new FakeCollection(this.store, this.name);
     next.filters = this.filters;
+    next.limitN = this.limitN;
+    next.byName = this.byName;
+    next.afterId = this.afterId;
+    return next;
+  }
+
+  limit(n) {
+    const next = this._clone();
     next.limitN = n;
     return next;
   }
@@ -215,8 +252,11 @@ class FakeCollection {
   _matchingDocs() {
     const out = [];
     const prefix = `${this.name}/`;
-    for (const [path, data] of this.store.docs) {
+    let entries = Array.from(this.store.docs);
+    if (this.byName) entries = entries.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+    for (const [path, data] of entries) {
       if (!path.startsWith(prefix)) continue;
+      if (this.afterId !== null && path.slice(prefix.length) <= this.afterId) continue;
       // Faqat shu kolleksiyaning bevosita hujjatlari (subkolleksiya emas).
       if (path.slice(prefix.length).includes('/')) continue;
       let ok = true;

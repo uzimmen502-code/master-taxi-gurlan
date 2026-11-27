@@ -43,6 +43,7 @@
 
 const caps = require('./capabilities_model');
 const fraud = require('./taxi_fraud');
+const { render, langOfPhoneTx } = require('./notif_i18n');
 
 const TRIPS = 'taxi_trips';
 const PRICE_CHANGES = 'taxi_price_changes';
@@ -51,6 +52,8 @@ const RESCHEDULES = 'taxi_reschedules';
 const FRAUD_CASES = 'taxi_fraud_cases';
 const AGREEMENTS = 'service_agreements';
 const CAPS = 'provider_capabilities';
+/** Audit M1: publish idempotentligi - server-only `{driverUid}_{requestId}` hujjatlari. */
+const PUBLISH_REQUESTS = 'taxi_publish_requests';
 const EARNINGS_ACCOUNT = 'earnings:ava_taxi_fee';
 
 const SEAT_BASIS = 4;
@@ -101,6 +104,96 @@ function starterNoticeOf(cap, status, nowDate) {
     starterNotice: dueMs - nowDate.getTime() <= STARTER_NOTICE_DAYS * caps.DAY_MS,
     starterEndsAt: new Date(dueMs).toISOString(),
   };
+}
+
+// ── Kirish tekshiruvi (audit M2/H5, 2026-10) ───────────────────────────
+// `publish` oldin hech narsani tekshirmasdi: o'tgan jo'nash vaqti qabul qilinar,
+// noto'g'ri sana jimgina `null` bo'lardi, from/to bo'sh, `seats` cheksiz, sana/vaqt
+// erkin matn. Tekshiruv PUL TEGILMASDAN OLDIN (qarz yopish ham pul harakati).
+// Eski ilovalar uchun TOLERANT: `departureAt` yo'q bo'lsa eski xulq (null), `seats`
+// yo'q bo'lsa 4, `scheduleDate`/`startTime` bo'sh bo'lsa o'tkazib yuboriladi.
+// Narx chegarasi (min/max) QO'SHILMAGAN - ega qarori kutilmoqda.
+
+/** Jo'nash vaqti shu davrdan ko'p o'tgan bo'lsa rad etiladi (soat farqi / sekin tarmoq uchun zaxira). */
+const DEPARTURE_PAST_TOLERANCE_MS = 5 * 60 * 1000;
+/** Audit M1: parallel nusxa birinchi urinish tugashini shuncha kutadi / `processing` shundan eski bo'lsa kutilmaydi. */
+const PUBLISH_REPLAY_WAIT_MS = 10000;
+const PUBLISH_REPLAY_POLL_MS = 200;
+const PUBLISH_PROCESSING_MAX_AGE_MS = 30000;
+const SEATS_MIN = 1;
+const SEATS_MAX = 8;
+const SCHEDULE_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const SCHEDULE_TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+const REQUEST_ID_RE = /^[A-Za-z0-9_-]{8,64}$/;
+
+function isRealDate(y, m, d) {
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+
+/** `departureAt` (ISO satr yoki ms). Yo'q/bo'sh -> {present:false}; noto'g'ri -> {present:true, date:null}. */
+function parseDeparture(raw) {
+  if (!raw) return { present: false, date: null };
+  if (typeof raw !== 'string' && typeof raw !== 'number') return { present: true, date: null };
+  const d = new Date(raw);
+  return { present: true, date: Number.isNaN(d.getTime()) ? null : d };
+}
+
+/** @returns {string|null} xato tafsiloti yoki null (yaroqli). */
+function departureProblem(date, nowMs) {
+  if (!date) return 'invalid_date';
+  if (date.getTime() < nowMs - DEPARTURE_PAST_TOLERANCE_MS) return 'in_past';
+  return null;
+}
+
+/** `scheduleDate` YYYY-MM-DD (haqiqiy sana), `startTime` HH:MM; bo'sh/yo'q - ruxsat. */
+function parseSchedule(scheduleDate, startTime) {
+  const sd = scheduleDate === undefined || scheduleDate === null ? '' : scheduleDate;
+  const st = startTime === undefined || startTime === null ? '' : startTime;
+  if (typeof sd !== 'string' || typeof st !== 'string') return { ok: false };
+  const date = sd.trim();
+  const time = st.trim();
+  if (date) {
+    const m = SCHEDULE_DATE_RE.exec(date);
+    if (!m || !isRealDate(Number(m[1]), Number(m[2]), Number(m[3]))) return { ok: false };
+  }
+  if (time && !SCHEDULE_TIME_RE.test(time)) return { ok: false };
+  return { ok: true, scheduleDate: date, startTime: time };
+}
+
+/** Asia/Tashkent, yozgi vaqt yo'q (intercity_auto_shift.js bilan bir xil). */
+const TZ_OFFSET_MS = 5 * 3600000;
+
+/** Toshkent bo'yicha `YYYY-MM-DD` va `HH:MM` (UTC ms dan). */
+function tashkentParts(ms) {
+  const d = new Date(ms + TZ_OFFSET_MS);
+  const p = (n) => String(n).padStart(2, '0');
+  return {
+    date: `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}`,
+    time: `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`,
+  };
+}
+
+/** `YYYY-MM-DD` kunining Toshkent bo'yicha 23:59:59 vaqti (UTC ms) - ilova `expiresAt` ni shunday yozadi. */
+function endOfTashkentDayMs(dateStr) {
+  const m = SCHEDULE_DATE_RE.exec(dateStr);
+  return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 23, 59, 59) - TZ_OFFSET_MS;
+}
+
+/** `requestId` (ixtiyoriy): yo'q -> '' (eski ilova); yaroqli -> o'zi; yaroqsiz -> null. */
+function parseRequestId(raw) {
+  if (raw === undefined || raw === null || raw === '') return '';
+  return typeof raw === 'string' && REQUEST_ID_RE.test(raw) ? raw : null;
+}
+
+/** `seats`: yo'q -> 4 (eski ilova); aks holda butun son SEATS_MIN..SEATS_MAX (raqamli satr ham). */
+function parseSeats(raw) {
+  if (raw === undefined || raw === null || raw === '') return { ok: true, seats: SEAT_BASIS };
+  let n = Number.NaN;
+  if (typeof raw === 'number') n = raw;
+  else if (typeof raw === 'string' && raw.trim() !== '') n = Number(raw);
+  if (!Number.isInteger(n) || n < SEATS_MIN || n > SEATS_MAX) return { ok: false };
+  return { ok: true, seats: n };
 }
 
 function attachTaxiBilling(exports, deps) {
@@ -292,11 +385,85 @@ function attachTaxiBilling(exports, deps) {
   }
 
   /**
+   * Audit M1: shu `requestId` bilan boshlangan e'lonning joriy natijasi (yoki null).
+   * Birinchi urinish hali ishlayotgan bo'lsa (`processing`, 30 soniyadan yosh) qisqa
+   * kutiladi - parallel nusxa "to'lov kerak" deb noto'g'ri javob olmasin. Yangi reys
+   * ochilmaydi, pul harakati YO'Q.
+   */
+  async function existingPublishResult(reqRef, me) {
+    let req = await reqRef.get();
+    if (!req.exists) return null;
+    const startedAt = Date.now();
+    while (req.exists && (req.data() || {}).status === 'processing'
+      && Date.now() - Number((req.data() || {}).startedAtMs || 0) < PUBLISH_PROCESSING_MAX_AGE_MS
+      && Date.now() - startedAt < PUBLISH_REPLAY_WAIT_MS) {
+      await new Promise((resolve) => setTimeout(resolve, PUBLISH_REPLAY_POLL_MS));
+      req = await reqRef.get();
+    }
+    if (!req.exists) return null;
+    const tripSnap = await db.collection(TRIPS).doc(String((req.data() || {}).tripId || '_')).get();
+    if (!tripSnap.exists) return null;
+    const t = tripSnap.data() || {};
+    const out = {
+      tripId: tripSnap.id, status: t.status, feeAmount: Number(t.feeAmount) || 0, idempotent: true,
+    };
+    if (t.status === 'payment_required') out.walletBalance = await walletBalance(me.usersDocId);
+    else out.billable = t.billable === true;
+    console.log(JSON.stringify({
+      action: 'publishTaxiTrip', result: 'replayed', tripId: tripSnap.id, userId: me.phone, status: t.status,
+    }));
+    return out;
+  }
+
+  const inputError = (reason, message, detail) => err('failed-precondition', message,
+    detail ? { reason, detail } : { reason });
+
+  /**
+   * Audit M2/H5: `publish` kirishini tekshiradi va tozalaydi. Xato -
+   * `failed-precondition` + `details.reason` (ilova uch tilli matn tanlaydi,
+   * 25-qoida); pul harakati bundan KEYIN.
+   */
+  function validatePublishInput(data, nowMs) {
+    const requestId = parseRequestId(data.requestId);
+    if (requestId === null) {
+      throw err('invalid-argument', 'requestId 8..64 belgi bo\'lishi kerak ([A-Za-z0-9_-])',
+        { reason: 'request_id_invalid' });
+    }
+    const dep = parseDeparture(data.departureAt);
+    if (dep.present) {
+      const problem = departureProblem(dep.date, nowMs);
+      if (problem) throw inputError('departure_in_past', 'Jo\'nash vaqti noto\'g\'ri yoki o\'tib ketgan', problem);
+    }
+    const from = typeof data.from === 'string' ? data.from.trim() : '';
+    const to = typeof data.to === 'string' ? data.to.trim() : '';
+    if (!from || !to) throw inputError('route_required', 'Yo\'nalish (qayerdan/qayerga) kerak');
+    const seats = parseSeats(data.seats);
+    if (!seats.ok) throw inputError('seats_invalid', `Joylar soni ${SEATS_MIN}..${SEATS_MAX} butun son bo'lishi kerak`);
+    const sched = parseSchedule(data.scheduleDate, data.startTime);
+    if (!sched.ok) throw inputError('schedule_invalid', 'Sana (YYYY-MM-DD) yoki vaqt (HH:MM) formati noto\'g\'ri');
+    return {
+      requestId, departureAt: dep.date, from, to, seats: seats.seats,
+      scheduleDate: sched.scheduleDate, startTime: sched.startTime,
+    };
+  }
+
+  /**
    * E'LON (D-TAXI-13): narx → komissiya → to'lov → `published`.
    * To'lovsiz `published` BO'LMAYDI. Snapshot — D-TAXI-21.
    */
   async function publish(data, context) {
     const me = await resolveCaller(context);
+    data = data || {};
+    // Audit M2/H5: kirish tekshiruvi - qarz yopish va komissiyadan OLDIN.
+    const input = validatePublishInput(data, now().getTime());
+    // Audit M1: shu `requestId` bilan avval boshlangan e'lon bo'lsa - o'sha natija
+    // (yangi reys ham, qayta yechim ham, qarz yopish ham YO'Q).
+    const reqRef = input.requestId
+      ? db.collection(PUBLISH_REQUESTS).doc(`${me.phone}_${input.requestId}`) : null;
+    if (reqRef) {
+      const replay = await existingPublishResult(reqRef, me);
+      if (replay) return replay;
+    }
     // D-TAXI-CANCEL-6: avval qarz, keyin yangi komissiya.
     const debt = await settleOutstanding(me);
     if (debt.outstanding > 0) {
@@ -308,18 +475,18 @@ function attachTaxiBilling(exports, deps) {
 
     const when = now();
     const tripRef = db.collection(TRIPS).doc();
-    const departureAt = data.departureAt ? new Date(data.departureAt) : null;
+    const departureAt = input.departureAt;
     const snapshot = {
       driverUid: me.phone,
       usersDocId: me.usersDocId,
       accountId: me.accountId,
       taxiType: 'intercity',
-      from: String(data.from || '').trim(),
-      to: String(data.to || '').trim(),
-      scheduleDate: String(data.scheduleDate || ''),
-      startTime: String(data.startTime || ''),
-      departureAt: departureAt && !Number.isNaN(departureAt.getTime()) ? Timestamp.fromDate(departureAt) : null,
-      seats: Number(data.seats) || SEAT_BASIS,
+      from: input.from,
+      to: input.to,
+      scheduleDate: input.scheduleDate,
+      startTime: input.startTime,
+      departureAt: departureAt ? Timestamp.fromDate(departureAt) : null,
+      seats: input.seats,
       // D-TAXI-21 snapshot
       farePerSeat: q.farePerSeat,
       seatBasis: SEAT_BASIS,
@@ -334,7 +501,7 @@ function attachTaxiBilling(exports, deps) {
       status: 'payment_required',
       // D-TAXI-14 — location qaydi
       location: {
-        originDeclared: String(data.from || '').trim(),
+        originDeclared: input.from,
         originLat: numOrNull(data.originLat),
         originLng: numOrNull(data.originLng),
         driverLat: numOrNull(data.driverLat),
@@ -346,20 +513,65 @@ function attachTaxiBilling(exports, deps) {
       updatedAt: when,
     };
 
-    if (q.feeAmount > 0) {
-      await tripRef.set(snapshot);
-      const c = await charge({
-        usersDocId: me.usersDocId, phone: me.phone, tripId: tripRef.id,
-        amount: q.feeAmount, version: BILLING_VERSION, kind: 'taxi_fee',
-        meta: { farePerSeat: q.farePerSeat, grossBasis: q.grossBasis },
+    // Reys hujjati va (bo'lsa) `requestId` hujjati BITTA tranzaksiyada: ikkala parallel
+    // chaqiruvdan faqat bittasi yaratadi, ikkinchisi birinchisining natijasini oladi.
+    const createTrip = async (tripDoc, requestStatus) => {
+      const created = await db.runTransaction(async (tx) => {
+        if (reqRef) {
+          const r = await tx.get(reqRef);
+          if (r.exists) return false;
+        }
+        tx.set(tripRef, tripDoc);
+        if (reqRef) {
+          tx.set(reqRef, {
+            driverUid: me.phone, requestId: input.requestId, tripId: tripRef.id, status: requestStatus,
+            startedAtMs: Date.now(), createdAt: when, updatedAt: when,
+          });
+        }
+        return true;
       });
+      if (created) return null;
+      const replay = await existingPublishResult(reqRef, me);
+      if (replay) return replay;
+      throw err('aborted', 'E\'lon holati o\'zgardi - qayta urinib ko\'ring', { reason: 'publish_in_progress' });
+    };
+    const setRequestStatus = (status) => (reqRef
+      ? reqRef.update({ status, updatedAt: now() }).catch((e) => {
+        console.error(`taxi_publish_requests status (${reqRef.id}): ${e.message}`);
+      })
+      : Promise.resolve());
+
+    if (q.feeAmount > 0) {
+      const replay = await createTrip(snapshot, 'processing');
+      if (replay) return replay;
+      let c;
+      try {
+        c = await charge({
+          usersDocId: me.usersDocId, phone: me.phone, tripId: tripRef.id,
+          amount: q.feeAmount, version: BILLING_VERSION, kind: 'taxi_fee',
+          meta: { farePerSeat: q.farePerSeat, grossBasis: q.grossBasis },
+        });
+      } catch (e) {
+        await setRequestStatus('error');
+        throw e;
+      }
       if (!c.ok) {
         // D-TAXI-23: `payment_required` da qoladi, e'lon chiqmaydi.
+        await setRequestStatus('payment_required');
         return { tripId: tripRef.id, status: 'payment_required', feeAmount: q.feeAmount, walletBalance: q.walletBalance };
       }
-      await tripRef.update({ status: 'published', chargedAt: now(), ledgerEntryId: c.entryId, updatedAt: now() });
+      const publishedPatch = { status: 'published', chargedAt: now(), ledgerEntryId: c.entryId, updatedAt: now() };
+      if (reqRef) {
+        const batch = db.batch();
+        batch.update(tripRef, publishedPatch);
+        batch.update(reqRef, { status: 'published', updatedAt: now() });
+        await batch.commit();
+      } else {
+        await tripRef.update(publishedPatch);
+      }
     } else {
-      await tripRef.set({ ...snapshot, status: 'published', chargedAt: null });
+      const replay = await createTrip({ ...snapshot, status: 'published', chargedAt: null }, 'published');
+      if (replay) return replay;
     }
 
     // D-TAXI-14: mismatch — signal, hukm emas.
@@ -657,6 +869,29 @@ function attachTaxiBilling(exports, deps) {
   }
 
   /**
+   * Audit H3: shu reys davomida AVA orqali tasdiqlangan (`confirmed`/`completed`) bron
+   * bormi - `intercity_bookings`dan (driverId = haydovchi telefoni, 12 yoki 9 xonali;
+   * reys yaratilgandan KEYIN ochilgan bronlar). `pending`/`cancelled`/`expired` sanalmaydi.
+   * O'qish xatosi - `false` (fraud tomoniga xavfsiz: noaniq holatda pul qaytarib olinmaydi);
+   * refund siyosatiga ta'sir qilmaydi.
+   */
+  async function serverHadAvaBooking(me, trip) {
+    const sinceMs = tsMillis(trip.createdAt);
+    const ids = [...new Set([me.phone, me.phone.length === 12 ? me.phone.slice(3) : me.phone])];
+    try {
+      const snaps = await Promise.all(ids.map((id) => db.collection('intercity_bookings')
+        .where('driverId', '==', id).where('status', 'in', ['confirmed', 'completed']).get()));
+      return snaps.some((s) => s.docs.some((d) => tsMillis((d.data() || {}).createdAt) >= sinceMs));
+    } catch (e) {
+      console.error(JSON.stringify({
+        action: 'cancelTaxiTrip', result: 'error', errorCode: 'HAD_BOOKING_LOOKUP_FAILED',
+        userId: me.phone, message: e && e.message,
+      }));
+      return false;
+    }
+  }
+
+  /**
    * D-TAXI-15: bekor → komissiya wallet'ga `refund`.
    *
    * D-TAXI-CANCEL-9 (2026-10-06): jo'nash vaqtidan KEYIN ham bekor qilish
@@ -677,9 +912,18 @@ function attachTaxiBilling(exports, deps) {
     }
     const when = now();
     const amount = Number(trip.feeAmount) || 0;
+    // Audit H3: `hadAvaBooking` klientdan KELMAYDI (18-qoida) - server `intercity_bookings`dan
+    // hisoblaydi. Klient qiymati fraud/refund qaroriga ta'sir qilmaydi, faqat log'da solishtiriladi.
+    const hadAvaBooking = (await serverHadAvaBooking(me, trip)) || trip.hadAvaBooking === true;
+    if ((data.hadAvaBooking === true) !== hadAvaBooking) {
+      console.log(JSON.stringify({
+        action: 'cancelTaxiTrip', result: 'had_booking_client_mismatch', tripId: tripRef.id,
+        userId: me.phone, client: data.hadAvaBooking === true, server: hadAvaBooking,
+      }));
+    }
     const cancelPatch = (refunded) => ({
       status: 'cancelled', cancelledAt: when, refunded, fraudReviewed: false,
-      hadAvaBooking: data.hadAvaBooking === true || trip.hadAvaBooking === true,
+      hadAvaBooking,
       'location.cancelLat': numOrNull(data.driverLat), 'location.cancelLng': numOrNull(data.driverLng),
       updatedAt: when,
     });
@@ -728,6 +972,90 @@ function attachTaxiBilling(exports, deps) {
   }
 
   /**
+   * Audit H6: qo'lda ko'chirish BITTA tranzaksiyada hammasini bir xil qiladi - reys, uning
+   * pending/confirmed bronlari (`departureTime`, eslatma qayta), `schedules` e'loni
+   * (`date/startTime/expiresAt` - ilovaning `closeExpiredForDriver` i ko'chirilgan e'lonni
+   * eski `expiresAt` bo'yicha yopib qo'ymasin), `intercity_drivers` e'loni (shu reysga
+   * tegishli bo'lsa) va yo'lovchilarga uch tilli xabar (deterministik id).
+   * Idempotent: xuddi shu vaqtga qayta chaqiruv hech narsa yozmaydi. Holat tranzaksiya ichida
+   * qayta tekshiriladi (parallel bekor/reprice/avto-surish bilan).
+   */
+  async function applyReschedule({ tripRef, me, newDeparture, newDate, newTime, when }) {
+    const FieldValue = admin.firestore.FieldValue;
+    const newMs = newDeparture.getTime();
+    const ids = [...new Set([me.phone, me.phone.length === 12 ? me.phone.slice(3) : me.phone])];
+    const [hh, mm] = newTime.split(':').map(Number);
+    const out = await db.runTransaction(async (tx) => {
+      const tSnap = await tx.get(tripRef);
+      const t = tSnap.exists ? (tSnap.data() || {}) : null;
+      if (!t || t.status !== 'published' || t.driverUid !== me.phone) {
+        throw err('aborted', 'Reys holati o\'zgardi — qayta urinib ko\'ring', { reason: 'trip_changed' });
+      }
+      if (tsMillis(t.departureAt) === newMs && t.scheduleDate === newDate && t.startTime === newTime) {
+        return { idempotent: true };
+      }
+
+      // ── Barcha o'qishlar yozishdan oldin ──
+      const bookings = [];
+      const listings = [];
+      const schedules = [];
+      for (const id of ids) {
+        const bs = await tx.get(db.collection('intercity_bookings')
+          .where('driverId', '==', id).where('status', 'in', ['pending', 'confirmed']));
+        bookings.push(...bs.docs);
+        const ls = await tx.get(db.collection('intercity_drivers').doc(id));
+        if (ls.exists && String((ls.data() || {}).billingTripId || '') === tripRef.id) listings.push(ls);
+        if (t.scheduleDate) {
+          const ss = await tx.get(db.collection('schedules')
+            .where('driverId', '==', id).where('taxiType', '==', 'intercity')
+            .where('date', '==', t.scheduleDate).where('isActive', '==', true));
+          schedules.push(...ss.docs);
+        }
+      }
+      const langs = new Map();
+      for (const b of bookings) {
+        const phone = String((b.data() || {}).userPhone || '').replace(/\D/g, '');
+        if (phone.length >= 9 && !langs.has(phone)) langs.set(phone, await langOfPhoneTx(tx, db, phone));
+      }
+
+      // ── Yozishlar ──
+      const w = rescheduleWrites({
+        tripId: tripRef.id, trip: t, uid: me.phone, accountId: me.accountId,
+        newDeparture, scheduleDate: newDate, startTime: newTime, when, Timestamp, source: 'driver',
+      });
+      const count = w.tripPatch.rescheduleCount;
+      tx.set(db.collection(RESCHEDULES).doc(`manual_${tripRef.id}_${count}`), w.audit);
+      tx.update(tripRef, w.tripPatch);
+      for (const l of listings) {
+        tx.update(l.ref, { scheduleDate: newDate, hour: hh, minute: mm, updatedAt: FieldValue.serverTimestamp() });
+      }
+      const expiresAt = Timestamp.fromMillis(endOfTashkentDayMs(newDate));
+      for (const s of schedules) tx.update(s.ref, { date: newDate, startTime: newTime, expiresAt });
+      const dateText = `${newDate.slice(8, 10)}.${newDate.slice(5, 7)}`;
+      for (const b of bookings) {
+        tx.update(b.ref, {
+          departureTime: Timestamp.fromDate(newDeparture),
+          departureReminderSent: false, // eslatma yangi vaqtga qayta yuborilsin
+          rescheduledAt: when,
+        });
+        const phone = String((b.data() || {}).userPhone || '').replace(/\D/g, '');
+        if (phone.length < 9) continue;
+        const { title, body } = render('reschedule_passenger', langs.get(phone), { date: dateText, time: newTime });
+        tx.set(db.collection('notifications').doc(`resched_pax_${tripRef.id}_${count}_${b.id}`), {
+          targetPhone: phone, title, body, type: 'intercity_trip_rescheduled', bookingId: b.id,
+          sent: false, createdAt: FieldValue.serverTimestamp(),
+        });
+      }
+      return { idempotent: false, bookings: bookings.length, schedules: schedules.length, listings: listings.length };
+    });
+    console.log(JSON.stringify({
+      action: 'rescheduleTaxiTrip', result: out.idempotent ? 'noop' : 'moved', tripId: tripRef.id,
+      userId: me.phone, bookings: out.bookings || 0, schedules: out.schedules || 0, listings: out.listings || 0,
+    }));
+    return out;
+  }
+
+  /**
    * D-TAXI-CANCEL-3 — RESCHEDULE: reys va komissiya SAQLANADI, faqat
    * sana/vaqt o'zgaradi. `tripId` o'sha, refund YO'Q, qayta charge YO'Q.
    * Narx ham o'zgarsa — `reprice` qoidasi (oshsa farq, pasaysa bir
@@ -743,23 +1071,32 @@ function attachTaxiBilling(exports, deps) {
     if (trip.status !== 'published') throw err('failed-precondition', 'Reys e\'lon holatida emas', { reason: 'not_published' });
 
     const when = now();
-    const newDeparture = data.departureAt ? new Date(data.departureAt) : null;
-    if (!newDeparture || Number.isNaN(newDeparture.getTime())) {
+    const newDeparture = parseDeparture(data.departureAt).date;
+    if (!newDeparture) {
       throw err('invalid-argument', 'departureAt kerak');
     }
-    const w = rescheduleWrites({
-      tripId: tripRef.id, trip, uid: me.phone, accountId: me.accountId,
-      newDeparture, scheduleDate: data.scheduleDate, startTime: data.startTime,
-      when, Timestamp, source: 'driver',
+    // Audit M2: yangi vaqt o'tmishda bo'lmasin; sana/vaqt formati to'g'ri bo'lsin.
+    if (departureProblem(newDeparture, when.getTime())) {
+      throw inputError('departure_in_past', 'Yangi jo\'nash vaqti o\'tib ketgan', 'in_past');
+    }
+    const sched = parseSchedule(data.scheduleDate, data.startTime);
+    if (!sched.ok) throw inputError('schedule_invalid', 'Sana (YYYY-MM-DD) yoki vaqt (HH:MM) formati noto\'g\'ri');
+    const parts = tashkentParts(newDeparture.getTime());
+    const moved = await applyReschedule({
+      tripRef, me, newDeparture,
+      newDate: sched.scheduleDate || parts.date,
+      newTime: sched.startTime || parts.time,
+      when,
     });
-    await db.collection(RESCHEDULES).add(w.audit);
-    await tripRef.update(w.tripPatch);
 
     let billing = { status: 'unchanged', delta: 0, feeAmount: trip.feeAmount };
     if (typeof data.farePerSeat === 'number' && data.farePerSeat !== trip.farePerSeat) {
       billing = await reprice({ tripId: tripRef.id, farePerSeat: data.farePerSeat }, context);
     }
-    return { tripId: tripRef.id, status: 'published', rescheduled: true, billing };
+    return {
+      tripId: tripRef.id, status: 'published', rescheduled: true,
+      ...(moved.idempotent ? { idempotent: true } : {}), billing,
+    };
   }
 
   exports.quoteTaxiFee = functions.https.onCall(quote);
@@ -804,6 +1141,14 @@ function rescheduleWrites({
   };
 }
 
+function tsMillis(v) {
+  if (!v) return 0;
+  if (typeof v.toMillis === 'function') return v.toMillis();
+  if (v instanceof Date) return v.getTime();
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
 function numOrNull(v) {
   if (v === null || v === undefined || v === '') return null;
   const n = Number(v);
@@ -811,8 +1156,9 @@ function numOrNull(v) {
 }
 
 module.exports = {
-  TRIPS, PRICE_CHANGES, RESCHEDULES, FRAUD_CASES, AGREEMENTS, EARNINGS_ACCOUNT,
+  TRIPS, PRICE_CHANGES, RESCHEDULES, FRAUD_CASES, AGREEMENTS, EARNINGS_ACCOUNT, PUBLISH_REQUESTS,
   rescheduleWrites,
   SEAT_BASIS, RATE_BPS, BILLING_VERSION, MAX_DOWNWARD_REFUNDS, STARTER_NOTICE_DAYS,
   calculateTaxiFee, starterNoticeOf, attachTaxiBilling,
+  DEPARTURE_PAST_TOLERANCE_MS, SEATS_MIN, SEATS_MAX,
 };

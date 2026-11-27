@@ -42,6 +42,14 @@ const tariff = require('./restaurant_delivery_tariff');
 const localTaxi = require('./local_taxi');
 const qtyTiers = require('./restaurant_qty_tiers');
 const preorder = require('./restaurant_preorder');
+const moduleGate = require('./module_gate');
+
+/** `restaurantRegister` idempotentligi (C-2): mijoz kaliti va deterministik restoran id. */
+const REGISTER_REQUEST_ID_RE = /^[A-Za-z0-9_-]{8,64}$/;
+function restaurantIdFor(uid, requestId) {
+  const h = crypto.createHash('sha256').update(`restaurantRegister:${uid}:${requestId}`).digest('hex');
+  return `rst_${h.slice(0, 28)}`;
+}
 
 const RESTAURANTS = 'restaurants';
 const MEMBERS = 'members';
@@ -152,6 +160,91 @@ const FOOD_PAYMENT = ['prepay', 'cash_buyout', 'cash_to_restaurant'];
 const DELIVERY_PAYMENT = ['cash', 'wallet', 'none'];
 const FAIL_REASONS = ['customer_absent', 'customer_refused', 'courier_problem', 'other'];
 
+/**
+ * «Етказилмади» — мижоз тасдиғи (ega qarori 2026-10-31, C-1/C-2/A-1):
+ *   kuryer 'failed' → `awaitingCustomerConfirm.step = 'delivery_failed'` (+ failReason, escalateAt);
+ *   mijoz 'confirm' → delivery_failed (avvalgi yakun: 2 % qaytadi, strike sababga qarab);
+ *   mijoz 'reject'  → belgi o'chadi, kuryer yetkazishni davom ettiradi;
+ *   `failedTimeoutMin` (server_config/customer_confirm, standart 15) o'tsa → `escalateRestaurantDeliveryFailed`
+ *   restoranga xabar beradi va `restaurantResolveDeliveryFailed` ochiladi (restoran a'zosi yoki admin).
+ * Joriy holat maydonlari (faqat server yozadi; `orders` klient yozuvi yopiq):
+ *   deliveryFailedEscalateAt  — muddat (jadval so'rovi uchun; eskalatsiyadan keyin o'chadi)
+ *   deliveryFailedEscalatedAt — qaror restoranga o'tgan vaqt
+ *   deliveryFailedResolution  — { by: customer|restaurant|admin, decision: failed|continue, at, actorId }
+ * Tarix — `order_events` (o'zgarmas).
+ */
+const FAILED_STEP = 'delivery_failed';
+const FAILED_ESCALATE_AT = 'deliveryFailedEscalateAt';
+const FAILED_ESCALATED_AT = 'deliveryFailedEscalatedAt';
+const FAILED_RESOLUTION = 'deliveryFailedResolution';
+const FAILED_DECISIONS = ['failed', 'continue'];
+const ESCALATE_BATCH = 100;
+const { MARKER_FIELD: CC_MARKER_FIELD, REJECTED_FIELD: CC_REJECTED_FIELD } = require('./customer_confirm');
+const i18n = require('./notif_i18n');
+
+const msOf = (v) => (v && typeof v.toMillis === 'function' ? v.toMillis() : null);
+
+/**
+ * TOPSHIRISH (ega qarorlari 2026-10-31: C-4..C-7, A-2, A-3) — FAQAT restoran buyurtmasi
+ * (boshqa turlar alohida qaror, hisobotda UNKNOWN):
+ *   - olishdan OLDIN (accepted/ready): kuryer buyurtmani qo'yib yuboradi → yangi kuryer qidiriladi;
+ *   - olgandan KEYIN (picked/arrived): kod bilan jismoniy topshirish — boshqa kuryerga
+ *     (`courierAcceptRestaurantHandover`, kod + GPS) yoki restoranga (`restaurantAcceptReturn`, kod);
+ *   - restoranga qaytgach / qo'yib yuborilgach `RETURN_SEARCH_MIN` (30) daqiqa yangi kuryer
+ *     qidiriladi; topilmasa buyurtma bekor (2 % restoranga qaytadi) — jadval `expireReturnedRestaurantOrders`;
+ *   - chegara va jarima YO'Q;
+ *   - kuryer haqi masofa ulushi bo'yicha (`computeCourierShares`): butun so'm, qoldiq oxirgi kuryerga.
+ *   Custody zanjiri — mavjud `custody_events` (o'zgarmas; logistics bilan bir kolleksiya, `orderType: 'restaurant'`,
+ *   `shipmentId`/`completesLegId`/`deliversShipment` YO'Q — relay/wholesale triggerlari o'tkazib yuboradi).
+ */
+const HANDOVER_TTL_MIN = 15;
+const HANDOVER_CODE_ATTEMPTS = 5;
+const HANDOVER_CALLER_ATTEMPTS = 10;
+const HANDOVER_CALLER_WINDOW_MIN = 30;
+const RETURN_SEARCH_MIN = 30;
+const HANDOVER_TARGETS = ['courier', 'seller'];
+const HANDOVER_CODES = 'courier_handover_codes';
+const HANDOVER_ATTEMPTS = 'courier_handover_attempts';
+const CUSTODY = 'custody_events';
+/** Naqd ulush o'tkazmasi niyati (faqat server; rules'da match yo'q = klientga yopiq). */
+const SHARE_PENDING = 'restaurant_courier_share_pending';
+const cashShareId = (orderId, from, to) => `${orderId}_${from}_${to}`;
+
+/**
+ * Kuryerlar ulushi (A-3): `legs` = [{ courierId, meters }] tartib bilan (oxirgisi — yetkazgan kuryer).
+ * Bir kuryer bir necha bo'lak olib borgan bo'lsa — qo'shiladi. Butun so'm (floor), qoldiq OXIRGI
+ * kuryerga; jami har doim `fee` ga teng. Masofa yig'indisi 0 bo'lsa — hammasi oxirgi kuryerga.
+ */
+function computeCourierShares(fee, legs) {
+  const total = Number.isInteger(fee) && fee > 0 ? fee : 0;
+  const order = [];
+  const meters = new Map();
+  for (const l of Array.isArray(legs) ? legs : []) {
+    const id = String((l && l.courierId) || '');
+    if (!id) continue;
+    const m = Number(l.meters);
+    const add = Number.isFinite(m) && m > 0 ? Math.round(m) : 0;
+    if (!meters.has(id)) order.push(id);
+    meters.set(id, (meters.get(id) || 0) + add);
+  }
+  if (order.length === 0) return [];
+  const last = String(legs[legs.length - 1].courierId);
+  const sumM = order.reduce((s, id) => s + meters.get(id), 0);
+  const out = order.map((id) => ({ courierId: id, meters: meters.get(id), amount: 0 }));
+  if (sumM <= 0) {
+    out.find((x) => x.courierId === last).amount = total;
+    return out;
+  }
+  let given = 0;
+  for (const x of out) {
+    if (x.courierId === last) continue;
+    x.amount = Math.floor((total * x.meters) / sumM);
+    given += x.amount;
+  }
+  out.find((x) => x.courierId === last).amount = total - given;
+  return out;
+}
+
 function canTransition(from, to) {
   const allowed = TRANSITIONS[from];
   return !!allowed && allowed.includes(to);
@@ -221,6 +314,8 @@ function attachRestaurantOrders(exportsObj, deps) {
     functions, db, admin, callerPhone, canonicalUid, settlementLedger,
     requireCallerRoles, notifyUserInApp, notifyCourierArrivedToCustomer, axios,
     fetchRoute: fetchRouteOverride, now: nowFn, courierPush,
+    // Mijoz tasdig'i (D2/D7): `customer_confirm.js`. Yo'q bo'lsa — eski oqim (gate yo'q).
+    customerConfirm,
   } = deps;
   // `courierAuth` index.js da bu attach'dan KEYIN e'lon qilinadi (const, TDZ):
   // shuning uchun yuklashda emas, chaqiruvda olinadi (deps getter).
@@ -284,6 +379,13 @@ function attachRestaurantOrders(exportsObj, deps) {
       restaurantStatus: rs, status, fulfillmentStatus,
       statusUpdatedAt: ts(), updatedAt: ts(), ...extra,
     };
+  }
+
+  /** «Yetkazilmadi» kutish maydonlari bo'lsa — o'chirish yamoqchasi, aks holda `{}` (eski hujjat o'zgarmaydi). */
+  function failedPendingClear(od) {
+    if (!od || (od[FAILED_ESCALATE_AT] === undefined && od[FAILED_ESCALATED_AT] === undefined)) return {};
+    const del = admin.firestore.FieldValue.delete();
+    return { [FAILED_ESCALATE_AT]: del, [FAILED_ESCALATED_AT]: del };
   }
 
   function addEvent(t, orderRef, { from, to, actor, actorId, reason = '', meta = {} }) {
@@ -405,9 +507,17 @@ function attachRestaurantOrders(exportsObj, deps) {
   }
 
   // ── Yetkazish narxi (D-REST-4) ─────────────────────────────────────────
-  async function quoteDelivery(r, { toLat, toLng, at: atOverride }) {
+  async function readTariffDoc() {
     const tariffSnap = await db.collection(TARIFF_DOC[0]).doc(TARIFF_DOC[1]).get();
-    const tariffData = tariffSnap.exists ? (tariffSnap.data() || {}) : {};
+    return tariffSnap.exists ? (tariffSnap.data() || {}) : {};
+  }
+
+  /**
+   * `preloaded` — chaqiruvchi hujjatni allaqachon o'qigan bo'lsa (ortiqcha o'qish yo'q; kuryer auditi D9).
+   * `at` — oldindan buyurtmada yetkazish vaqti (S4b, tungi koeffitsient shu vaqtga qarab).
+   */
+  async function quoteDelivery(r, { toLat, toLng, at: atOverride }, preloaded) {
+    const tariffData = preloaded || await readTariffDoc();
     const fromLat = Number(r.lat);
     const fromLng = Number(r.lng);
     if (!validLatLng(fromLat, fromLng)) throw fail('failed-precondition', 'RESTAURANT_LOCATION_MISSING');
@@ -579,11 +689,37 @@ function attachRestaurantOrders(exportsObj, deps) {
     return { allowed: a.allowed, stage: a.stage };
   });
 
-  /** D-REST-7: barcha ro'yxatdan o'tadi; tasdiq — admin (yoki autoApprove). */
+  /** D-REST-7: barcha ro'yxatdan o'tadi. Ega, 2026-10-31: «серверда доим дарҳол жонли бўлсин» — yangi obyekt
+   *  DOIM `approved` (avvalgi `settings/app.restaurantAutoApprove` kaliti endi o'qilmaydi; nazorat — admin bloki). */
   exportsObj.restaurantRegister = functions.https.onCall(async (data, context) => {
     const t0 = Date.now();
     const uid = requirePhoneUid(context);
     await requireModule(uid);
+    // C-2 IDEMPOTENT (21-qoida): ixtiyoriy `requestId` → deterministik hujjat id (`submitJobAd` namunasi).
+    // Shu chaqiruvchi + shu `requestId` qayta kelsa — BIRINCHI natija qaytadi, ikkinchi restoran yaratilmaydi.
+    // `requestId` yo'q/yaroqsiz (eski ilova) — avvalgi xatti-harakat (avto-id).
+    const requestId = str(data && data.requestId, 64);
+    const rRefFixed = REGISTER_REQUEST_ID_RE.test(requestId)
+      ? db.collection(RESTAURANTS).doc(restaurantIdFor(uid, requestId)) : null;
+    const duplicateOf = (snap) => {
+      const x = snap.data() || {};
+      log('register', { restaurantId: snap.id, userId: uid, result: 'duplicate', durationMs: Date.now() - t0 });
+      return { ok: true, restaurantId: snap.id, status: String(x.status || RESTAURANT_STATUS.applied), duplicate: true };
+    };
+    if (rRefFixed) {
+      const existing = await rRefFixed.get();
+      if (existing.exists) {
+        if (existing.data().ownerUid !== uid) throw fail('failed-precondition', 'REQUEST_ID_CONFLICT');
+        return duplicateOf(existing);
+      }
+    }
+    // MEDIUM-4: admin «Ҳудудлар ва хизматлар» — `restaurants` moduli shu foydalanuvchi hududida ochiq bo'lishi
+    // shart (yuqoridagi `requireModule` bosqich darvozasiga QO'SHIMCHA). Konfig o'qilmasa — fail-open.
+    const gate = await moduleGate.moduleOpenFor(db, MODULE_ID, uid, { activeDistrictId: data && data.geoDistrictId });
+    if (!gate.open) {
+      log('register', { userId: uid, result: 'error', errorCode: moduleGate.MODULE_CLOSED, moduleStatus: gate.status });
+      throw fail('failed-precondition', moduleGate.MODULE_CLOSED, { moduleId: MODULE_ID, status: gate.status });
+    }
     const user = await findUserRef(uid);
     if (!user) throw fail('failed-precondition', 'USER_NOT_FOUND');
     const d = data || {};
@@ -608,15 +744,16 @@ function attachRestaurantOrders(exportsObj, deps) {
     const pickup = delivery.pickup === true;
     if (mode === 'none' && !pickup) throw fail('invalid-argument', 'DELIVERY_OR_PICKUP_REQUIRED');
     const payment = d.payment && typeof d.payment === 'object' ? d.payment : {};
-    const appSnap = await db.collection(APP_SETTINGS[0]).doc(APP_SETTINGS[1]).get();
-    const autoApprove = appSnap.exists && (appSnap.data() || {}).restaurantAutoApprove === true;
+    // Ariza zanjiri yo'q (ega, 2026-10-31): yangi kafe/uy oshpazi darhol jonli.
+    const autoApprove = true;
 
     // Bir foydalanuvchi bir nechta kafe-restoran yuritadi (menejerlik,
     // D-REST-15, ega 2026-10-10): egaga son chegarasi YO'Q — tarmoq
     // (set) bo'lishi mumkin. Suiiste'mol admin tasdig'i orqali nazorat qilinadi.
-    const rRef = db.collection(RESTAURANTS).doc();
+    const rRef = rRefFixed || db.collection(RESTAURANTS).doc();
     const batch = db.batch();
-    batch.set(rRef, {
+    // `create` — hujjat allaqachon bo'lsa (parallel ikki chaqiruv) butun batch rad etiladi (a'zo/private ham yozilmaydi).
+    batch.create(rRef, {
       name,
       legalType,
       ...(venueType ? { venueType } : {}),
@@ -663,7 +800,16 @@ function attachRestaurantOrders(exportsObj, deps) {
         updatedAt: ts(),
       });
     }
-    await batch.commit();
+    try {
+      await batch.commit();
+    } catch (e) {
+      // Poyga: shu `requestId` bilan parallel chaqiruv birinchi yaratdi — o'shani qaytaramiz.
+      if (rRefFixed && e && (e.code === 6 || /ALREADY_EXISTS/i.test(String(e.message || '')))) {
+        const again = await rRefFixed.get();
+        if (again.exists && again.data().ownerUid === uid) return duplicateOf(again);
+      }
+      throw e;
+    }
     log('register', { restaurantId: rRef.id, userId: uid, result: 'ok', status: autoApprove ? 'approved' : 'applied', durationMs: Date.now() - t0 });
     return { ok: true, restaurantId: rRef.id, status: autoApprove ? 'approved' : 'applied' };
   });
@@ -765,6 +911,8 @@ function attachRestaurantOrders(exportsObj, deps) {
           : (cur.roadFactor != null ? cur.roadFactor : tariff.DEFAULT_ROAD_FACTOR),
         maxKm: global.maxKm != null ? global.maxKm : intOr(cur.maxKm, tariff.DEFAULT_MAX_KM, 1, 100),
         regions,
+        // D9: AVA ulushi (`adminSetRestaurantFeeSettings`) narx tarifini saqlashda YO'QOLMAYDI.
+        ...(cur.avaFeeBps != null ? { avaFeeBps: cur.avaFeeBps } : {}),
         version: next,
         reason,
         updatedAt: ts(),
@@ -782,6 +930,7 @@ function attachRestaurantOrders(exportsObj, deps) {
           nightEnd: cur.nightEnd == null ? null : cur.nightEnd,
           roadFactor: cur.roadFactor == null ? null : cur.roadFactor,
           maxKm: cur.maxKm == null ? null : cur.maxKm,
+          avaFeeBps: cur.avaFeeBps == null ? null : cur.avaFeeBps,
           regions: cur.regions && typeof cur.regions === 'object' ? cur.regions : {},
         },
         changedBy: actor,
@@ -797,7 +946,88 @@ function attachRestaurantOrders(exportsObj, deps) {
     return { ok: true, version };
   });
 
-  /** Admin — `settings/app.restaurantAutoApprove` (D-REST-7: tasdiq admin yoki avto). */
+  /**
+   * Admin — AVA ulushi (bps) va tungi koeffitsient (D9, ega qarori 2026-10-16).
+   * `adminSetRestaurantDeliveryPrices` bilan BITTA hujjat (`settings/restaurant_delivery`)
+   * va BITTA versiya zanjiri (`restaurant_delivery_tariffs/v{n}`): har haqiqiy
+   * o'zgarish yangi `version` + o'zgarmas tarix + audit. Narxlar (base, perKm,
+   * regions, ...) TEGILMAYDI. Mavjud buyurtmalar o'z `avaFee`/`deliveryTariffSnapshot`
+   * muhri bilan qoladi (9-qoida). Sozlama yo'q → standart 200 bps / ×1.5.
+   * data: { avaFeeBps?: butun 0..10000 | null (null = standartga qaytish),
+   *         nightCoef?: 1..3, reason }
+   * Bir xil qiymat qayta yuborilsa — versiya OCHILMAYDI (`unchanged: true`).
+   */
+  exportsObj.adminSetRestaurantFeeSettings = functions.https.onCall(async (data, context) => {
+    const actor = await requireCallerRoles(context, ['admin', 'superadmin'], 'Admin role required');
+    const d = data || {};
+    const wantFee = Object.prototype.hasOwnProperty.call(d, 'avaFeeBps') && d.avaFeeBps !== undefined;
+    let feeBps = null; // null = standartga qaytarish
+    if (wantFee && d.avaFeeBps !== null) {
+      const v = d.avaFeeBps;
+      if (typeof v !== 'number' || !Number.isInteger(v) || v < tariff.AVA_FEE_BPS_MIN || v > tariff.AVA_FEE_BPS_MAX) {
+        throw fail('invalid-argument', 'AVA_FEE_BPS_INVALID', { min: tariff.AVA_FEE_BPS_MIN, max: tariff.AVA_FEE_BPS_MAX });
+      }
+      feeBps = v;
+    }
+    let nightCoef = null;
+    if (d.nightCoef != null && d.nightCoef !== '') {
+      const c = Number(d.nightCoef);
+      if (!Number.isFinite(c) || c < tariff.NIGHT_COEF_MIN || c > tariff.NIGHT_COEF_MAX) {
+        throw fail('invalid-argument', 'NIGHT_COEF_INVALID', { min: tariff.NIGHT_COEF_MIN, max: tariff.NIGHT_COEF_MAX });
+      }
+      nightCoef = Math.round(c * 1000) / 1000;
+    }
+    if (!wantFee && nightCoef == null) throw fail('invalid-argument', 'NOTHING_TO_CHANGE');
+    const reason = str(d.reason, 300);
+    const ref = db.collection(TARIFF_DOC[0]).doc(TARIFF_DOC[1]);
+    const out = await db.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      const cur = snap.exists ? (snap.data() || {}) : {};
+      const prevVersion = Number.isInteger(cur.version) ? cur.version : 0;
+      const curFee = cur.avaFeeBps == null ? null : cur.avaFeeBps;
+      const curNight = cur.nightCoef == null ? null : cur.nightCoef;
+      const nextFee = wantFee ? feeBps : curFee;
+      const nextNight = nightCoef != null ? nightCoef : curNight;
+      if (nextFee === curFee && nextNight === curNight) {
+        return { version: prevVersion, unchanged: true, avaFeeBps: curFee, nightCoef: curNight };
+      }
+      const next = prevVersion + 1;
+      const tariffDoc = { ...cur, version: next, reason, updatedAt: ts(), updatedBy: actor };
+      if (nextFee == null) delete tariffDoc.avaFeeBps; else tariffDoc.avaFeeBps = nextFee;
+      if (nextNight != null) tariffDoc.nightCoef = nextNight;
+      t.set(ref, tariffDoc);
+      t.create(db.collection(TARIFF_HISTORY).doc(`v${next}`), {
+        ...tariffDoc,
+        previous: {
+          version: prevVersion,
+          base: cur.base == null ? null : cur.base,
+          perKm: cur.perKm == null ? null : cur.perKm,
+          nightCoef: curNight,
+          nightStart: cur.nightStart == null ? null : cur.nightStart,
+          nightEnd: cur.nightEnd == null ? null : cur.nightEnd,
+          roadFactor: cur.roadFactor == null ? null : cur.roadFactor,
+          maxKm: cur.maxKm == null ? null : cur.maxKm,
+          avaFeeBps: curFee,
+          regions: cur.regions && typeof cur.regions === 'object' ? cur.regions : {},
+        },
+        changeKind: 'fee_settings',
+        changedBy: actor,
+        changedAt: ts(),
+      });
+      t.set(db.collection(ADMIN_AUDIT).doc(), {
+        kind: 'restaurant_fee_settings', actor, target: TARIFF_DOC.join('/'),
+        from: String(prevVersion), to: String(next), reason,
+        detail: { avaFeeBps: nextFee, prevAvaFeeBps: curFee, nightCoef: nextNight, prevNightCoef: curNight },
+        at: ts(),
+      });
+      return { version: next, unchanged: false, avaFeeBps: nextFee, nightCoef: nextNight };
+    });
+    log('admin_fee_settings', { userId: actor, version: out.version, unchanged: out.unchanged, result: 'ok' });
+    return { ok: true, ...out };
+  });
+
+  /** Admin — `settings/app.restaurantAutoApprove`. ESKI admin panellar uchun qoldirildi: 2026-10-31 dan
+   *  `restaurantRegister` bu kalitni O'QIMAYDI (doim darhol jonli, ega qarori) — admin panelda tugma olib tashlandi. */
   exportsObj.adminSetRestaurantAutoApprove = functions.https.onCall(async (data, context) => {
     const actor = await requireCallerRoles(context, ['admin', 'superadmin'], 'Admin role required');
     const enabled = !!(data && data.enabled === true);
@@ -1056,12 +1286,15 @@ function attachRestaurantOrders(exportsObj, deps) {
       const minOrder = intOr(r.minOrderAmount, 0, 0, 1000000000);
       if (itemsTotal < minOrder) throw fail('failed-precondition', 'MIN_ORDER_NOT_MET', { minOrderAmount: minOrder, itemsTotal });
 
+      // Tarif hujjati BIR marta: yetkazish narxi VA AVA ulushi (D9) shundan.
+      const tariffData = await readTariffDoc();
+
       // Yetkazish narxi.
       let deliveryFee = 0;
       let deliveryFeeSource = 'none';
       let deliveryQuote = {};
       if (deliveryMode === 'ava_courier') {
-        const q = await quoteDelivery(r, { toLat, toLng, at: scheduledFor || undefined });
+        const q = await quoteDelivery(r, { toLat, toLng, at: scheduledFor || undefined }, tariffData);
         deliveryFee = q.deliveryFee;
         deliveryFeeSource = q.deliveryFeeSource;
         deliveryQuote = {
@@ -1089,7 +1322,12 @@ function attachRestaurantOrders(exportsObj, deps) {
         }
       }
 
-      const avaFee = { ...tariff.computeAvaFee(itemsTotal), charged: false };
+      // D9: ulush foizi admin sozlamasidan (yo'q bo'lsa 2 %); buyurtmaga muhrlanadi —
+      // keyin sozlama o'zgarsa ham shu buyurtmaning ulushi o'zgarmaydi.
+      const avaFee = {
+        ...tariff.computeAvaFee(itemsTotal, tariff.resolveAvaFeeSettings(tariffData)),
+        charged: false,
+      };
       const code = pickupCode();
       // Oddiy buyurtma — 5 daqiqa; oldindan — 2 soat yoki bajarilishdan 30 daqiqa oldin (restoran_preorder.js).
       const deadline = scheduledFor
@@ -1463,7 +1701,11 @@ function attachRestaurantOrders(exportsObj, deps) {
         routeId = routeRef.id;
       }
       // `courierName` — mijoz va restoran egasi kimni kutishini bilishi uchun (S6); faqat buyurtma ishtirokchilari o'qiydi.
-      t.update(orderRef, { courierId, deliveryRouteId: routeId, courierClaimedAt: ts(), updatedAt: ts(), ...(courierName ? { courierName } : {}) });
+      t.update(orderRef, {
+        courierId, deliveryRouteId: routeId, courierClaimedAt: ts(), updatedAt: ts(), ...(courierName ? { courierName } : {}),
+        // Qaytarilgan/qo'yib yuborilgan buyurtmaga kuryer topildi — 30 daqiqalik qidiruv tugadi.
+        ...(od.returnSearchUntil !== undefined ? { returnSearchUntil: admin.firestore.FieldValue.delete() } : {}),
+      });
       addEvent(t, orderRef, { from: od.restaurantStatus, to: od.restaurantStatus, actor: 'courier', actorId: courierId, reason: 'claimed', meta: { routeId } });
       return { ok: true, routeId, restaurantId: od.restaurantId, customerUid: od.userPhone };
     }), (od) => {
@@ -1542,33 +1784,102 @@ function attachRestaurantOrders(exportsObj, deps) {
   });
 
   /**
-   * Yakun: `delivered` (yetkazish puli naqd yoki mijoz hamyoni → kuryer hamyoni)
-   * yoki `delivery_failed` (2 % restoranga qaytadi, mijozga strike).
-   * Idempotent: `wallet_idempotency/rest_complete_{orderId}`.
+   * Yakun tranzaksiyasi — YAGONA yadro (7-qoida): kuryerning `courierCompleteRestaurantDelivery`
+   * chaqiruvi ham, mijozning tasdig'i (`customerConfirmHandover`, modul `restaurant`) ham shuni
+   * ishlatadi.
+   *   `gate: true` (kuryer chaqiruvi) va mijoz tasdig'i shu mijoz uchun YOQILGAN bo'lsa,
+   *   'delivered' YAKUNLANMAYDI: faqat kutish belgisi yoziladi (holat va pul o'zgarmaydi).
+   *   `confirmStep` — mijoz tasdig'i: yadro bajariladi, belgi o'chadi, tasdiq izi yoziladi.
+   * Sozlama o'chiq bo'lsa yo'l AVVALGI kod bilan bir xil. Pul kalitlari o'zgarmagan
+   * (`rest_complete_{id}`, `restDelivery_{id}`), shuning uchun qayta urinish ikki marta to'lamaydi.
    */
-  exportsObj.courierCompleteRestaurantDelivery = functions.https.onCall(async (data, context) => {
-    const t0 = Date.now();
-    const uid = requirePhoneUid(context);
-    const courierId = await courierAuthOf().resolve(uid, COURIER_AUTH_MODES.finish);
-    const orderId = str(data && data.orderId, 64);
-    const outcome = (data && data.outcome) === 'failed' ? 'failed' : 'delivered';
-    const failReason = FAIL_REASONS.includes(data && data.failReason) ? data.failReason : 'other';
-    const orderRef = db.collection(ORDERS).doc(orderId);
-    const idemRef = db.collection(IDEMPOTENCY).doc(`rest_complete_${orderId}`);
-    await courierAuthOf().assertOrderOnActiveRoute(courierId, orderId);
-    const out = await db.runTransaction(async (t) => {
+  async function completeInTx(t, {
+    orderRef, idemRef, orderId, courierId, outcome, failReason, gate, confirmStep,
+    // Kim yakunladi (hodisa uchun): 'courier' (standart) | 'customer' | 'restaurant' | 'admin'.
+    actor, actorId,
+  }) {
       // READ fazasi.
       const [idemSnap, od] = await Promise.all([t.get(idemRef), getOrderInTx(t, orderRef)]);
       courierAuthOf().assertOrderActionable(od, courierId, 'courierCompleteRestaurantDelivery', orderId);
       if (idemSnap.exists) return { done: true, result: { ...(idemSnap.data().result || { ok: true }), idempotent: true } };
       const to = outcome === 'delivered' ? RS.delivered : RS.deliveryFailed;
       const from = assertTransition(od, to, orderId);
+      // `ready → delivered` jadvalda restoranning O'Z kuryeri uchun (restaurantMarkDelivered).
+      // AVA kuryeri esa olmasdan (kod, `picked`, `arrived` siz) yakunlay olmaydi:
+      // buyurtma `accepted`da marshrutga olinadi, `ready` bo'lgach kod aylanib o'tilardi.
+      if (from !== RS.picked && from !== RS.arrived) {
+        log('complete', { orderId, result: 'denied', errorCode: 'ORDER_NOT_PICKED', from, to });
+        throw fail('failed-precondition', 'ORDER_NOT_PICKED', { from, to });
+      }
       const customerUid = canonicalUid(String(od.userPhone || ''));
+      // «Yetkazilmadi» (ega qarori 2026-10-31, HAMMA mijoz uchun): kuryer o'zi YAKUNLAY OLMAYDI.
+      // Mijozdan tasdiq so'raladi; `failedTimeoutMin` ichida javob bo'lmasa qaror restoranga o'tadi
+      // (`escalateRestaurantDeliveryFailed`). Holat va pul O'ZGARMAYDI.
+      if (gate && to === RS.deliveryFailed && customerConfirm) {
+        const m = od[CC_MARKER_FIELD];
+        if (m && m.step === FAILED_STEP) {
+          // Takroriy chaqiruv: birinchi so'rov (sababi va muddati) o'zgarmaydi.
+          return { done: true, result: { ...customerConfirm.awaitingResponse(FAILED_STEP), escalateAtMs: msOf(m.escalateAt) }, requested: { od, created: false } };
+        }
+        const timeoutMin = await customerConfirm.getFailedTimeoutMin();
+        const escalateAt = tsOf(new Date(now().getTime() + timeoutMin * 60 * 1000));
+        const rq = customerConfirm.requestInTx(t, orderRef, od, {
+          step: FAILED_STEP, courierId, extra: { failReason, escalateAt },
+          patch: {
+            [FAILED_ESCALATE_AT]: escalateAt,
+            [FAILED_ESCALATED_AT]: admin.firestore.FieldValue.delete(),
+            [FAILED_RESOLUTION]: admin.firestore.FieldValue.delete(),
+          },
+        });
+        addEvent(t, orderRef, {
+          from, to: from, actor: 'courier', actorId: courierId, reason: 'delivery_failed_requested',
+          meta: { step: FAILED_STEP, failReason, timeoutMin, replacedStep: m && m.step ? String(m.step) : null },
+        });
+        return {
+          done: true,
+          result: { ...customerConfirm.awaitingResponse(FAILED_STEP), escalateAtMs: escalateAt.toMillis() },
+          requested: { od, created: rq.created, step: FAILED_STEP, failReason },
+        };
+      }
+      // Mijoz tasdig'i (D2/D7): yoqilgan bo'lsa kuryer yetkazishni YAKUNLAY OLMAYDI.
+      if (gate && to === RS.delivered && customerConfirm && await customerConfirm.isGated('restaurant', customerUid)) {
+        // «Yetkazilmadi» kutilayotgan bo'lsa (mijoz chiqib keldi) — u bekor bo'ladi, muddat o'chadi.
+        const rq = customerConfirm.requestInTx(t, orderRef, od, { step: 'received', courierId, patch: failedPendingClear(od) });
+        if (rq.created) {
+          addEvent(t, orderRef, { from, to: from, actor: 'courier', actorId: courierId, reason: 'customer_confirm_requested', meta: { step: 'received' } });
+        }
+        return { done: true, result: customerConfirm.awaitingResponse('received'), requested: { od, created: rq.created } };
+      }
+      const clearMarker = { ...(customerConfirm ? customerConfirm.clearPatch(od) : {}), ...failedPendingClear(od) };
+      const evActor = actor || (confirmStep ? 'customer' : 'courier');
+      const evActorId = actorId || (confirmStep ? customerUid : courierId);
+      const resolution = to === RS.deliveryFailed && evActor !== 'courier'
+        ? { [FAILED_RESOLUTION]: { by: evActor, decision: 'failed', at: ts(), actorId: evActorId } }
+        : {};
       const fee = Number(od.deliveryFee) || 0;
       let walletPrep = null;
       let refundPrep = null;
       let prevStrikes = 0;
-      if (to === RS.delivered && od.deliveryPaymentMethod === 'wallet' && fee > 0) {
+      // Topshirish bo'lgan bo'lsa (A-3): yetkazish haqi kuryerlar orasida masofa ulushi bo'yicha.
+      // Bo'laklar: `courierLegs` (qaytarilganlar — hissasiz) + oxirgi topshirish nuqtasi → mijoz.
+      let shares = null;
+      if (to === RS.delivered && Array.isArray(od.courierLegs) && od.courierLegs.length > 0) {
+        const cLat = Number(od.lat);
+        const cLng = Number(od.lng);
+        const custPt = validLatLng(cLat, cLng) ? { lat: cLat, lng: cLng } : null;
+        const legs = od.courierLegs.filter((l) => l && !l.returned)
+          .map((l) => ({ courierId: canonicalUid(String(l.courierId || '')), meters: Number(l.meters) || 0 }));
+        legs.push({ courierId, meters: legMeters(custodyStartPoint(od), custPt) });
+        shares = computeCourierShares(fee, legs);
+      }
+      const split = shares && shares.filter((s) => s.amount > 0).length > 1 ? shares.filter((s) => s.amount > 0) : null;
+      let splitPreps = null;
+      if (to === RS.delivered && od.deliveryPaymentMethod === 'wallet' && fee > 0 && split) {
+        splitPreps = await Promise.all(split.map((s) => settlementLedger.prepareBonusInTx(t, db, customerUid, {
+          fundingAccount: settlementLedger.passengerCreditAccount(s.courierId),
+          idempotencyKey: `restDeliveryShare_${orderId}_${s.courierId}`,
+        })));
+      } else if (to === RS.delivered && od.deliveryPaymentMethod === 'wallet' && fee > 0) {
         walletPrep = await settlementLedger.prepareBonusInTx(t, db, customerUid, {
           fundingAccount: settlementLedger.passengerCreditAccount(courierId),
           idempotencyKey: `restDelivery_${orderId}`,
@@ -1603,6 +1914,53 @@ function attachRestaurantOrders(exportsObj, deps) {
           deliveryFeeFallback = 'insufficient_wallet';
         }
       }
+      if (splitPreps) {
+        // Bitta tranzaksiyada mijoz hisobidan bir nechta yozuv: `commitBonusInTx` mutlaq balans yozadi,
+        // shuning uchun har keyingi yozuvga oldingisidan keyingi qoldiq beriladi (o'qish READ fazasida).
+        const already = splitPreps.every((p) => p.jExists);
+        const pending = split.reduce((sum, s, i) => sum + (splitPreps[i].jExists ? 0 : s.amount), 0);
+        if (already) {
+          walletPaid = fee;
+        } else if (splitPreps[0].pcPrev >= pending) {
+          let pc = splitPreps[0].pcPrev;
+          const cRef = db.collection('users').doc(customerUid);
+          split.forEach((s, i) => {
+            const prep = splitPreps[i];
+            if (prep.jExists) return;
+            prep.pcPrev = pc;
+            settlementLedger.commitBonusInTx(t, prep, {
+              delta: -s.amount, kind: 'restaurant_delivery_fee', refType: 'order', refId: orderId,
+              meta: { module: MODULE_ID, courierId: s.courierId.slice(-4), share: true, meters: s.meters },
+              postedBy: customerUid, postedRole: 'client',
+            });
+            pc -= s.amount;
+            const kRef = db.collection('users').doc(s.courierId);
+            t.set(kRef, { bonusBalance: inc(s.amount), balanceUpdatedAt: ts() }, { merge: true });
+            t.set(kRef.collection('wallet_ledger').doc(), { type: 'restaurant_delivery_credit', amount: s.amount, module: MODULE_ID, refType: 'order', refId: orderId, meta: { share: true }, createdAt: ts(), createdBy: 'server' });
+          });
+          t.set(cRef, { bonusBalance: inc(-pending), balanceUpdatedAt: ts() }, { merge: true });
+          t.set(cRef.collection('wallet_ledger').doc(), { type: 'restaurant_delivery_debit', amount: -pending, module: MODULE_ID, refType: 'order', refId: orderId, meta: { split: split.length }, createdAt: ts(), createdBy: 'server' });
+          walletPaid = fee;
+        } else {
+          deliveryPaymentMethod = 'cash';
+          deliveryFeeFallback = 'insufficient_wallet';
+        }
+      }
+      // Naqd (ega qarori 2026-10-31): oxirgi kuryer hamma naqdni oladi; oldingi kuryer(lar) ulushi OXIRGI
+      // kuryerning AVA hamyonidan AVTOMATIK o'tkaziladi. Niyat shu tranzaksiyada yoziladi (yakun bilan
+      // bir marta), o'tkazma esa `settleCashShare` (darhol) / `restaurantCourierSharePendingSweep` (qayta).
+      const cashShares = to === RS.delivered && split && walletPaid !== fee
+        ? split.filter((s) => s.courierId !== courierId && s.amount > 0) : [];
+      const sharePendingIds = cashShares.map((s) => cashShareId(orderId, courierId, s.courierId));
+      cashShares.forEach((s, i) => {
+        t.set(db.collection(SHARE_PENDING).doc(sharePendingIds[i]), {
+          orderId, fromCourierId: courierId, toCourierId: s.courierId, amount: s.amount, meters: s.meters,
+          status: 'pending', attempts: 0, createdAt: ts(),
+        });
+      });
+      const payoutSettlement = !shares ? null
+        : !split ? 'single'
+          : walletPaid === fee ? 'wallet_split' : 'cash_last_pays';
       const buyout = od.foodPaymentMethod === 'cash_buyout';
       const foodAmount = foodAmountOf(od);
       const cashCollected = to === RS.delivered
@@ -1614,7 +1972,10 @@ function attachRestaurantOrders(exportsObj, deps) {
         t.update(orderRef, statusPatch(RS.delivered, {
           deliveredAt: ts(), completedAt: ts(), courierId, deliveryPaymentMethod, deliveryFeeFallback,
           deliveryFeeWalletPaid: walletPaid, cashCollected, cashPaid: cashCollected,
+          ...(shares ? { payoutShares: shares, payoutSettlement, custodyPoint: admin.firestore.FieldValue.delete() } : {}),
           ...(buyout || od.paymentStatus === 'paid' ? { paymentStatus: 'paid' } : {}),
+          ...clearMarker,
+          ...(confirmStep ? customerConfirm.confirmedPatch(confirmStep, courierId) : {}),
         }));
         t.set(db.collection(CUSTOMER_STATS).doc(customerUid), { completedCount: inc(1), updatedAt: ts() }, { merge: true });
       } else {
@@ -1623,6 +1984,9 @@ function attachRestaurantOrders(exportsObj, deps) {
         t.update(orderRef, statusPatch(RS.deliveryFailed, {
           failedAt: ts(), courierId, failReason, 'avaFee.refunded': refund.applied, 'avaFee.refundedAt': refund.applied ? ts() : null,
           rejectReason: `delivery_failed:${failReason}`,
+          ...clearMarker,
+          ...resolution,
+          ...(confirmStep ? customerConfirm.confirmedPatch(confirmStep, courierId) : {}),
         }));
         if (strike) {
           // Mijoz eshikda olmadi — strike; ikkinchisidan faqat oldindan
@@ -1635,20 +1999,819 @@ function attachRestaurantOrders(exportsObj, deps) {
           }, { merge: true });
         }
       }
-      const result = { ok: true, orderId, outcome, deliveryFee: fee, walletPaid, cashCollected, refundAmount: refund.amount, deliveryPaymentMethod };
+      const result = {
+        ok: true, orderId, outcome, deliveryFee: fee, walletPaid, cashCollected, refundAmount: refund.amount, deliveryPaymentMethod,
+        ...(shares ? { payoutShares: shares.map((s) => ({ courierTail: s.courierId.slice(-4), meters: s.meters, amount: s.amount })), payoutSettlement } : {}),
+      };
       t.set(idemRef, { type: 'courierCompleteRestaurantDelivery', result, createdAt: ts() });
-      addEvent(t, orderRef, { from, to, actor: 'courier', actorId: courierId, reason: to === RS.deliveryFailed ? failReason : '', meta: { walletPaid, cashCollected, refundAmount: refund.amount } });
-      return { done: false, result, customerUid, restaurantId: od.restaurantId };
-    });
+      addEvent(t, orderRef, confirmStep
+        ? { from, to, actor: 'customer', actorId: customerUid, reason: 'customer_confirmed', meta: { walletPaid, cashCollected, refundAmount: refund.amount, step: confirmStep, courierId, ...(to === RS.deliveryFailed ? { failReason } : {}) } }
+        : evActor !== 'courier'
+          ? { from, to, actor: evActor, actorId: evActorId, reason: `delivery_failed_decided:${failReason}`, meta: { refundAmount: refund.amount, courierId, failReason } }
+          : { from, to, actor: 'courier', actorId: courierId, reason: to === RS.deliveryFailed ? failReason : '', meta: { walletPaid, cashCollected, refundAmount: refund.amount } });
+      return { done: false, result, customerUid, restaurantId: od.restaurantId, courierId, sharePendingIds };
+  }
+
+  /**
+   * Naqd ulush o'tkazmasi: oxirgi kuryer hamyoni → oldingi kuryer hamyoni (mavjud `settlementLedger.postEntry`,
+   * passenger_credit ↔ passenger_credit, butun so'm). Idempotentlik kaliti (jurnal hujjati id'si)
+   * `restCourierShare_{orderId}_{from}_{to}` — qayta urinish ikki marta o'tkazmaydi; niyat hujjati
+   * AYNI tranzaksiyada o'chadi. Hamyon yetmasa yakun TO'XTAMAYDI: niyat `insufficient_balance` bo'lib
+   * qoladi va jadval har 5 daqiqada qayta uradi (`courierCashPendingSweep` naqshi, R1).
+   * @returns {'posted'|'already'|'insufficient'|'failed'|'missing'}
+   */
+  async function settleCashShare(pendingId) {
+    const pRef = db.collection(SHARE_PENDING).doc(pendingId);
+    const snap = await pRef.get();
+    if (!snap.exists) return 'missing';
+    const p = snap.data() || {};
+    const from = canonicalUid(String(p.fromCourierId || ''));
+    const toC = canonicalUid(String(p.toCourierId || ''));
+    const amount = Number(p.amount);
+    if (!from || !toC || from === toC || !Number.isInteger(amount) || amount <= 0) {
+      await pRef.update({ status: 'invalid', updatedAt: ts() });
+      return 'failed';
+    }
+    const fromAcc = settlementLedger.passengerCreditAccount(from);
+    try {
+      const r = await settlementLedger.postEntry(db, {
+        idempotencyKey: `restCourierShare_${cashShareId(String(p.orderId || ''), from, toC)}`,
+        kind: 'restaurant_courier_share',
+        refType: 'order',
+        refId: String(p.orderId || ''),
+        postedBy: 'system',
+        postedRole: 'system',
+        legs: [{ account: fromAcc, dr: amount }, { account: settlementLedger.passengerCreditAccount(toC), cr: amount }],
+      }, {
+        walletLedgerType: 'restaurant_courier_share',
+        meta: { module: MODULE_ID, meters: Number(p.meters) || 0, fromTail: from.slice(-4), toTail: toC.slice(-4) },
+        assert: ({ accounts }) => {
+          const s = accounts.get(fromAcc);
+          if (s && s.next < 0) {
+            const e = new Error('COURIER_SHARE_INSUFFICIENT');
+            e.insufficient = true;
+            e.balance = s.prev;
+            throw e;
+          }
+        },
+        onCommit: (tx) => { tx.delete(pRef); },
+      });
+      if (r.idempotent) await pRef.delete();
+      log('courier_share', { orderId: p.orderId, result: r.idempotent ? 'already' : 'posted', amount });
+      return r.idempotent ? 'already' : 'posted';
+    } catch (e) {
+      const insufficient = !!(e && e.insufficient);
+      try {
+        await pRef.update({
+          status: insufficient ? 'insufficient_balance' : 'error', attempts: inc(1), lastAttemptAt: ts(),
+          lastError: insufficient ? 'COURIER_SHARE_INSUFFICIENT' : String((e && e.message) || e).slice(0, 160),
+        });
+      } catch (_) { /* niyat qoladi — jadval qayta uradi */ }
+      log('courier_share', {
+        orderId: p.orderId, result: insufficient ? 'insufficient' : 'failed',
+        errorCode: insufficient ? 'COURIER_SHARE_INSUFFICIENT' : 'COURIER_SHARE_FAILED', amount,
+      });
+      return insufficient ? 'insufficient' : 'failed';
+    }
+  }
+
+  async function settleCashShares(ids) {
+    for (const id of ids || []) await settleCashShare(id);
+  }
+
+  /** Jadval: o'tkazilmagan naqd ulushlar (hamyon yetmagan / xato) — har 5 daqiqa qayta. */
+  async function sweepCashShares() {
+    const snap = await db.collection(SHARE_PENDING).orderBy('createdAt').limit(200).get();
+    const out = { scanned: snap.size, posted: 0, insufficient: 0, failed: 0 };
+    for (const d of snap.docs) {
+      const r = await settleCashShare(d.id);
+      if (r === 'posted' || r === 'already') out.posted += 1;
+      else if (r === 'insufficient') out.insufficient += 1;
+      else out.failed += 1;
+    }
+    if (snap.size) log('courier_share_sweep', out);
+    return out;
+  }
+
+  exportsObj.restaurantCourierSharePendingSweep = functions.pubsub
+    .schedule('every 5 minutes')
+    .timeZone('Asia/Tashkent')
+    .onRun(async () => sweepCashShares());
+
+  /**
+   * Yakun: `delivered` (yetkazish puli naqd yoki mijoz hamyoni → kuryer hamyoni)
+   * yoki `delivery_failed` (2 % restoranga qaytadi, mijozga strike).
+   * Idempotent: `wallet_idempotency/rest_complete_{orderId}`.
+   * Mijoz tasdig'i yoqilgan bo'lsa 'delivered' kuryer chaqiruvida yakunlanmaydi:
+   * `{ ok, awaitingCustomer: true, step: 'received' }` qaytadi (yadro: `completeInTx`).
+   */
+  exportsObj.courierCompleteRestaurantDelivery = functions.https.onCall(async (data, context) => {
+    const t0 = Date.now();
+    const uid = requirePhoneUid(context);
+    const courierId = await courierAuthOf().resolve(uid, COURIER_AUTH_MODES.finish);
+    const orderId = str(data && data.orderId, 64);
+    const outcome = (data && data.outcome) === 'failed' ? 'failed' : 'delivered';
+    const failReason = FAIL_REASONS.includes(data && data.failReason) ? data.failReason : 'other';
+    const orderRef = db.collection(ORDERS).doc(orderId);
+    const idemRef = db.collection(IDEMPOTENCY).doc(`rest_complete_${orderId}`);
+    await courierAuthOf().assertOrderOnActiveRoute(courierId, orderId);
+    const out = await db.runTransaction((t) => completeInTx(t, {
+      orderRef, idemRef, orderId, courierId, outcome, failReason, gate: true,
+    }));
+    if (out.requested) {
+      const step = out.requested.step || 'received';
+      await customerConfirm.afterRequest('restaurant', orderId, step, out.requested.od,
+        step === FAILED_STEP ? { failReason: out.requested.failReason } : {}, out.requested.created);
+    }
     if (out.done) return out.result;
     log('complete', { orderId, restaurantId: out.restaurantId, userId: courierId, result: outcome, walletPaid: out.result.walletPaid, durationMs: Date.now() - t0 });
     if (outcome === 'delivered') {
+      await settleCashShares(out.sharePendingIds);
       await notifyCustomer(out.customerUid, { title: '✅ Buyurtma yetkazildi', body: 'Yoqimli ishtaha!', orderId });
     } else {
       await notifyMembers(String(out.restaurantId), { title: 'Yetkazib bo\'lmadi', body: 'Kuryer buyurtmani yetkaza olmadi', orderId });
     }
     return out.result;
   });
+
+  // Mijoz tasdig'i yadrosi (D2/D7): `customerConfirmHandover({module:'restaurant', step:'received'})`
+  // kuryer chaqiruvi bilan AYNAN bir xil `completeInTx` ni ishlatadi (saqlangan courierId bilan).
+  if (customerConfirm) {
+    customerConfirm.registerHandler('restaurant', {
+      collection: ORDERS,
+      phoneField: 'userPhone',
+      customerPhoneOf: (od) => od.userPhone,
+      statusOf: (od) => String(od.restaurantStatus || ''),
+      describe: (od, marker) => {
+        if (![RS.picked, RS.arrived].includes(od.restaurantStatus)) return null;
+        if (marker.step === 'received') return { key: 'confirm_restaurant_received', params: {} };
+        if (marker.step === FAILED_STEP) {
+          const reason = FAIL_REASONS.includes(marker.failReason) ? marker.failReason : 'other';
+          return {
+            key: 'confirm_restaurant_delivery_failed',
+            params: {},
+            details: { failReason: reason, escalateAtMs: msOf(marker.escalateAt) },
+          };
+        }
+        return null;
+      },
+      confirm: async (t, { ref, id, od, marker, step }) => {
+        const orderId = id;
+        const idemRef = db.collection(IDEMPOTENCY).doc(`rest_complete_${orderId}`);
+        const courierId = canonicalUid(String(marker.courierId || ''));
+        if (step === FAILED_STEP) {
+          // Mijoz «olmadim»ni tasdiqladi — avvalgi yakun (2 % qaytadi, strike sababga qarab).
+          const failReason = FAIL_REASONS.includes(marker.failReason) ? marker.failReason : 'other';
+          const out = await completeInTx(t, {
+            orderRef: ref, idemRef, orderId, courierId,
+            outcome: 'failed', failReason, gate: false, confirmStep: FAILED_STEP,
+          });
+          if (out.done) {
+            t.update(ref, { ...customerConfirm.clearPatch(od), ...failedPendingClear(od), ...customerConfirm.confirmedPatch(FAILED_STEP, marker.courierId) });
+          }
+          return {
+            status: RS.deliveryFailed,
+            after: out.done ? null : () => afterFailedFinal(orderId, out, 'customer'),
+          };
+        }
+        const out = await completeInTx(t, {
+          orderRef: ref, idemRef, orderId, courierId,
+          outcome: 'delivered', failReason: 'other', gate: false, confirmStep: 'received',
+        });
+        if (out.done) {
+          // Pul allaqachon yopilgan (idempotentlik hujjati bor), belgi esa qolib ketgan: tozalaymiz.
+          t.update(ref, { ...customerConfirm.clearPatch(od), ...customerConfirm.confirmedPatch('received', marker.courierId) });
+        }
+        const ids = out.done ? [] : (out.sharePendingIds || []);
+        return { status: RS.delivered, ...(ids.length ? { after: () => settleCashShares(ids) } : {}) };
+      },
+      // Mijoz «Олмоқчиман»: kuryer «yetkazilmadi» degan, mijoz esa olmoqchi — yetkazish davom etadi.
+      reject: async (t, { ref, id, od, marker, step, customerId }) => {
+        if (step !== FAILED_STEP) throw fail('failed-precondition', 'NOT_REJECTABLE');
+        if (![RS.picked, RS.arrived].includes(od.restaurantStatus)) {
+          throw fail('failed-precondition', 'ORDER_INVALID_TRANSITION', { from: od.restaurantStatus });
+        }
+        continueInTx(t, ref, od, { by: 'customer', actorId: customerId, marker });
+        return {
+          status: String(od.restaurantStatus || ''),
+          after: () => afterContinue(id, od, marker, 'customer'),
+        };
+      },
+    });
+  }
+
+  /**
+   * «Davom etsin» (mijoz rad etdi yoki restoran/admin «yetkazilsin» dedi) — WRITE fazasi.
+   * Holat o'zgarmaydi (picked/arrived), belgi va muddat o'chadi, qaror joriy holatga va hodisaga yoziladi.
+   */
+  function continueInTx(t, ref, od, { by, actorId, marker }) {
+    t.update(ref, {
+      ...customerConfirm.clearPatch(od),
+      ...failedPendingClear(od),
+      ...(by === 'customer' ? { [`${CC_REJECTED_FIELD}.${FAILED_STEP}`]: { at: ts(), courierId: String(marker.courierId || '') } } : {}),
+      [FAILED_RESOLUTION]: { by, decision: 'continue', at: ts(), actorId: actorId || null },
+      updatedAt: ts(),
+    });
+    addEvent(t, ref, {
+      from: od.restaurantStatus, to: od.restaurantStatus, actor: by, actorId,
+      reason: 'delivery_failed_rejected',
+      meta: { courierId: String(marker.courierId || ''), failReason: String(marker.failReason || '') },
+    });
+  }
+
+  /** Xabar: 3 tilda, har qabul qiluvchining `appLang` iga qarab. Xato asosiy oqimni to'xtatmaydi. */
+  async function notifyI18n(userId, key, params, extra) {
+    try {
+      if (!userId) return;
+      const lang = await i18n.langOfPhone(db, userId);
+      const m = i18n.render(key, lang, params || {});
+      await notifyUserInApp({
+        userId: canonicalUid(String(userId)), title: m.title, body: m.body, category: 'order', source: 'restaurant_order',
+        extraNews: { orderId: String(extra.orderId || ''), orderType: 'restaurant' },
+        dataType: 'restaurant_order', screen: extra.screen || 'orders',
+        extraData: { orderId: extra.orderId, ...(extra.data || {}) },
+        ...(extra.channelId ? { channelId: extra.channelId } : {}),
+      });
+    } catch (e) {
+      console.error(JSON.stringify({ module: MODULE_ID, action: 'notifyI18n', key, result: 'failed', errorCode: 'NOTIFY_FAILED', message: String((e && e.message) || e).slice(0, 160) }));
+    }
+  }
+
+  async function notifyMembersI18n(restaurantId, key, params, orderId) {
+    try {
+      const ms = await db.collection(RESTAURANTS).doc(String(restaurantId || '')).collection(MEMBERS).limit(10).get();
+      await Promise.all(ms.docs.map((m) => notifyI18n(m.id, key, params, {
+        orderId, screen: 'restaurant_orders', data: { restaurantId, ring: '1' }, channelId: 'courier_arrival_alarm',
+      })));
+    } catch (e) {
+      console.error('restaurant notifyMembersI18n:', e.message || e);
+    }
+  }
+
+  async function afterFailedFinal(orderId, out, by) {
+    log('delivery_failed_final', { orderId, restaurantId: out.restaurantId, result: 'delivery_failed', by, refundAmount: out.result.refundAmount });
+    await notifyMembersI18n(out.restaurantId, 'restaurant_delivery_failed_final', {}, orderId);
+    if (out.courierId) await notifyI18n(out.courierId, 'courier_delivery_failed_final', {}, { orderId });
+    if (by !== 'customer' && out.customerUid) await notifyI18n(out.customerUid, 'customer_delivery_failed_final', {}, { orderId });
+  }
+
+  async function afterContinue(orderId, od, marker, by) {
+    log('delivery_failed_continue', { orderId, restaurantId: od.restaurantId, result: 'continue', by });
+    if (marker.courierId) await notifyI18n(marker.courierId, 'courier_delivery_failed_continue', {}, { orderId });
+    if (by !== 'customer' && od.userPhone) await notifyI18n(od.userPhone, 'customer_delivery_failed_continue', {}, { orderId });
+  }
+
+  /**
+   * Mijoz `failedTimeoutMin` ichida javob bermadi → qaror restoranga (ega qarori A-1, 2026-10-31).
+   * `decision`: 'failed' — yetkazilmadi (avvalgi yakun), 'continue' — kuryer yetkazishni davom ettiradi.
+   * Ruxsat: restoran a'zosi (shu buyurtmaning restorani) yoki admin/superadmin (zaxira, audit bilan — PROPOSED).
+   * Muddat o'tmaguncha — `DECISION_NOT_YET` (mijoz navbatida). Birinchi qaror yutadi (tranzaksiya).
+   */
+  exportsObj.restaurantResolveDeliveryFailed = functions.https.onCall(async (data, context) => {
+    const t0 = Date.now();
+    const uid = requirePhoneUid(context);
+    const orderId = str(data && data.orderId, 64);
+    const decision = str(data && data.decision, 16);
+    if (!orderId || orderId.includes('/') || !FAILED_DECISIONS.includes(decision)) {
+      throw fail('invalid-argument', 'RESOLVE_ARGS_INVALID');
+    }
+    let isAdmin = false;
+    try {
+      await requireCallerRoles(context, ['admin', 'superadmin'], 'admin');
+      isAdmin = true;
+    } catch (_) { isAdmin = false; }
+    const orderRef = db.collection(ORDERS).doc(orderId);
+    const idemRef = db.collection(IDEMPOTENCY).doc(`rest_complete_${orderId}`);
+    const out = await withContention(orderRef, 'resolve_failed', () => db.runTransaction(async (t) => {
+      const od = await getOrderInTx(t, orderRef);
+      const rRef = db.collection(RESTAURANTS).doc(String(od.restaurantId || ''));
+      const mSnap = await t.get(rRef.collection(MEMBERS).doc(uid));
+      const by = mSnap.exists ? 'restaurant' : (isAdmin ? 'admin' : null);
+      if (!by) throw fail('permission-denied', 'NOT_RESTAURANT_MEMBER');
+      const res = od[FAILED_RESOLUTION];
+      const marker = od[CC_MARKER_FIELD];
+      if (!marker || marker.step !== FAILED_STEP) {
+        // Takror: shu qaror allaqachon qabul qilingan.
+        if (decision === 'failed' && od.restaurantStatus === RS.deliveryFailed) return { idempotent: true, status: od.restaurantStatus };
+        if (decision === 'continue' && res && res.decision === 'continue' && [RS.picked, RS.arrived].includes(od.restaurantStatus)) {
+          return { idempotent: true, status: od.restaurantStatus };
+        }
+        throw fail('failed-precondition', 'NOT_AWAITING_DECISION', { status: od.restaurantStatus });
+      }
+      const escalateMs = msOf(marker.escalateAt);
+      const escalated = od[FAILED_ESCALATED_AT] !== undefined && od[FAILED_ESCALATED_AT] !== null;
+      if (!escalated && (escalateMs === null || escalateMs > now().getTime())) {
+        throw fail('failed-precondition', 'DECISION_NOT_YET', { escalateAtMs: escalateMs });
+      }
+      // Admin qarori audit jurnaliga (41-qoida). Yozuv — barcha o'qishlardan KEYIN (tranzaksiya qoidasi).
+      const audit = () => {
+        if (by !== 'admin') return;
+        t.set(db.collection(ADMIN_AUDIT).doc(), {
+          kind: 'restaurant_delivery_failed_decision', actor: uid, target: `orders/${orderId}`,
+          from: od.restaurantStatus, to: decision === 'failed' ? RS.deliveryFailed : od.restaurantStatus,
+          reason: decision, detail: { failReason: String(marker.failReason || ''), restaurantId: String(od.restaurantId || '') }, at: ts(),
+        });
+      };
+      if (decision === 'continue') {
+        if (![RS.picked, RS.arrived].includes(od.restaurantStatus)) {
+          throw fail('failed-precondition', 'ORDER_INVALID_TRANSITION', { from: od.restaurantStatus });
+        }
+        continueInTx(t, orderRef, od, { by, actorId: uid, marker });
+        audit();
+        return { status: od.restaurantStatus, continued: { od, marker, by } };
+      }
+      const failReason = FAIL_REASONS.includes(marker.failReason) ? marker.failReason : 'other';
+      const r = await completeInTx(t, {
+        orderRef, idemRef, orderId, courierId: canonicalUid(String(marker.courierId || '')),
+        outcome: 'failed', failReason, gate: false, actor: by, actorId: uid,
+      });
+      if (r.done) return { idempotent: true, status: RS.deliveryFailed };
+      audit();
+      return { status: RS.deliveryFailed, final: { ...r, by } };
+    }), (od) => {
+      if (decision === 'failed' && od.restaurantStatus === RS.deliveryFailed) return { idempotent: true, status: od.restaurantStatus };
+      return null;
+    });
+    if (out.final) await afterFailedFinal(orderId, out.final, out.final.by);
+    if (out.continued) await afterContinue(orderId, out.continued.od, out.continued.marker, out.continued.by);
+    log('resolve_failed', { orderId, userId: uid.slice(-4), result: out.idempotent ? 'idempotent' : decision, durationMs: Date.now() - t0 });
+    return { ok: true, status: out.status, decision, ...(out.idempotent ? { idempotent: true } : {}) };
+  });
+
+  /**
+   * Jadval (har daqiqa): mijoz javob bermagan «yetkazilmadi» so'rovlari muddati o'tdi →
+   * `deliveryFailedEscalatedAt` qo'yiladi, restoran a'zolariga 3 tilda xabar. Bitta maydon bo'yicha
+   * diapazon so'rovi — kompozit indeks KERAK EMAS. Takror ishga tushsa ikkinchi marta yozmaydi.
+   */
+  async function escalateOne(orderRef, at) {
+    return db.runTransaction(async (t) => {
+      const s = await t.get(orderRef);
+      if (!s.exists) return null;
+      const od = s.data() || {};
+      const dl = msOf(od[FAILED_ESCALATE_AT]);
+      if (dl === null) return null;
+      const marker = od[CC_MARKER_FIELD];
+      const pending = od.type === 'restaurant' && marker && marker.step === FAILED_STEP
+        && [RS.picked, RS.arrived].includes(od.restaurantStatus);
+      if (!pending) {
+        // Eskirgan muddat (buyurtma boshqa yo'l bilan yakunlangan) — faqat maydon o'chadi.
+        t.update(orderRef, { [FAILED_ESCALATE_AT]: admin.firestore.FieldValue.delete() });
+        return { stale: true };
+      }
+      if (dl > at.getTime()) return null;
+      t.update(orderRef, { [FAILED_ESCALATE_AT]: admin.firestore.FieldValue.delete(), [FAILED_ESCALATED_AT]: ts() });
+      addEvent(t, orderRef, {
+        from: od.restaurantStatus, to: od.restaurantStatus, actor: 'system', reason: 'delivery_failed_escalated',
+        meta: { failReason: String(marker.failReason || ''), courierId: String(marker.courierId || '') },
+      });
+      return { orderId: orderRef.id, restaurantId: od.restaurantId, customerUid: od.userPhone };
+    });
+  }
+
+  async function escalateDeliveryFailed() {
+    const at = now();
+    const snap = await db.collection(ORDERS)
+      .where(FAILED_ESCALATE_AT, '<=', tsOf(at))
+      .limit(ESCALATE_BATCH)
+      .get();
+    let escalated = 0;
+    let stale = 0;
+    for (const doc of snap.docs) {
+      try {
+        const r = await escalateOne(doc.ref, at);
+        if (!r) continue;
+        if (r.stale) { stale += 1; continue; }
+        escalated += 1;
+        log('delivery_failed_escalate', { orderId: r.orderId, restaurantId: r.restaurantId, result: 'escalated' });
+        await notifyMembersI18n(r.restaurantId, 'restaurant_delivery_failed_decide', {}, r.orderId);
+      } catch (e) {
+        console.error(JSON.stringify({ module: MODULE_ID, action: 'delivery_failed_escalate', orderId: doc.id, result: 'failed', errorCode: 'ESCALATE_FAILED', message: String((e && e.message) || e).slice(0, 160) }));
+      }
+    }
+    return { scanned: snap.size, escalated, stale };
+  }
+
+  exportsObj.escalateRestaurantDeliveryFailed = functions.pubsub
+    .schedule('every 1 minutes')
+    .timeZone('Asia/Tashkent')
+    .onRun(async () => escalateDeliveryFailed());
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // TOPSHIRISH: boshqa kuryerga / restoranga (ega qarorlari 2026-10-31)
+  // ═══════════════════════════════════════════════════════════════════════
+
+  const delField = () => admin.firestore.FieldValue.delete();
+  const handoverCode = () => String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+
+  function optLatLng(data) {
+    const lat = Number(data && data.lat);
+    const lng = Number(data && data.lng);
+    return validLatLng(lat, lng) ? { lat, lng } : null;
+  }
+
+  /** Buyurtma bo'yicha joriy jismoniy nuqta: oxirgi topshirish nuqtasi, bo'lmasa restoran. */
+  function custodyStartPoint(od) {
+    const p = od.custodyPoint;
+    if (p && validLatLng(Number(p.lat), Number(p.lng))) return { lat: Number(p.lat), lng: Number(p.lng) };
+    const rLat = Number(od.restaurantLat);
+    const rLng = Number(od.restaurantLng);
+    return validLatLng(rLat, rLng) ? { lat: rLat, lng: rLng } : null;
+  }
+
+  function legMeters(from, to) {
+    if (!from || !to) return 0;
+    return Math.round(tariff.haversineMeters(from.lat, from.lng, to.lat, to.lng));
+  }
+
+  function custodyEventDoc({ orderId, od, kind, from, to, location, proof, actorId, handoverId, meta }) {
+    return {
+      orderType: 'restaurant',
+      orderId,
+      restaurantId: String(od.restaurantId || ''),
+      shipmentId: null,
+      legId: null,
+      /** Qoida `get()`siz: mijoz o'z buyurtmasi tarixini o'qiy oladi (`isOwner(ownerId)`). */
+      ownerId: canonicalUid(String(od.userPhone || '')),
+      kind,
+      from,
+      to,
+      timestamp: ts(),
+      location: location || null,
+      proof: proof || {},
+      createdBy: actorId,
+      idempotencyKey: `rest_${orderId}_${handoverId}`,
+      handoverId,
+      meta: meta || {},
+      deliversShipment: false,
+    };
+  }
+
+  /**
+   * Kuryer topshirishni boshlaydi.
+   *   accepted/ready (hali olinmagan): DARHOL qo'yib yuboradi — kuryer, marshrut o'chadi, 30 daqiqa qidiruv.
+   *   picked/arrived: kod chiqadi (TTL 15 daq). `target: 'courier'` — kod boshqa kuryerga aytiladi;
+   *   `target: 'seller'` — kod restoranga aytiladi. Takroriy chaqiruv o'sha kodni qaytaradi.
+   */
+  exportsObj.courierStartRestaurantHandover = functions.https.onCall(async (data, context) => {
+    const t0 = Date.now();
+    const uid = requirePhoneUid(context);
+    const courierId = await courierAuthOf().resolve(uid, COURIER_AUTH_MODES.finish);
+    const orderId = str(data && data.orderId, 64);
+    const target = str(data && data.target, 16);
+    if (!orderId || orderId.includes('/') || !HANDOVER_TARGETS.includes(target)) throw fail('invalid-argument', 'HANDOVER_ARGS_INVALID');
+    const loc = optLatLng(data);
+    await courierAuthOf().assertOrderOnActiveRoute(courierId, orderId);
+    const orderRef = db.collection(ORDERS).doc(orderId);
+    const secretRef = orderRef.collection(PRIVATE).doc('secrets');
+    const out = await withContention(orderRef, 'handover_start', () => db.runTransaction(async (t) => {
+      const od = await getOrderInTx(t, orderRef);
+      courierAuthOf().assertOrderActionable(od, courierId, 'courierStartRestaurantHandover', orderId);
+      const st = od.restaurantStatus;
+      // ── Olishdan oldin: qo'yib yuborish (jismoniy narsa yo'q, kod kerak emas) ──
+      if ([RS.accepted, RS.ready].includes(st)) {
+        const routeRef = od.deliveryRouteId ? db.collection(ROUTES).doc(String(od.deliveryRouteId)) : null;
+        const routeSnap = routeRef ? await t.get(routeRef) : null;
+        const until = tsOf(new Date(now().getTime() + RETURN_SEARCH_MIN * 60 * 1000));
+        t.update(orderRef, {
+          courierId: null, courierName: delField(), deliveryRouteId: delField(), courierClaimedAt: delField(),
+          returnSearchUntil: until, releasedAt: ts(), releasedBy: courierId, updatedAt: ts(),
+          handoverCount: inc(1),
+        });
+        detachFromRouteInTx(t, routeRef, routeSnap, orderId, 'courier_released');
+        addEvent(t, orderRef, { from: st, to: st, actor: 'courier', actorId: courierId, reason: 'courier_released', meta: { searchMin: RETURN_SEARCH_MIN } });
+        return { released: true, od: { ...od, courierId: null }, untilMs: until.toMillis() };
+      }
+      if (![RS.picked, RS.arrived].includes(st)) {
+        throw fail('failed-precondition', 'HANDOVER_NOT_ALLOWED', { from: st });
+      }
+      const m = od[CC_MARKER_FIELD];
+      if (m && m.step === FAILED_STEP) throw fail('failed-precondition', 'HANDOVER_BLOCKED_FAILED_PENDING');
+      // Naqd vykup: kuryer A restoranga o'z pulini bergan; B ga o'tkazishda kuryerlararo hisob — ega qarori yo'q.
+      if (target === 'courier' && od.foodPaymentMethod === 'cash_buyout') {
+        throw fail('failed-precondition', 'HANDOVER_BUYOUT_UNSUPPORTED');
+      }
+      const ho = od.handover;
+      const nowMs = now().getTime();
+      const sec = await t.get(secretRef);
+      const sd = sec.exists ? (sec.data() || {}) : {};
+      if (ho && ho.status === 'pending' && ho.fromCourierId === courierId && ho.target === target
+          && msOf(ho.expiresAt) > nowMs && sd.handoverCode) {
+        return { idempotent: true, handoverId: ho.id, code: sd.handoverCode, expiresAtMs: msOf(ho.expiresAt) };
+      }
+      // Kuryerga: kod butun tizimda yagona (B buyurtma raqamini bilmaydi) — `courier_handover_codes/{code}`.
+      let code = handoverCode();
+      let codeRef = null;
+      if (target === 'courier') {
+        for (let i = 0; i < 5; i += 1) {
+          codeRef = db.collection(HANDOVER_CODES).doc(code);
+          const cs = await t.get(codeRef);
+          if (!cs.exists || (msOf((cs.data() || {}).expiresAt) || 0) <= nowMs) break;
+          code = handoverCode();
+          codeRef = null;
+        }
+        if (!codeRef) throw fail('aborted', 'HANDOVER_CODE_BUSY');
+      }
+      const oldCodeRef = ho && ho.status === 'pending' && ho.target === 'courier' && sd.handoverCode
+        ? db.collection(HANDOVER_CODES).doc(String(sd.handoverCode)) : null;
+      // WRITE fazasi.
+      const handoverId = `h${nowMs.toString(36)}${crypto.randomInt(0, 1296).toString(36)}`;
+      const expiresAt = tsOf(new Date(nowMs + HANDOVER_TTL_MIN * 60 * 1000));
+      if (oldCodeRef && (!codeRef || oldCodeRef.path !== codeRef.path)) t.delete(oldCodeRef);
+      if (codeRef) t.set(codeRef, { orderId, handoverId, fromCourierId: courierId, expiresAt, createdAt: ts() });
+      t.set(secretRef, { handoverCode: code, handoverAttempts: 0, handoverId }, { merge: true });
+      t.update(orderRef, {
+        handover: {
+          status: 'pending', id: handoverId, target, fromCourierId: courierId, createdAt: ts(), expiresAt,
+          ...(loc ? { fromLat: loc.lat, fromLng: loc.lng } : {}),
+        },
+        updatedAt: ts(),
+      });
+      addEvent(t, orderRef, { from: st, to: st, actor: 'courier', actorId: courierId, reason: 'handover_started', meta: { target, handoverId } });
+      return { handoverId, code, expiresAtMs: expiresAt.toMillis() };
+    }), () => null);
+    if (out.released) {
+      log('handover_release', { orderId, userId: courierId.slice(-4), result: 'released', durationMs: Date.now() - t0 });
+      await notifyNearbyCouriers(orderId, out.od, 'ready');
+      return { ok: true, released: true, searchUntilMs: out.untilMs };
+    }
+    log('handover_start', { orderId, userId: courierId.slice(-4), result: out.idempotent ? 'idempotent' : 'ok', target, durationMs: Date.now() - t0 });
+    return { ok: true, handoverId: out.handoverId, code: out.code, expiresAtMs: out.expiresAtMs, target, ...(out.idempotent ? { idempotent: true } : {}) };
+  });
+
+  /** Kuryer boshlagan topshirishni bekor qiladi (kod o'chadi). Takror — idempotent. */
+  exportsObj.courierCancelRestaurantHandover = functions.https.onCall(async (data, context) => {
+    const uid = requirePhoneUid(context);
+    const courierId = await courierAuthOf().resolve(uid, COURIER_AUTH_MODES.finish);
+    const orderId = str(data && data.orderId, 64);
+    const orderRef = db.collection(ORDERS).doc(orderId);
+    const secretRef = orderRef.collection(PRIVATE).doc('secrets');
+    await db.runTransaction(async (t) => {
+      const od = await getOrderInTx(t, orderRef);
+      courierAuthOf().assertOrderActionable(od, courierId, 'courierCancelRestaurantHandover', orderId);
+      const ho = od.handover;
+      if (!ho || ho.status !== 'pending') return;
+      const sec = await t.get(secretRef);
+      const sd = sec.exists ? (sec.data() || {}) : {};
+      if (ho.target === 'courier' && sd.handoverCode) t.delete(db.collection(HANDOVER_CODES).doc(String(sd.handoverCode)));
+      t.set(secretRef, { handoverCode: delField(), handoverAttempts: delField(), handoverId: delField() }, { merge: true });
+      t.update(orderRef, { handover: delField(), updatedAt: ts() });
+      addEvent(t, orderRef, { from: od.restaurantStatus, to: od.restaurantStatus, actor: 'courier', actorId: courierId, reason: 'handover_cancelled', meta: { handoverId: ho.id } });
+    });
+    return { ok: true };
+  });
+
+  /** Kod bo'yicha urinishlar chegarasi (kuryer boshiga, oyna bilan) — kod taxmin qilinmasin. */
+  async function consumeCallerAttempt(uid) {
+    const ref = db.collection(HANDOVER_ATTEMPTS).doc(uid);
+    return db.runTransaction(async (t) => {
+      const s = await t.get(ref);
+      const d = s.exists ? (s.data() || {}) : {};
+      const nowMs = now().getTime();
+      const windowStart = msOf(d.windowStart) || 0;
+      const fresh = nowMs - windowStart > HANDOVER_CALLER_WINDOW_MIN * 60 * 1000;
+      const count = fresh ? 0 : (Number(d.count) || 0);
+      if (count >= HANDOVER_CALLER_ATTEMPTS) return false;
+      t.set(ref, { count: count + 1, windowStart: fresh ? tsOf(new Date(nowMs)) : d.windowStart, updatedAt: ts() });
+      return true;
+    });
+  }
+
+  /**
+   * Kuryer B kuryer A dan buyurtmani oladi: A ning ekranidagi 6 xonali kod + B ning GPS'i (custody joyi, 15-qoida).
+   * Bitta g'olib (tranzaksiya). Holat `picked` (B mijozga yo'lda); A marshrutidan olinadi, B marshrutiga qo'shiladi;
+   * `courierLegs` ga A ning bo'lagi (oxirgi nuqta → topshirish nuqtasi) yoziladi; `custody_events` ga A → B.
+   */
+  exportsObj.courierAcceptRestaurantHandover = functions.https.onCall(async (data, context) => {
+    const t0 = Date.now();
+    const uid = requirePhoneUid(context);
+    const courierId = await courierAuthOf().resolve(uid, COURIER_AUTH_MODES.new);
+    const code = str(data && data.code, 8);
+    const loc = optLatLng(data);
+    if (!/^\d{6}$/.test(code)) throw fail('invalid-argument', 'HANDOVER_CODE_INVALID');
+    if (!loc) throw fail('invalid-argument', 'HANDOVER_LOCATION_REQUIRED');
+    if (!(await consumeCallerAttempt(courierId))) throw fail('resource-exhausted', 'HANDOVER_TOO_MANY_ATTEMPTS');
+    const codeRef = db.collection(HANDOVER_CODES).doc(code);
+    const pre = await codeRef.get();
+    const cd = pre.exists ? (pre.data() || {}) : null;
+    if (!cd || (msOf(cd.expiresAt) || 0) <= now().getTime()) throw fail('failed-precondition', 'HANDOVER_CODE_MISMATCH');
+    const orderId = String(cd.orderId || '');
+    const orderRef = db.collection(ORDERS).doc(orderId);
+    const secretRef = orderRef.collection(PRIVATE).doc('secrets');
+    const courierName = await courierDisplayName(courierId);
+    const out = await withContention(orderRef, 'handover_accept', () => db.runTransaction(async (t) => {
+      const od = await getOrderInTx(t, orderRef);
+      const ho = od.handover;
+      const [cs, sec, memberSnap, routeQ] = await Promise.all([
+        t.get(codeRef), t.get(secretRef),
+        t.get(db.collection(RESTAURANTS).doc(String(od.restaurantId || '')).collection(MEMBERS).doc(courierId)),
+        t.get(db.collection(ROUTES).where('courierId', '==', courierId).where('status', 'in', ['active', 'ready']).limit(1)),
+      ]);
+      const sd = sec.exists ? (sec.data() || {}) : {};
+      const cdx = cs.exists ? (cs.data() || {}) : null;
+      if (!ho || ho.status !== 'pending' || ho.target !== 'courier' || !cdx || cdx.handoverId !== ho.id
+          || sd.handoverCode !== code || (msOf(ho.expiresAt) || 0) <= now().getTime()) {
+        // Takror: shu kuryer allaqachon olgan.
+        if (canonicalUid(String(od.courierId || '')) === courierId && od.lastHandoverId === (cdx && cdx.handoverId)) {
+          return { idempotent: true };
+        }
+        throw fail('failed-precondition', 'HANDOVER_CODE_MISMATCH');
+      }
+      if ((Number(sd.handoverAttempts) || 0) >= HANDOVER_CODE_ATTEMPTS) throw fail('failed-precondition', 'HANDOVER_CODE_LOCKED');
+      const fromCourier = canonicalUid(String(ho.fromCourierId || ''));
+      if (fromCourier === courierId) throw fail('failed-precondition', 'HANDOVER_SAME_COURIER');
+      if (canonicalUid(String(od.courierId || '')) !== fromCourier) throw fail('failed-precondition', 'HANDOVER_STALE');
+      if (![RS.picked, RS.arrived].includes(od.restaurantStatus)) throw fail('failed-precondition', 'HANDOVER_NOT_ALLOWED', { from: od.restaurantStatus });
+      if (courierAuthOf().isOwnOrder(od, courierId)) throw fail('permission-denied', 'COURIER_OWN_ORDER');
+      if (memberSnap.exists) throw fail('permission-denied', 'COURIER_IS_RESTAURANT_MEMBER');
+      const oldRouteRef = od.deliveryRouteId ? db.collection(ROUTES).doc(String(od.deliveryRouteId)) : null;
+      const oldRouteSnap = oldRouteRef ? await t.get(oldRouteRef) : null;
+      // WRITE fazasi.
+      const startPt = custodyStartPoint(od);
+      const meters = legMeters(startPt, loc);
+      const legs = Array.isArray(od.courierLegs) ? od.courierLegs.slice() : [];
+      legs.push({ courierId: fromCourier, meters, fromLat: startPt ? startPt.lat : null, fromLng: startPt ? startPt.lng : null, toLat: loc.lat, toLng: loc.lng, handoverId: ho.id });
+      detachFromRouteInTx(t, oldRouteRef, oldRouteSnap, orderId, 'handed_over');
+      let routeId;
+      if (!routeQ.empty) {
+        const rt = routeQ.docs[0];
+        const existing = Array.isArray(rt.data().orders) ? rt.data().orders.slice() : [];
+        if (!existing.includes(orderId)) existing.push(orderId);
+        t.update(rt.ref, { orders: existing, updatedAt: ts() });
+        routeId = rt.id;
+      } else {
+        const routeRef = db.collection(ROUTES).doc();
+        t.set(routeRef, {
+          orders: [orderId], courierId, status: 'active', currentIndex: 0,
+          routeSource: 'restaurant_handover', createdAt: ts(), startedAt: ts(),
+        });
+        routeId = routeRef.id;
+      }
+      t.delete(codeRef);
+      t.set(secretRef, { handoverCode: delField(), handoverAttempts: delField(), handoverId: delField() }, { merge: true });
+      t.delete(db.collection(COURIER_LIVE).doc(orderId)); // A ning nuqtasi; B o'zi yozadi (S6)
+      t.update(orderRef, statusPatch(RS.picked, {
+        courierId, deliveryRouteId: routeId, courierName: courierName || delField(),
+        handover: delField(), lastHandoverId: ho.id, handoverCount: inc(1),
+        courierLegs: legs, custodyPoint: { lat: loc.lat, lng: loc.lng },
+      }));
+      t.set(db.collection(CUSTODY).doc(`rest_${orderId}_${ho.id}`), custodyEventDoc({
+        orderId, od, kind: 'handover',
+        from: { kind: 'courier', id: fromCourier }, to: { kind: 'courier', id: courierId },
+        location: loc, proof: { codeVerified: true }, actorId: courierId, handoverId: ho.id,
+        meta: { meters, statusBefore: od.restaurantStatus },
+      }));
+      addEvent(t, orderRef, {
+        from: od.restaurantStatus, to: RS.picked, actor: 'courier', actorId: courierId, reason: 'handover_accepted',
+        meta: { handoverId: ho.id, fromCourierId: fromCourier, meters, routeId },
+      });
+      return { ok: true, fromCourier, customerUid: od.userPhone, restaurantId: od.restaurantId };
+    }), (od) => (canonicalUid(String(od.courierId || '')) === courierId && od.lastHandoverId === cd.handoverId ? { idempotent: true } : null)).catch(async (e) => {
+      // Noto'g'ri kod / bloklangan: urinishni buyurtma sirida ham hisoblaymiz (kod bo'yicha chegara).
+      if (e instanceof HttpsError && (e.details || {}).code === 'HANDOVER_CODE_MISMATCH') {
+        try { await secretRef.set({ handoverAttempts: inc(1) }, { merge: true }); } catch (_) { /* log yetarli */ }
+      }
+      throw e;
+    });
+    log('handover_accept', { orderId, userId: courierId.slice(-4), result: out.idempotent ? 'idempotent' : 'ok', durationMs: Date.now() - t0 });
+    if (!out.idempotent) {
+      await notifyI18n(out.fromCourier, 'courier_handover_done', {}, { orderId });
+      await notifyI18n(out.customerUid, 'customer_courier_changed', {}, { orderId });
+    }
+    return { ok: true, orderId, ...(out.idempotent ? { idempotent: true } : {}) };
+  });
+
+  /**
+   * Restoran (a'zo) kuryer qaytargan buyurtmani qabul qiladi: kuryer ekranidagi kod. Holat `ready`
+   * (yangi olish kodi), kuryer va marshrut o'chadi, 30 daqiqa yangi kuryer qidiriladi; custody kuryer → restoran.
+   * Naqd vykup bo'lgan bo'lsa — to'lov belgisi qaytariladi (yangi kuryer qayta vykup qiladi);
+   * restoran kuryerga vykup pulini jismonan qaytaradi (AVA hisobida emas — D-REST-1; hodisada qayd).
+   */
+  exportsObj.restaurantAcceptReturn = functions.https.onCall(async (data, context) => {
+    const t0 = Date.now();
+    const uid = requirePhoneUid(context);
+    const orderId = str(data && data.orderId, 64);
+    const code = str(data && data.code, 8);
+    if (!orderId || orderId.includes('/') || !/^\d{6}$/.test(code)) throw fail('invalid-argument', 'HANDOVER_CODE_INVALID');
+    const orderRef = db.collection(ORDERS).doc(orderId);
+    const secretRef = orderRef.collection(PRIVATE).doc('secrets');
+    const out = await withContention(orderRef, 'handover_return', () => db.runTransaction(async (t) => {
+      const od = await getOrderInTx(t, orderRef);
+      await requireMemberInTx(t, String(od.restaurantId || ''), uid);
+      const ho = od.handover;
+      const sec = await t.get(secretRef);
+      const sd = sec.exists ? (sec.data() || {}) : {};
+      if (!ho || ho.status !== 'pending' || ho.target !== 'seller') {
+        if (od.lastReturnBy === uid && od.restaurantStatus === RS.ready && !od.courierId) return { idempotent: true };
+        throw fail('failed-precondition', 'HANDOVER_NOT_PENDING');
+      }
+      if ((msOf(ho.expiresAt) || 0) <= now().getTime()) throw fail('failed-precondition', 'HANDOVER_EXPIRED');
+      const attempts = Number(sd.handoverAttempts) || 0;
+      if (attempts >= HANDOVER_CODE_ATTEMPTS) throw fail('failed-precondition', 'HANDOVER_CODE_LOCKED');
+      if (!sd.handoverCode || sd.handoverCode !== code) {
+        t.set(secretRef, { handoverAttempts: inc(1) }, { merge: true });
+        return { mismatch: true, left: HANDOVER_CODE_ATTEMPTS - attempts - 1 };
+      }
+      if (![RS.picked, RS.arrived].includes(od.restaurantStatus)) throw fail('failed-precondition', 'HANDOVER_NOT_ALLOWED', { from: od.restaurantStatus });
+      const fromCourier = canonicalUid(String(ho.fromCourierId || ''));
+      const routeRef = od.deliveryRouteId ? db.collection(ROUTES).doc(String(od.deliveryRouteId)) : null;
+      const routeSnap = routeRef ? await t.get(routeRef) : null;
+      // WRITE fazasi.
+      const rPt = custodyStartPoint({ restaurantLat: od.restaurantLat, restaurantLng: od.restaurantLng });
+      const startPt = custodyStartPoint(od);
+      const legs = Array.isArray(od.courierLegs) ? od.courierLegs.slice() : [];
+      // Qaytarilgan bo'lak yetkazishga hissa qo'shmaydi (ulushdan chiqariladi — hisobotda UNKNOWN).
+      legs.push({ courierId: fromCourier, meters: 0, returned: true, handoverId: ho.id,
+        fromLat: startPt ? startPt.lat : null, fromLng: startPt ? startPt.lng : null, toLat: rPt ? rPt.lat : null, toLng: rPt ? rPt.lng : null });
+      const buyoutPaid = od.paidBy === 'courier_buyout' ? (Number(od.buyoutAmount) || foodAmountOf(od)) : 0;
+      const until = tsOf(new Date(now().getTime() + RETURN_SEARCH_MIN * 60 * 1000));
+      detachFromRouteInTx(t, routeRef, routeSnap, orderId, 'returned_to_restaurant');
+      t.set(secretRef, {
+        handoverCode: delField(), handoverAttempts: delField(), handoverId: delField(),
+        pickupCode: pickupCode(), pickupAttempts: 0,
+      }, { merge: true });
+      t.delete(db.collection(COURIER_LIVE).doc(orderId));
+      t.update(orderRef, statusPatch(RS.ready, {
+        courierId: null, courierName: delField(), deliveryRouteId: delField(), courierClaimedAt: delField(),
+        handover: delField(), lastHandoverId: ho.id, lastReturnBy: uid, handoverCount: inc(1),
+        courierLegs: legs, custodyPoint: delField(), returnSearchUntil: until, returnedAt: ts(),
+        ...(buyoutPaid > 0 ? { paymentStatus: 'unpaid', paidBy: delField(), paidAt: delField(), buyoutAmount: delField() } : {}),
+      }));
+      t.set(db.collection(CUSTODY).doc(`rest_${orderId}_${ho.id}`), custodyEventDoc({
+        orderId, od, kind: 'return_to_seller',
+        from: { kind: 'courier', id: fromCourier }, to: { kind: 'restaurant', id: String(od.restaurantId || '') },
+        location: rPt, proof: { codeVerified: true }, actorId: uid, handoverId: ho.id,
+        meta: { statusBefore: od.restaurantStatus, buyoutReturnDue: buyoutPaid },
+      }));
+      addEvent(t, orderRef, {
+        from: od.restaurantStatus, to: RS.ready, actor: 'restaurant', actorId: uid, reason: 'returned_to_restaurant',
+        meta: { handoverId: ho.id, fromCourierId: fromCourier, buyoutReturnDue: buyoutPaid, searchMin: RETURN_SEARCH_MIN },
+      });
+      return { ok: true, fromCourier, od: { ...od, courierId: null, restaurantStatus: RS.ready }, untilMs: until.toMillis(), buyoutPaid };
+    }), (od) => (od.lastReturnBy === uid && od.restaurantStatus === RS.ready && !od.courierId ? { idempotent: true } : null));
+    if (out.mismatch) {
+      log('handover_return', { orderId, result: 'denied', errorCode: 'HANDOVER_CODE_MISMATCH' });
+      throw fail('failed-precondition', 'HANDOVER_CODE_MISMATCH', { attemptsLeft: out.left });
+    }
+    log('handover_return', { orderId, userId: uid.slice(-4), result: out.idempotent ? 'idempotent' : 'ok', durationMs: Date.now() - t0 });
+    if (!out.idempotent) {
+      await notifyI18n(out.fromCourier, 'courier_return_done', {}, { orderId });
+      await notifyNearbyCouriers(orderId, out.od, 'ready');
+    }
+    return { ok: true, ...(out.idempotent ? { idempotent: true } : { searchUntilMs: out.untilMs, buyoutReturnDue: out.buyoutPaid }) };
+  });
+
+  /**
+   * Jadval (har daqiqa): qaytarilgan / qo'yib yuborilgan buyurtmaga 30 daqiqada kuryer topilmadi →
+   * bekor (`rejected`, `rejectedBy: system`, sabab `no_courier_after_return`), 2 % restoranga qaytadi.
+   * Kuryer olgan bo'lsa — faqat maydon o'chadi. Bitta maydon diapazon so'rovi — kompozit indeks yo'q.
+   */
+  async function expireReturnedOne(orderRef, at) {
+    return db.runTransaction(async (t) => {
+      const s = await t.get(orderRef);
+      if (!s.exists) return null;
+      const od = s.data() || {};
+      const dl = msOf(od.returnSearchUntil);
+      if (dl === null) return null;
+      const searching = od.type === 'restaurant' && !od.courierId && [RS.accepted, RS.ready].includes(od.restaurantStatus);
+      if (!searching) {
+        t.update(orderRef, { returnSearchUntil: delField() });
+        return { stale: true };
+      }
+      if (dl > at.getTime()) return null;
+      const prep = await prepareFeeInTx(t, od, orderRef.id, false);
+      const refund = commitFeeInTx(t, prep, { orderId: orderRef.id, actorId: 'system' });
+      t.update(orderRef, statusPatch(RS.rejected, {
+        rejectedAt: ts(), rejectedBy: 'system', rejectReason: 'no_courier_after_return', returnSearchUntil: delField(),
+        'avaFee.refunded': refund.applied, 'avaFee.refundedAt': refund.applied ? ts() : null,
+      }));
+      addEvent(t, orderRef, { from: od.restaurantStatus, to: RS.rejected, actor: 'system', reason: 'no_courier_after_return', meta: { refundAmount: refund.amount } });
+      return { orderId: orderRef.id, restaurantId: od.restaurantId, customerUid: od.userPhone, prepaid: od.foodPaymentMethod === 'prepay' && od.paymentStatus === 'paid' };
+    });
+  }
+
+  async function expireReturned() {
+    const at = now();
+    const snap = await db.collection(ORDERS).where('returnSearchUntil', '<=', tsOf(at)).limit(ESCALATE_BATCH).get();
+    let cancelled = 0;
+    for (const doc of snap.docs) {
+      try {
+        const r = await expireReturnedOne(doc.ref, at);
+        if (!r || r.stale) continue;
+        cancelled += 1;
+        log('return_expire', { orderId: r.orderId, restaurantId: r.restaurantId, result: 'rejected_no_courier', prepaid: r.prepaid });
+        await notifyI18n(r.customerUid, r.prepaid ? 'customer_no_courier_cancel_prepaid' : 'customer_no_courier_cancel', {}, { orderId: r.orderId });
+        await notifyMembersI18n(r.restaurantId, r.prepaid ? 'restaurant_no_courier_cancel_prepaid' : 'restaurant_no_courier_cancel', {}, r.orderId);
+      } catch (e) {
+        console.error(JSON.stringify({ module: MODULE_ID, action: 'return_expire', orderId: doc.id, result: 'failed', errorCode: 'RETURN_EXPIRE_FAILED', message: String((e && e.message) || e).slice(0, 160) }));
+      }
+    }
+    return { scanned: snap.size, cancelled };
+  }
+
+  exportsObj.expireReturnedRestaurantOrders = functions.pubsub
+    .schedule('every 1 minutes')
+    .timeZone('Asia/Tashkent')
+    .onRun(async () => expireReturned());
 
   // ═══════════════════════════════════════════════════════════════════════
   // JADVAL: qabul qilinmagan buyurtmalar (taymaut) — har daqiqa
@@ -1742,4 +2905,7 @@ module.exports = {
   ACCEPT_TIMEOUT_MIN, AUTO_PAUSE_AFTER_TIMEOUTS, AUTO_PAUSE_MIN,
   STRIKES_FOR_PREPAY_ONLY, PREPAY_ONLY_DAYS, PICKUP_CODE_ATTEMPTS,
   EARNINGS_ACCOUNT, MODULE_ID,
+  // «Yetkazilmadi» sabablari — boshqa modullar (delivery_failed.js) ham shuni ishlatadi (7-qoida).
+  FAIL_REASONS,
+  computeCourierShares, HANDOVER_TTL_MIN, RETURN_SEARCH_MIN, HANDOVER_CODE_ATTEMPTS,
 };

@@ -310,6 +310,17 @@ const MESSAGES = {
     uz_Latn: { title: 'Yangi yetkazish buyurtmasi', body: '{name} · {km} km · yetkazish {fee} so\'m · vykup {buyout} so\'m' },
     ru: { title: 'Новый заказ на доставку', body: '{name} · {km} км · доставка {fee} сум · выкуп {buyout} сум' },
   },
+  // «Бозорлар» STAGE 11 — катта маиший техника етказиш нархи сўрови (delivery_quotes.js, эга 2026-11-16).
+  delivery_quote_request_courier: {
+    uz_Cyrl: { title: 'Етказиш нархини сўрашмоқда', body: '{title} · {name} · {km} км. Нархни ёзинг — биринчи жавоб қабул қилинади.' },
+    uz_Latn: { title: 'Yetkazish narxini so\'rashmoqda', body: '{title} · {name} · {km} km. Narxni yozing — birinchi javob qabul qilinadi.' },
+    ru: { title: 'Запрос цены доставки', body: '{title} · {name} · {km} км. Укажите цену — принимается первый ответ.' },
+  },
+  delivery_quote_answered: {
+    uz_Cyrl: { title: 'Етказиш нархи келди', body: '{title}: етказиш {price} сўм. Тасдиқласангиз, буюртма берилади.' },
+    uz_Latn: { title: 'Yetkazish narxi keldi', body: '{title}: yetkazish {price} so\'m. Tasdiqlasangiz, buyurtma beriladi.' },
+    ru: { title: 'Цена доставки получена', body: '{title}: доставка {price} сум. Подтвердите, чтобы оформить заказ.' },
+  },
   confirm_collection_finalize: {
     uz_Cyrl: { title: 'Курьер ёзган миқдорни тасдиқлайсизми?', body: 'Курьер қуйидагини ёзди: {summary}. Жами: {amount} сўм. Тўғри бўлса, тасдиқланг — шундан кейин ҳисоб-китоб амалга ошади.' },
     uz_Latn: { title: 'Kuryer yozgan miqdorni tasdiqlaysizmi?', body: 'Kuryer quyidagini yozdi: {summary}. Jami: {amount} so\'m. To\'g\'ri bo\'lsa, tasdiqlang — shundan keyin hisob-kitob amalga oshadi.' },

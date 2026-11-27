@@ -21,6 +21,8 @@
  *   pending → escrow_funded → release_approved → settled
  *     ├─ escrow_frozen        (nizo — avtomat payout to'xtaydi)
  *     └─ refund_pending → refunded
+ *   escrow_funded | escrow_frozen → loss_pending → loss_settled   (D1, yo'qolgan posilka:
+ *     admin e'lon qiladi → `loss_pending`; default codebase pulni hisoblab → `loss_settled`)
  *   Statusni DEMAND codebase yozadi, PULNI default codebase (ledger) —
  *   ikkisi Firestore orqali bog'lanadi (`functions/relay_escrow.js`).
  *
@@ -38,6 +40,8 @@ const SHIPMENTS = 'shipments';
 const CUSTODY = 'custody_events';
 const ROUTE_PLANS = 'route_plans';
 const COUNTERS = 'logistics_counters';
+/** Yo'qolish hodisalari (D1, 2026-10-16): `logistics_incidents/{shipmentId}` — faqat server. */
+const INCIDENTS = 'logistics_incidents';
 const MODULE = 'logistics';
 
 const SHIPMENT_STATUS = {
@@ -70,18 +74,27 @@ const PAYMENT_STATUS = {
   ESCROW_FROZEN: 'escrow_frozen',
   REFUND_PENDING: 'refund_pending',
   REFUNDED: 'refunded',
+  /** Posilka yo'qolgan deb e'lon qilindi; pul hali hisoblanmagan (default codebase hisoblaydi). */
+  LOSS_PENDING: 'loss_pending',
+  /** Yo'qolish puli hisoblandi: eskrou yopildi, G mijozga (qarz bo'lsa — hodisada). */
+  LOSS_SETTLED: 'loss_settled',
 };
 
 const PAYMENT_ALLOWED = {
   [PAYMENT_STATUS.PENDING]: [PAYMENT_STATUS.ESCROW_FUNDED, PAYMENT_STATUS.REFUNDED],
   [PAYMENT_STATUS.ESCROW_FUNDED]: [
     PAYMENT_STATUS.RELEASE_APPROVED, PAYMENT_STATUS.ESCROW_FROZEN, PAYMENT_STATUS.REFUND_PENDING,
+    PAYMENT_STATUS.LOSS_PENDING,
   ],
-  [PAYMENT_STATUS.ESCROW_FROZEN]: [PAYMENT_STATUS.RELEASE_APPROVED, PAYMENT_STATUS.REFUND_PENDING],
+  [PAYMENT_STATUS.ESCROW_FROZEN]: [
+    PAYMENT_STATUS.RELEASE_APPROVED, PAYMENT_STATUS.REFUND_PENDING, PAYMENT_STATUS.LOSS_PENDING,
+  ],
   [PAYMENT_STATUS.RELEASE_APPROVED]: [PAYMENT_STATUS.SETTLED],
   [PAYMENT_STATUS.REFUND_PENDING]: [PAYMENT_STATUS.REFUNDED],
   [PAYMENT_STATUS.SETTLED]: [],
   [PAYMENT_STATUS.REFUNDED]: [],
+  [PAYMENT_STATUS.LOSS_PENDING]: [PAYMENT_STATUS.LOSS_SETTLED],
+  [PAYMENT_STATUS.LOSS_SETTLED]: [],
 };
 
 /** Custody egasi turlari. HUB YO'Q — bu AVA qizil chizig'i (7.5). */
@@ -120,6 +133,18 @@ function assertPaymentTransition(from, to, context) {
 /** Pul harakati boshlangan — bekor qilish endi refund orqali. */
 function isShipmentCancellable(status) {
   return status === SHIPMENT_STATUS.AWAITING_PAYMENT || status === SHIPMENT_STATUS.READY;
+}
+
+/**
+ * Yo'qolgan posilka uchun mijozga qaytariladigan summa G (so'm, butun) — jo'natmaning
+ * MUHRLANGAN narx suratidagi e'lon qilingan qiymat (`priceSnapshot.declaredValue`,
+ * D-8: tarif keyin o'zgarsa ham o'zgarmaydi). Bitta SHIPMENT = bitta posilka (D-4),
+ * shuning uchun «posilkalar yig'indisi» shu bitta qiymat. Yo'q/0/butun emas -> 0
+ * (chaqiruvchi `declared_value_missing` deb rad etadi; qiymat TAXMIN QILINMAYDI).
+ */
+function goodsValueOf(shipment) {
+  const v = ((shipment || {}).priceSnapshot || {}).declaredValue;
+  return typeof v === 'number' && Number.isSafeInteger(v) && v > 0 ? v : 0;
 }
 
 /**
@@ -239,6 +264,95 @@ function verifyDeliveryCode(shipmentId, qrSecret, code) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// KOD URINISHLARI CHEKLOVI (audit S4/L7, 2026-10-16)
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Standart (module_config `logistics.*` ustiga yozadi): pul/tarif QIYMATI EMAS. */
+const CODE_ATTEMPT_DEFAULTS = { maxFailed: 5, lockMinutes: 15 };
+
+function msOf(v) {
+  if (v == null) return 0;
+  if (typeof v.toMillis === 'function') return v.toMillis();
+  if (v instanceof Date) return v.getTime();
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function posIntOr(v, d) {
+  const n = Number(v);
+  return Number.isInteger(n) && n > 0 ? n : d;
+}
+
+/** Konfigdan `{maxFailed, lockMs}`; noto'g'ri/yo'q qiymat — standart (qattiq tomon). */
+function codeAttemptLimits(config) {
+  const c = ((config || {}).logistics) || {};
+  return {
+    maxFailed: posIntOr(c.codeMaxFailedAttempts, CODE_ATTEMPT_DEFAULTS.maxFailed),
+    lockMs: posIntOr(c.codeLockMinutes, CODE_ATTEMPT_DEFAULTS.lockMinutes) * 60 * 1000,
+  };
+}
+
+/** Qulf qolgan millisekund (0 — qulf yo'q yoki muddati o'tgan). */
+function codeLockRemainingMs(doc, now) {
+  const until = msOf((doc || {}).lockedUntil);
+  const left = until - now.getTime();
+  return left > 0 ? left : 0;
+}
+
+/**
+ * Xato urinishdan KEYINGI hujjat maydonlari. Qulf muddati o'tgan bo'lsa
+ * hisob noldan boshlanadi. `fails` limitga yetsa — `lockedUntil` qo'yiladi.
+ */
+function registerFailedCodeAttempt(doc, now, limits) {
+  const prev = doc || {};
+  const expired = msOf(prev.lockedUntil) > 0 && codeLockRemainingMs(prev, now) === 0;
+  const base = expired ? 0 : (Number(prev.fails) || 0);
+  const fails = base + 1;
+  const locked = fails >= limits.maxFailed;
+  return {
+    fails,
+    lastFailAt: now,
+    lockedUntil: locked ? new Date(now.getTime() + limits.lockMs) : null,
+  };
+}
+
+/**
+ * Dalil rasmi URL'i FAQAT shu loyihaning Firebase Storage'idagi
+ * `logistics/{callerId}/{fayl}` bo'lishi mumkin (Flutter `LogisticsPhotoStorage`
+ * shu yo'lga yuklaydi; `storage.rules` — yuklash faqat o'z papkasiga).
+ * `buckets` bo'sh bo'lsa bucket PIN QILINMAYDI (faqat host + yo'l tekshiriladi).
+ */
+function isOwnProofPhotoUrl(url, callerId, buckets) {
+  const id = String(callerId || '');
+  if (!id || !/^\d+$/.test(id)) return false;
+  let u;
+  try { u = new URL(String(url || '')); } catch (_) { return false; }
+  if (u.protocol !== 'https:' || u.username || u.password || u.port) return false;
+  let bucket;
+  let object;
+  try {
+    if (u.hostname === 'firebasestorage.googleapis.com') {
+      const m = /^\/v0\/b\/([^/]+)\/o\/([^/]+)$/.exec(u.pathname);
+      if (!m) return false;
+      bucket = m[1];
+      object = decodeURIComponent(m[2]);
+    } else if (u.hostname === 'storage.googleapis.com') {
+      const m = /^\/([^/]+)\/(.+)$/.exec(u.pathname);
+      if (!m) return false;
+      bucket = m[1];
+      object = decodeURIComponent(m[2]);
+    } else {
+      return false;
+    }
+  } catch (_) { return false; }
+  if (Array.isArray(buckets) && buckets.length && !buckets.includes(bucket)) return false;
+  const prefix = `logistics/${id}/`;
+  if (!object.startsWith(prefix)) return false;
+  const name = object.slice(prefix.length);
+  return name.length > 0 && !name.includes('/') && !name.includes('..');
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // LEG yordamchilari
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -272,22 +386,31 @@ function normalizeConditionFlags(flags) {
 // ═══════════════════════════════════════════════════════════════════════
 
 /**
- * `module_config/logistics_all.logistics.stage`:
- *   internal — FAQAT `testerIds` (kanonik telefon ID) jo'natadi VA LEG oladi;
- *   public   — hamma.
- * Noma'lum/yo'q qiymat — `internal` (yopiq tomonga xato, 53-band): sinov
- * ro'yxatisiz hech kim kirmaydi. PILOT — UNKNOWN (ega qarori yo'q).
+ * `module_config/logistics_all.logistics.stage` (lug'at: CLAUDE.md 42, ega
+ * qarori 2026-10-16 D8):
+ *   off      - HECH KIM (sinovchi ham): yangi buyurtma ham, yangi LEG ham yo'q;
+ *   internal - FAQAT `testerIds` (kanonik telefon ID) jo'natadi VA LEG oladi;
+ *   pilot    - hozircha INTERNAL bilan AYNAN bir xil (faqat `testerIds`).
+ *              PILOT qoidasi (kim kiradi, hudud/limit) - UNKNOWN: ega qarori
+ *              yo'q; farqlanadigan qoida chiqsa shu yerda qo'shiladi;
+ *   public   - hamma.
+ * Noma'lum/yo'q qiymat - `internal` (yopiq tomonga xato, 53-band): sinov
+ * ro'yxatisiz hech kim kirmaydi. Eski qiymatlar (internal/public) o'zgarmadi.
  */
-const STAGE = { INTERNAL: 'internal', PUBLIC: 'public' };
+const STAGE = {
+  OFF: 'off', INTERNAL: 'internal', PILOT: 'pilot', PUBLIC: 'public',
+};
 
 function stageOf(config) {
   const s = ((config || {}).logistics || {}).stage;
-  return s === STAGE.PUBLIC ? STAGE.PUBLIC : STAGE.INTERNAL;
+  return Object.values(STAGE).includes(s) ? s : STAGE.INTERNAL;
 }
 
 /** Shu foydalanuvchi joriy bosqichda logistikadan foydalana oladimi. */
 function isStageAllowed(config, userId) {
-  if (stageOf(config) === STAGE.PUBLIC) return true;
+  const stage = stageOf(config);
+  if (stage === STAGE.PUBLIC) return true;
+  if (stage === STAGE.OFF) return false;
   const id = toCanonicalId(userId || '');
   if (!id) return false;
   const list = ((config || {}).logistics || {}).testerIds;
@@ -301,6 +424,7 @@ module.exports = {
   CUSTODY,
   ROUTE_PLANS,
   COUNTERS,
+  INCIDENTS,
   MODULE,
   SHIPMENT_STATUS,
   SHIPMENT_ALLOWED,
@@ -314,6 +438,7 @@ module.exports = {
   canTransitionPayment,
   assertPaymentTransition,
   isShipmentCancellable,
+  goodsValueOf,
   deriveOrderStatus,
   trackingDayKey,
   formatTrackingNumber,
@@ -325,6 +450,11 @@ module.exports = {
   parseQrPayload,
   verifyHandoverProof,
   verifyDeliveryCode,
+  CODE_ATTEMPT_DEFAULTS,
+  codeAttemptLimits,
+  codeLockRemainingMs,
+  registerFailedCodeAttempt,
+  isOwnProofPhotoUrl,
   custodyIdempotencyKey,
   handoverKindsFor,
   normalizeConditionFlags,

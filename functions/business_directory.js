@@ -644,6 +644,9 @@ function attachBusinessDirectory(exportsObj, deps) {
       }
       inner.forEach((d) => t.delete(d.ref));
       if (snap.exists) t.delete(ref);
+      // Аниқ олиб кетиш нуқтаси (PII, фақат эга ўқийди; ega 2026-11-16) — дўкон билан бирга ўчади.
+      // Шартсиз delete: ҳужжат йўқ бўлса ҳам зарарсиз (идемпотент), блокда эса юқорида тўхтаймиз.
+      t.delete(ref.collection('private').doc('pickup'));
       return { deleted: snap.exists || inner.length > 0, innerShops: inner.length };
     });
     // Асосий дўконнинг ўз маҳсулотлари — транзакциядан ташқари, саҳифалаб (сони чекланмаган), идемпотент.

@@ -2548,6 +2548,11 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow write: if false;
     }
+    // Пуллик splash буюртмаси: эгаси ва админ ўқийди; пул/ҳолат — фақат CF. config/tariffs/events — қоида йўқ = ёпиқ.
+    match /splash_ad_orders/{id} {
+      allow get, list: if isAdmin() || resource.data.uid == phoneFromToken();
+      allow write: if false;
+    }
 
     // Мобил ариза — marshrut/intercity маршрут майдонлари билан.
     function driverRequestGuestPatchKeys() {

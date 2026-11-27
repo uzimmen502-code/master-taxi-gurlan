@@ -74,6 +74,37 @@ async function main() {
     await assertFails(setDoc(doc(as(USER), `splash_ad_imp_log/${USER}_2026-11-28`), { n: 0 }));
   });
 
+  const OTHER = '998907778899';
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, 'splash_ad_orders/o1'), { uid: USER, status: 'pending', amount: 60000 });
+    await setDoc(doc(db, 'splash_ad_orders/o2'), { uid: OTHER, status: 'approved', amount: 20000 });
+    await setDoc(doc(db, 'splash_ad_config/main'), { stage: 'public', activeTariffVersion: 1 });
+    await setDoc(doc(db, 'splash_ad_tariffs/v1'), { version: 1, perDay: { district: 1 } });
+    await setDoc(doc(db, 'splash_ad_events/e1'), { orderId: 'o1', type: 'paid' });
+  });
+  await check('R6 splash_ad_orders: эгаси ўзиникини ўқийди (get + uid сўрови), бегонасини йўқ; админ ҳаммасини', async () => {
+    await assertSucceeds(getDoc(doc(as(USER), 'splash_ad_orders/o1')));
+    await assertSucceeds(getDocs(query(collection(as(USER), 'splash_ad_orders'), where('uid', '==', USER))));
+    await assertFails(getDoc(doc(as(USER), 'splash_ad_orders/o2')));
+    await assertFails(getDocs(collection(as(USER), 'splash_ad_orders')));
+    await assertFails(getDoc(doc(anon(), 'splash_ad_orders/o1')));
+    await assertSucceeds(getDocs(query(collection(as(ADMIN), 'splash_ad_orders'), where('status', '==', 'pending'))));
+  });
+  await check('R7 splash_ad_orders: пул/ҳолат клиентдан ёзилмайди (эгаси ва админ ҳам)', async () => {
+    await assertFails(updateDoc(doc(as(USER), 'splash_ad_orders/o1'), { status: 'approved' }));
+    await assertFails(updateDoc(doc(as(USER), 'splash_ad_orders/o1'), { amount: 1 }));
+    await assertFails(setDoc(doc(as(USER), 'splash_ad_orders/o3'), { uid: USER, status: 'approved', amount: 0 }));
+    await assertFails(updateDoc(doc(as(ADMIN), 'splash_ad_orders/o1'), { status: 'approved' }));
+    await assertFails(deleteDoc(doc(as(ADMIN), 'splash_ad_orders/o1')));
+  });
+  await check('R8 splash_ad_config / tariffs / events: ёпиқ (фақат CF)', async () => {
+    for (const p of ['splash_ad_config/main', 'splash_ad_tariffs/v1', 'splash_ad_events/e1']) {
+      await assertFails(getDoc(doc(as(USER), p)));
+      await assertFails(setDoc(doc(as(ADMIN), p), { x: 1 }));
+    }
+  });
+
   await testEnv.cleanup();
   const passed = results.filter(Boolean).length;
   console.log(`\n${passed} passed, ${results.length - passed} failed`);

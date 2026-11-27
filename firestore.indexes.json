@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "splash_ads",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "visible", "order": "ASCENDING" },
+        { "fieldPath": "areaKeys", "arrayConfig": "CONTAINS" }
+      ]
+    },
+    {
       "collectionGroup": "orders",
       "queryScope": "COLLECTION",
       "fields": [

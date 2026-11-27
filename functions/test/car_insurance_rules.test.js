@@ -34,6 +34,7 @@ async function main() {
     await db.doc(`insurance_requests/ins_${B}_k1`).set({ uid: B, status: 'paid', price: 200000 });
     await db.doc(`insurance_enrollments/2026_01A123BC`).set({ uid: A, option: 'oil', oilChanges: 1 });
     await db.doc(`insurance_policy_files/ins_${A}_k1`).set({ uid: A, token: 'secret' });
+    await db.doc(`insurance_techpass_files/ins_${A}_k1`).set({ uid: A, front: { token: 'secret' } });
     await db.doc('insurance_config/main').set({ stage: 'internal', agentPhones: [ADM] });
     await db.doc('insurance_tariffs/v1').set({ version: 1, rows: [] });
     await db.doc(`insurance_expiry_index/${A}`).set({ uid: A, expiresOn: '2027-01-01' });
@@ -44,6 +45,10 @@ async function main() {
     await assertSucceeds(a.collection('insurance_enrollments').where('uid', '==', A).get());
     await assertFails(a.doc(`insurance_requests/ins_${B}_k1`).get());
     await assertFails(a.collection('insurance_requests').get());
+    // Эга 2026-11-28: техпаспорт файллари — эгаси ҳам ўқимайди/ёзмайди (ҳавола фақат callable орқали).
+    await assertFails(a.doc(`insurance_techpass_files/ins_${A}_k1`).get());
+    await assertFails(a.doc(`insurance_techpass_files/ins_${A}_k1`).set({ uid: A }));
+    await assertFails(a.doc(`insurance_requests/ins_${A}_k1`).update({ 'techPassport.front': true }));
     await assertFails(b.doc('insurance_enrollments/2026_01A123BC').get());
   });
   await check('R2 ҳеч ким (эгаси ҳам, админ ҳам) клиентдан ёзолмайди: ҳолат/нарх/рағбат', async () => {

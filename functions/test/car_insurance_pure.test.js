@@ -168,6 +168,22 @@ check('I12 хабарлар 3 тилда; uz_Latn янги алифбода (o\'
   for (const code of ['INSUFFICIENT_BALANCE', 'PLATE_ALREADY_ENROLLED', 'NOT_AVAILABLE', 'CIS_VEHICLE_NOT_ALLOWED']) assert.ok(!/o'|g'|sh|ch/i.test(c.messagesOf(code).uz_Latn), code);
 });
 
+check('I13 техпаспорт ва агент тузатиши (эга 2026-11-28): шарт фақат янги ОСАГО; расм тури; нарх ўзгарса тўланганда бекор шарт', () => {
+  assert.ok(c.techPassportRequired({ policyType: 'osago', tariffSchema: 2 }));
+  assert.ok(!c.techPassportRequired({ policyType: 'osago' }), 'эски ариза');
+  assert.ok(!c.techPassportRequired({ policyType: 'kasko', tariffSchema: 2 }));
+  assert.ok(c.techPassportComplete({ techPassport: { front: true, back: true } }));
+  assert.ok(!c.techPassportComplete({ techPassport: { front: true } }));
+  assert.strictEqual(c.sniffImage(Buffer.from('%PDF-1.7 xxxxxxxx')), null, 'PDF расм эмас');
+  assert.strictEqual(c.sniffImage(Buffer.from([0xff, 0xd8, 0xff, 0, 0, 0, 0, 0, 0, 0, 0, 0])).ext, 'jpg');
+  assert.deepStrictEqual(c.correctionDecision('requested', 100, 150), { ok: true, price: 150 });
+  assert.deepStrictEqual(c.correctionDecision('paid', 100, 100), { ok: true, price: 100 });
+  assert.deepStrictEqual(c.correctionDecision('in_progress', 100, 80), { ok: false, code: 'PRICE_CHANGED_CANCEL_REQUIRED', newPrice: 80 });
+  assert.strictEqual(c.correctionDecision('issued', 100, 100).code, 'INVALID_TRANSITION');
+  assert.strictEqual(c.TECHPASS_PURGE_DAYS, 30);
+  for (const code of ['TECH_PASSPORT_REQUIRED', 'IMAGE_INVALID', 'PRICE_CHANGED_CANCEL_REQUIRED']) { const m = c.messagesOf(code); assert.ok(m.uz_Cyrl && m.uz_Latn && m.ru && !/o'|g'|sh|ch/i.test(m.uz_Latn.replace("ma'lumot", '')), code); }
+});
+
 const passed = results.filter(Boolean).length;
 console.log(`\n${passed}/${results.length} passed`);
 process.exit(passed === results.length ? 0 : 1);

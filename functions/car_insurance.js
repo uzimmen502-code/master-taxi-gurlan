@@ -52,6 +52,11 @@ const REQUESTS = 'insurance_requests';
 const OPEN = 'insurance_open';
 const EVENTS = 'insurance_events';
 const FILES = 'insurance_policy_files';
+/** Техпаспорт расмлари (эга 2026-11-28): {front, back:{path,bucket,token,contentType,size}, purgeAfter} — ФАҚАТ CF. */
+const TECHPASS = 'insurance_techpass_files';
+const TECHPASS_SIDES = Object.freeze(['front', 'back']);
+/** Полис берилгач/ариза бекор қилингач шунча кундан кейин расмлар ўчирилади (PII, 40-банд; PROPOSED). */
+const TECHPASS_PURGE_DAYS = 30;
 const EXPIRY = 'insurance_expiry_index';
 const REMIND_LOG = 'insurance_reminder_log';
 const REPORTS = 'insurance_service_reports';
@@ -156,6 +161,9 @@ const TEXT = Object.freeze({
   ],
   CAMPAIGN_INVALID: ['Таклиф созламаси нотўғри.', "Taklif sozlamasi notöğri.", 'Неверные настройки предложения.'],
   REASON_REQUIRED: ['Сабабни ёзинг.', 'Sababni yozing.', 'Укажите причину.'],
+  TECH_PASSPORT_REQUIRED: ['Техпаспортнинг олд ва орқа томони расмини юкланг.', 'Texpasportning old va orqa tomoni rasmini yuklang.', 'Загрузите фото техпаспорта с двух сторон.'],
+  IMAGE_INVALID: ['Расм JPG, PNG ёки WebP (≤5 МБ) бўлиши керак.', 'Rasm JPG, PNG yoki WebP (≤5 MB) bölişi kerak.', 'Фото должно быть JPG, PNG или WebP (≤5 МБ).'],
+  PRICE_CHANGED_CANCEL_REQUIRED: ['Тузатишдан кейин нарх ўзгаради — аризани бекор қилинг (пул қайтади), мижоз тўғри маълумот билан қайта топширади.', "Tuzatişdan keyin narx özgaradi — arizani bekor qiling (pul qaytadi), mijoz töğri ma'lumot bilan qayta topşiradi.", 'После исправления меняется цена — отмените заявку (деньги вернутся), клиент подаст заново с верными данными.'],
 });
 function messagesOf(code) {
   const t = TEXT[code] || TEXT.INVALID_REQUEST;
@@ -479,6 +487,7 @@ function requestView(id, r) {
   return {
     requestId: id, status: x.status, policyType: x.policyType, vehicleType: x.vehicleType, termMonths: x.termMonths,
     zone: x.zone || '', driverScope: x.driverScope || '',
+    techPassport: { front: !!(x.techPassport && x.techPassport.front), back: !!(x.techPassport && x.techPassport.back), purged: !!(x.techPassport && x.techPassport.purged) },
     car: x.car || {}, tariffVersion: x.tariffVersion, price: x.price || 0,
     oilDiscountPct: x.oilDiscountPct || 0, oilDiscount: x.oilDiscount || 0, incentiveApplied: x.incentiveApplied || 0,
     walletPaid: x.walletPaid || 0,
@@ -486,6 +495,31 @@ function requestView(id, r) {
     cancelReason: x.cancelReason || '', refund: x.refund || null,
     createdAtMs: toMs(x.createdAt), paidAtMs: toMs(x.paidAt), issuedAtMs: toMs(x.issuedAt), cancelledAtMs: toMs(x.cancelledAt),
   };
+}
+
+/** Техпаспорт шартми (соф): янги ОСАГО аризаси (tariffSchema 2). Эски аризалар — йўқ (мослик). */
+function techPassportRequired(r) {
+  const x = r || {};
+  return x.policyType === 'osago' && x.tariffSchema === TARIFF_SCHEMA;
+}
+function techPassportComplete(r) {
+  const tp = (r && r.techPassport) || {};
+  return tp.front === true && tp.back === true;
+}
+/** Расм тури (магик байт) — фақат JPG/PNG/WebP (PDF эмас). */
+function sniffImage(buf) {
+  const k = sniffFile(buf);
+  return k && k.contentType.startsWith('image/') ? k : null;
+}
+/**
+ * Агент тузатиши (соф қарор, эга 2026-11-28 — энг содда хавфсиз йўл): тўланмаган ариза — нарх янгиланади;
+ * тўланган/ишда — фақат нарх ЎЗГАРМАСА; ўзгарса — бекор қилиш (тўлиқ қайтариш) ва мижоз қайта топширади (қисман
+ * тўлов/қайтариш йўқ, 8/21-банд). → {ok:true, price} | {ok:false, code, newPrice}.
+ */
+function correctionDecision(status, oldPrice, newPrice) {
+  if (!['requested', 'paid', 'in_progress'].includes(status)) return { ok: false, code: 'INVALID_TRANSITION' };
+  if (status === 'requested' || newPrice === oldPrice) return { ok: true, price: newPrice };
+  return { ok: false, code: 'PRICE_CHANGED_CANCEL_REQUIRED', newPrice };
 }
 
 // ══════════════════════ CLOUD FUNCTIONS ══════════════════════
@@ -507,6 +541,9 @@ function attachCarInsurance(exportsObj, deps) {
       const token = crypto.randomUUID();
       await bucket.file(path).save(buf, { resumable: false, metadata: { contentType, metadata: { firebaseStorageDownloadTokens: token } } });
       return { token, bucket: bucket.name };
+    },
+    async remove(path) {
+      await admin.storage().bucket().file(path).delete({ ignoreNotFound: true });
     },
   };
 
@@ -751,6 +788,8 @@ function attachCarInsurance(exportsObj, deps) {
     const reqRef = db.collection(REQUESTS).doc(requestId);
     const pre = await reqRef.get();
     if (!pre.exists || pre.data().uid !== key) throw fail('not-found', 'REQUEST_NOT_FOUND');
+    // Эга 2026-11-28: янги ОСАГО аризаси (schema 2) — техпаспорт икки томони шарт (агент маълумотни текширади).
+    if (techPassportRequired(pre.data()) && !techPassportComplete(pre.data())) throw fail('failed-precondition', 'TECH_PASSPORT_REQUIRED');
     const walletDocId = pre.data().walletDocId || key;
     const userRef = db.collection('users').doc(walletDocId);
     const enrollSnap = await db.collection(ENROLL).where('uid', '==', key).get();
@@ -829,6 +868,7 @@ function attachCarInsurance(exportsObj, deps) {
       const ls = await t.get(lockRef);
       if (ls.exists && ls.data().requestId === requestId) t.delete(lockRef);
       t.update(reqRef, { status: 'cancelled', cancelReason: 'customer', cancelledBy: key, cancelledAt: ts(), updatedAt: ts() });
+      schedulePurge(t, requestId);
       event(t, requestId, 'cancelled', key, { reason: 'customer', refund: null });
       return { duplicate: false };
     });
@@ -923,6 +963,104 @@ function attachCarInsurance(exportsObj, deps) {
     return { ok: true, ...out };
   });
 
+  /** Ариза ёпилганда: техпаспорт расмлари N кундан кейин ўчирилади (ҳужжат бўлмаса ҳам белги қўйилади — тозалаш идемпотент). */
+  function schedulePurge(t, requestId) {
+    t.set(db.collection(TECHPASS).doc(requestId), { requestId, purgeAfter: TS.fromMillis(now() + TECHPASS_PURGE_DAYS * DAY_MS) }, { merge: true });
+  }
+
+  /**
+   * Техпаспорт расми (эга 2026-11-28): { requestId, side:'front'|'back', fileBase64 } — ариза эгаси, ҳолат requested.
+   * Storage `insurance_techpass/{requestId}/…` (Storage rules: {allPaths=**} рад — фақат CF), ҳавола — callable орқали.
+   * Аризада фақат белги `techPassport.{side}=true` (client-write йўқ). Қайта юкласа — алмаштирилади, эскиси ўчади.
+   */
+  exportsObj.insuranceUploadTechPassport = functions.https.onCall(async (data, context) => {
+    const key = callerKey(context);
+    const d = isObj(data) ? data : {};
+    const requestId = String(d.requestId || '');
+    const side = String(d.side || '');
+    if (!REQ_ID_RE.test(requestId) || !TECHPASS_SIDES.includes(side)) throw fail('invalid-argument', 'INVALID_REQUEST');
+    const b64 = String(d.fileBase64 || '');
+    if (!b64 || b64.length > Math.ceil(MAX_FILE_BYTES / 3) * 4 + 8) throw fail('invalid-argument', 'IMAGE_INVALID');
+    const buf = Buffer.from(b64, 'base64');
+    const kind = sniffImage(buf);
+    if (!kind || buf.length > MAX_FILE_BYTES) throw fail('invalid-argument', 'IMAGE_INVALID');
+    const reqRef = db.collection(REQUESTS).doc(requestId);
+    const pre = await reqRef.get();
+    if (!pre.exists || pre.data().uid !== key) throw fail('not-found', 'REQUEST_NOT_FOUND');
+    if (pre.data().status !== 'requested') throw fail('failed-precondition', 'REQUEST_CLOSED');
+    const path = `insurance_techpass/${requestId}/${side}_${crypto.randomUUID()}.${kind.ext}`;
+    const saved = await storage.save(path, buf, kind.contentType);
+    const fileRef = db.collection(TECHPASS).doc(requestId);
+    const old = await db.runTransaction(async (t) => {
+      const [rs, fs] = await Promise.all([t.get(reqRef), t.get(fileRef)]);
+      if (rs.data().status !== 'requested') throw fail('failed-precondition', 'REQUEST_CLOSED');
+      const prev = fs.exists ? (fs.data() || {})[side] : null;
+      t.set(fileRef, { requestId, uid: key, [side]: { path, bucket: saved.bucket, token: saved.token, contentType: kind.contentType, size: buf.length, at: TS.fromMillis(now()) } }, { merge: true });
+      t.update(reqRef, { [`techPassport.${side}`]: true, 'techPassport.updatedAt': ts(), updatedAt: ts() });
+      event(t, requestId, `techpass_${side}`, key, { size: buf.length });
+      return prev && prev.path ? prev.path : null;
+    });
+    if (old && old !== path) {
+      try { await storage.remove(old); } catch (e) { log({ action: 'insuranceUploadTechPassport', result: 'old_delete_failed', errorCode: 'STORAGE_DELETE_FAILED' }); }
+    }
+    log({ action: 'insuranceUploadTechPassport', userId: tail(key), side, size: buf.length, result: 'ok' });
+    return { ok: true, side };
+  });
+
+  /** Техпаспорт ҳаволалари (ариза эгаси ёки агент/админ): { requestId } → { front, back } URL ёки ''. */
+  exportsObj.insuranceGetTechPassportLinks = functions.https.onCall(async (data, context) => {
+    const key = callerKey(context);
+    const requestId = String((data && data.requestId) || '');
+    if (!REQ_ID_RE.test(requestId)) throw fail('invalid-argument', 'INVALID_REQUEST');
+    const rs = await db.collection(REQUESTS).doc(requestId).get();
+    if (!rs.exists) throw fail('not-found', 'REQUEST_NOT_FOUND');
+    if (rs.data().uid !== key) await requireAgent(context);
+    const fs = await db.collection(TECHPASS).doc(requestId).get();
+    const f = fs.exists ? (fs.data() || {}) : {};
+    const url = (x) => (x && x.path ? `https://firebasestorage.googleapis.com/v0/b/${x.bucket}/o/${encodeURIComponent(x.path)}?alt=media&token=${x.token}` : '');
+    return { ok: true, front: url(f.front), back: url(f.back) };
+  });
+
+  /**
+   * Агент тузатиши: { requestId, zone, vehicleType, driverScope, reason } — техпаспорт бўйича ҳудуд/тоифа/ҳайдовчи.
+   * Нарх аризанинг ЎЗ тариф версиясидан қайта ҳисобланади; қарор — [correctionDecision] (тўланган бўлса нарх
+   * ўзгарса — PRICE_CHANGED_CANCEL_REQUIRED: агент insuranceAgentCancel билан тўлиқ қайтаради).
+   */
+  exportsObj.insuranceAgentCorrect = functions.https.onCall(async (data, context) => {
+    const actor = await requireAgent(context);
+    const d = isObj(data) ? data : {};
+    const requestId = String(d.requestId || '');
+    const zone = String(d.zone || '');
+    const vehicleType = String(d.vehicleType || '');
+    const driverScope = String(d.driverScope || '');
+    const reason = String(d.reason || '').trim().slice(0, 300);
+    if (!REQ_ID_RE.test(requestId) || !ZONES.includes(zone) || !VEHICLE_TYPES.includes(vehicleType) || !DRIVER_SCOPES.includes(driverScope)) {
+      throw fail('invalid-argument', 'INVALID_REQUEST');
+    }
+    if (reason.length < 3) throw fail('invalid-argument', 'REASON_REQUIRED');
+    if (zone === 'cis' && !CIS_VEHICLE_TYPES.includes(vehicleType)) throw fail('failed-precondition', 'CIS_VEHICLE_NOT_ALLOWED');
+    const reqRef = db.collection(REQUESTS).doc(requestId);
+    const pre = await reqRef.get();
+    if (!pre.exists) throw fail('not-found', 'REQUEST_NOT_FOUND');
+    const tariff = await loadTariff(pre.data().tariffVersion);
+    if (!isZoneTariff(tariff)) throw fail('failed-precondition', 'TARIFF_NOT_FOUND');
+    const row = findZoneTariffRow(tariff.rows, { policyType: pre.data().policyType, zone, vehicleType, driverScope, termMonths: pre.data().termMonths });
+    if (!row) throw fail('failed-precondition', 'TARIFF_NOT_FOUND');
+    const out = await db.runTransaction(async (t) => {
+      const rs = await t.get(reqRef);
+      const r = rs.data();
+      const dec = correctionDecision(r.status, r.price, row.price);
+      if (!dec.ok) throw fail('failed-precondition', dec.code, dec.newPrice != null ? { newPrice: dec.newPrice, price: r.price } : {});
+      const before = { zone: r.zone || '', vehicleType: r.vehicleType, driverScope: r.driverScope || '', price: r.price };
+      t.update(reqRef, { zone, vehicleType, driverScope, price: dec.price, zoneSource: 'agent', correctedBy: actor, correctedAt: ts(), updatedAt: ts() });
+      event(t, requestId, 'corrected', actor, { before, after: { zone, vehicleType, driverScope, price: dec.price }, reason });
+      t.create(db.collection(ADMIN_AUDIT).doc(), { action: 'insurance_corrected', requestId, actor, before, after: { zone, vehicleType, driverScope, price: dec.price }, reason, at: ts() });
+      return { price: dec.price };
+    });
+    log({ action: 'insuranceAgentCorrect', actor: tail(actor), result: 'ok', price: out.price });
+    return { ok: true, ...out };
+  });
+
   /** Полис файли ҳаволаси (эгаси ёки агент/админ): { requestId } → { url, contentType }. */
   exportsObj.insuranceGetPolicyLink = functions.https.onCall(async (data, context) => {
     const key = callerKey(context);
@@ -1011,6 +1149,7 @@ function attachCarInsurance(exportsObj, deps) {
       if (ls.exists && ls.data().requestId === requestId) t.delete(lockRef);
       const policy = { number: policyNumber, validFrom, validTo, contentType: kind.contentType, size: buf.length };
       t.update(reqRef, { status: 'issued', policy, issuedBy: actor, issuedAt: ts(), updatedAt: ts() });
+      schedulePurge(t, requestId);
       t.set(db.collection(FILES).doc(requestId), { requestId, uid: r.uid, path, bucket: saved.bucket, token: saved.token, contentType: kind.contentType, size: buf.length, uploadedBy: actor, at: ts() });
       const userRef = db.collection('users').doc(r.walletDocId || r.uid);
       t.set(db.collection(EXPIRY).doc(r.uid), { uid: r.uid, userDocId: r.walletDocId || r.uid, expiresOn: validTo, policyType: r.policyType, plate: (r.car || {}).plate || '', source: 'ava', requestId, updatedAt: ts() });
@@ -1078,6 +1217,7 @@ function attachCarInsurance(exportsObj, deps) {
       if (ls.exists && ls.data().requestId === requestId) t.delete(lockRef);
       const refund = { wallet: walletRefund, incentive: incentiveRefund, oilRestored };
       t.update(reqRef, { status: 'cancelled', cancelReason: reason, cancelledBy: actor, cancelledAt: ts(), refund, updatedAt: ts() });
+      schedulePurge(t, requestId);
       event(t, requestId, 'cancelled', actor, { reason, refund });
       t.create(db.collection(ADMIN_AUDIT).doc(), { action: 'insurance_cancelled', requestId, actor, reason, refund, at: ts() });
       return { duplicate: false, r, refund };
@@ -1308,13 +1448,43 @@ function attachCarInsurance(exportsObj, deps) {
       return null;
     });
 
-  return { runReminders, loadConfig };
+  /** Техпаспорт PII тозалаш: purgeAfter ≤ ҳозир — Storage файллари ва ҳужжат ўчади, аризада `techPassport.purged`. Идемпотент. */
+  async function runTechPassPurge(nowMs, limit = 200) {
+    const snap = await db.collection(TECHPASS).where('purgeAfter', '<=', TS.fromMillis(nowMs)).limit(limit).get();
+    let purged = 0;
+    for (const d of snap.docs) {
+      const f = d.data() || {};
+      for (const side of TECHPASS_SIDES) {
+        if (f[side] && f[side].path) {
+          try { await storage.remove(f[side].path); } catch (e) { log({ action: 'techPassPurge', result: 'delete_failed', errorCode: 'STORAGE_DELETE_FAILED' }); }
+        }
+      }
+      const reqRef = db.collection(REQUESTS).doc(d.id);
+      await db.runTransaction(async (t) => {
+        const rs = await t.get(reqRef);
+        t.delete(d.ref);
+        if (rs.exists) t.update(reqRef, { 'techPassport.purged': true, 'techPassport.front': false, 'techPassport.back': false, 'techPassport.purgedAt': ts() });
+      });
+      purged += 1;
+    }
+    return { purged, scanned: snap.size };
+  }
+
+  exportsObj.insuranceTechPassportPurge = functions.pubsub
+    .schedule('every day 04:20').timeZone('Asia/Tashkent')
+    .onRun(async () => {
+      const res = await runTechPassPurge(Date.now());
+      log({ action: 'insuranceTechPassportPurge', ...res });
+      return null;
+    });
+
+  return { runReminders, loadConfig, runTechPassPurge };
 }
 
 module.exports = {
   attachCarInsurance,
   normalizePlate, dateOk, addDaysKey, tashkentYear, displayDate, validateConfig, validateTariffRows, findTariffRow,
-  tariffOptionsFor, zoneForRegion, findZoneTariffRow, zoneTariffOptions, ownerDraftRows, validOilSteps, oilDiscountPct, oilGoal, validateCampaign, computePayment, canTransition,
+  tariffOptionsFor, techPassportRequired, techPassportComplete, sniffImage, correctionDecision, TECHPASS, TECHPASS_PURGE_DAYS, zoneForRegion, findZoneTariffRow, zoneTariffOptions, ownerDraftRows, validOilSteps, oilDiscountPct, oilGoal, validateCampaign, computePayment, canTransition,
   reminderTargets, sniffFile, requestView, messagesOf,
   STAGES, POLICY_TYPES, VEHICLE_TYPES, ZONES, DRIVER_SCOPES, CIS_VEHICLE_TYPES, TASHKENT_REGION_IDS, TARIFF_SCHEMA,
   OSAGO_OWNER_TABLE_2026_11_28, STATUSES, TRANSITIONS, OPEN_STATUSES, OPTIONS, REMIND_DAYS, BONUS_PROGRAM, NOTICE,

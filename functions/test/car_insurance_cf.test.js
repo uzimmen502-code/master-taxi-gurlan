@@ -30,6 +30,7 @@ const ctxOf = (p) => ({ auth: { uid: `uid_${p}`, token: { phone_number: `+${p}` 
 let fakeNow = Date.UTC(2026, 10, 28, 6); // 2026-11-28 11:00 Тошкент
 const sent = [];
 const saved = [];
+const removed = [];
 const local = {};
 const api = ci.attachCarInsurance(local, {
   functions, db, admin, nowMs: () => fakeNow,
@@ -43,7 +44,7 @@ const api = ci.attachCarInsurance(local, {
     return uid;
   },
   notifyUserInApp: async (m) => { sent.push(m); },
-  storage: { async save(path, buf, contentType) { saved.push({ path, size: buf.length, contentType }); return { token: 'tok123', bucket: 'demo-bucket' }; } },
+  storage: { async save(path, buf, contentType) { saved.push({ path, size: buf.length, contentType }); return { token: 'tok123', bucket: 'demo-bucket' }; }, async remove(path) { removed.push(path); } },
 });
 const call = (name, data, who) => local[name].run(data, ctxOf(who));
 
@@ -52,7 +53,9 @@ const check = async (name, fn) => {
   try { await fn(); results.push(true); console.log(`PASS - ${name}`); } catch (e) { results.push(false); console.log(`FAIL - ${name} :: ${e.stack || e.message}`); }
 };
 async function expectCode(promise, code) {
-  await assert.rejects(promise, (e) => { assert.strictEqual((e.details && e.details.code) || e.message, code); return true; });
+  let caught;
+  await assert.rejects(promise, (e) => { caught = e; assert.strictEqual((e.details && e.details.code) || e.message, code); return true; });
+  return caught;
 }
 async function clearEmulator() {
   const res = await fetch(`http://${process.env.FIRESTORE_EMULATOR_HOST}/emulator/v1/projects/${process.env.GCLOUD_PROJECT}/databases/(default)/documents`, { method: 'DELETE' });
@@ -61,6 +64,8 @@ async function clearEmulator() {
 const get = async (p) => (await db.doc(p).get()).data();
 const car = (plate) => ({ carModel: 'Cobalt', carColor: 'oq', carPlate: plate, carSeats: 4, carBrand: 'Chevrolet', carYear: 2020 });
 const PDF = Buffer.from('%PDF-1.7\n1 0 obj\n<<>>\nendobj\n').toString('base64');
+const JPG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64, 1)]).toString('base64');
+const tp = async (requestId, who) => { for (const side of ['front', 'back']) await call('insuranceUploadTechPassport', { requestId, side, fileBase64: JPG }, who); };
 const CONFIG = { stage: 'internal', internalPhones: [U, V, W], pilotDistrictIds: [], agentPhones: [AGENT], reporterPhones: [REP], kaskoEnabled: false, remindersEnabled: true };
 const CAMPAIGN = { stage: 'internal', internalPhones: [U, V, W], pilotDistrictIds: [], bonusEnabled: true, bonusAmount: 100000, bonusValidityDays: 60, bonusMaxOrderSharePct: 100, bonusBudgetTotal: 150000, oilEnabled: true, oilSteps: [{ count: 1, pct: 50 }, { count: 2, pct: 100 }] };
 // Эга ОСАГО жадвали (schema 2, 20 қатор); тест учун «бошқа ҳудуд / енгил / чекланган» = 200 000. КАСКО — 20 қатор 900 000.
@@ -127,6 +132,8 @@ async function main() {
   });
 
   await check('C4 тўлов: маблағ етмаса — рад, ҳеч нарса ёзилмайди; тўлдирилгач — ҳамён −200 000, журнал, ledger; такрор — икки марта ечилмайди', async () => {
+    await expectCode(call('insurancePayRequest', { requestId: reqU1 }, U), 'TECH_PASSPORT_REQUIRED'); // эга 2026-11-28
+    await tp(reqU1, U);
     await expectCode(call('insurancePayRequest', { requestId: reqU1 }, U), 'INSUFFICIENT_BALANCE');
     assert.strictEqual((await get(`insurance_requests/${reqU1}`)).status, 'requested');
     await expectCode(call('insurancePayRequest', { requestId: reqU1 }, V), 'REQUEST_NOT_FOUND');
@@ -161,8 +168,9 @@ async function main() {
     const r = await call('insuranceAgentIssuePolicy', { ...base, fileBase64: PDF }, AGENT);
     assert.strictEqual(r.duplicate, false);
     assert.strictEqual((await call('insuranceAgentIssuePolicy', { ...base, fileBase64: PDF }, AGENT)).duplicate, true);
-    assert.strictEqual(saved.length, 1);
-    assert.ok(saved[0].path.startsWith(`insurance_policies/${reqU1}/`) && saved[0].contentType === 'application/pdf');
+    const pol = saved.filter((x) => x.path.startsWith('insurance_policies/'));
+    assert.strictEqual(pol.length, 1);
+    assert.ok(pol[0].path.startsWith(`insurance_policies/${reqU1}/`) && pol[0].contentType === 'application/pdf');
     const doc = await get(`insurance_requests/${reqU1}`);
     assert.deepStrictEqual([doc.status, doc.policy.number, doc.policy.validTo], ['issued', 'ABC 1234567', '2027-11-28']);
     assert.deepStrictEqual([(await get(`users/${U}`)).carInsurance.expiresOn, (await get(`insurance_expiry_index/${U}`)).source], ['2027-11-28', 'ava']);
@@ -194,6 +202,7 @@ async function main() {
     const doc0 = await get(`insurance_requests/${reqV}`);
     assert.deepStrictEqual([doc0.price, doc0.tariffVersion], [250000, 3]); // v3 (Хоразм 250 000)
     // 250 000 − бонус 100 000 = 150 000 > ҳамён 100 000 → рад, грант ўзгармайди.
+    await tp(reqV, V);
     await expectCode(call('insurancePayRequest', { requestId: reqV }, V), 'INSUFFICIENT_BALANCE');
     assert.strictEqual((await get(`incentive_grants/car_insurance_bonus_2026_${V}`)).remaining, 100000);
     await db.doc(`users/${V}`).update({ bonusBalance: 160000 });
@@ -212,7 +221,7 @@ async function main() {
     assert.strictEqual((await get(`users/${V}/wallet_ledger/insurance_refund_${reqV}`)).amount, 150000);
     assert.ok(sent.some((m) => m.userId === V && m.source === 'insurance_cancelled'));
     const ev = (await db.collection('insurance_events').where('requestId', '==', reqV).get()).docs.map((d) => d.data().type).sort();
-    assert.deepStrictEqual(ev, ['cancelled', 'paid', 'requested']);
+    assert.deepStrictEqual(ev, ['cancelled', 'paid', 'requested', 'techpass_back', 'techpass_front']);
   });
 
   await check('C8 мой дастури: ҳисобот (номер шакли бошқача) → 1/2 (50%), бир кунда такрор/бошқа ҳисобот — ҳисобланмайди; эртага → 2/2 (100%); кейин goal_reached', async () => {
@@ -243,6 +252,7 @@ async function main() {
   await check('C9 100% чегирма: ҳамёндан 0 сўм, чегирма ишлатилди; бекор → чегирма қайтади; қайта тўлов → яна 100%', async () => {
     const r = await call('insuranceCreateRequest', { policyType: 'osago', vehicleType: 'car', termMonths: 12, driverScope: 'limited', idempotencyKey: 'u-req-00003' }, U);
     const bal0 = (await get(`users/${U}`)).bonusBalance;
+    await tp(r.requestId, U);
     const p = await call('insurancePayRequest', { requestId: r.requestId }, U);
     assert.deepStrictEqual([p.oilDiscount, p.walletPaid, p.incentive], [250000, 0, 0]);
     assert.strictEqual((await get(`users/${U}`)).bonusBalance, bal0);
@@ -252,6 +262,7 @@ async function main() {
     const st = await call('insuranceGetMyState', {}, U);
     assert.deepStrictEqual([st.enrollment.discountUsed, st.enrollment.discountPct], [false, 100]);
     const r2 = await call('insuranceCreateRequest', { policyType: 'osago', vehicleType: 'car', termMonths: 12, driverScope: 'limited', idempotencyKey: 'u-req-00004' }, U);
+    await tp(r2.requestId, U);
     assert.strictEqual((await call('insurancePayRequest', { requestId: r2.requestId }, U)).oilDiscount, 250000);
   });
 
@@ -314,6 +325,56 @@ async function main() {
     const s = await call('adminInsuranceGetSettings', {}, ADMIN);
     assert.deepStrictEqual([s.tariff.schema, s.draftRows.length], [1, 20]);
     assert.strictEqual(s.draftRows.find((x) => x.zone === 'cis' && x.vehicleType === 'truck' && x.driverScope === 'unlimited').price, 1120000);
+  });
+
+  await check('C13 техпаспорт (эга 2026-11-28): фақат эгаси, расм тури, ҳаволалар эгаси/агентга; агент тузатиши (тўланмаган — нарх; тўланган — нарх ўзгарса бекор шарт); полис/бекордан 30 кун кейин расмлар ўчади', async () => {
+    await db.doc('insurance_config/main').update({ activeTariffVersion: 3 });
+    await db.doc(`users/${W}`).update({ bonusBalance: 5000000 });
+    for (const d of (await db.collection('insurance_requests').where('uid', '==', W).where('status', '==', 'requested').get()).docs) {
+      await call('insuranceCancelMyRequest', { requestId: d.id }, W);
+    }
+    const r = await call('insuranceCreateRequest', { policyType: 'osago', vehicleType: 'car', termMonths: 12, driverScope: 'limited', idempotencyKey: 'w-tp-000001' }, W);
+    await expectCode(call('insuranceUploadTechPassport', { requestId: r.requestId, side: 'front', fileBase64: PDF }, W), 'IMAGE_INVALID');
+    await expectCode(call('insuranceUploadTechPassport', { requestId: r.requestId, side: 'top', fileBase64: JPG }, W), 'INVALID_REQUEST');
+    await expectCode(call('insuranceUploadTechPassport', { requestId: r.requestId, side: 'front', fileBase64: JPG }, V), 'REQUEST_NOT_FOUND');
+    await call('insuranceUploadTechPassport', { requestId: r.requestId, side: 'front', fileBase64: JPG }, W);
+    await expectCode(call('insurancePayRequest', { requestId: r.requestId }, W), 'TECH_PASSPORT_REQUIRED');
+    await call('insuranceUploadTechPassport', { requestId: r.requestId, side: 'front', fileBase64: JPG }, W); // алмаштириш — эскиси ўчади
+    assert.strictEqual(removed.length, 1);
+    await call('insuranceUploadTechPassport', { requestId: r.requestId, side: 'back', fileBase64: JPG }, W);
+    const doc = await get(`insurance_requests/${r.requestId}`);
+    assert.deepStrictEqual([doc.techPassport.front, doc.techPassport.back], [true, true]);
+    assert.strictEqual(JSON.stringify(doc).includes('tok123'), false, 'ариза ҳужжатида ҳавола/token йўқ');
+    const own = await call('insuranceGetTechPassportLinks', { requestId: r.requestId }, W);
+    assert.ok(own.front.includes('insurance_techpass') && own.back.includes('token=tok123'));
+    assert.ok((await call('insuranceGetTechPassportLinks', { requestId: r.requestId }, AGENT)).front);
+    await expectCode(call('insuranceGetTechPassportLinks', { requestId: r.requestId }, V), 'PERMISSION_DENIED');
+    // Тўланмаган — агент тузатади, нарх қайта (v3: бошқа ҳудуд/юк/чекланмаган = 560 000 + 50 000).
+    await expectCode(call('insuranceAgentCorrect', { requestId: r.requestId, zone: 'other', vehicleType: 'truck', driverScope: 'unlimited', reason: 'x' }, AGENT), 'REASON_REQUIRED');
+    await expectCode(call('insuranceAgentCorrect', { requestId: r.requestId, zone: 'other', vehicleType: 'truck', driverScope: 'unlimited', reason: 'техпаспорт' }, W), 'PERMISSION_DENIED');
+    const c1 = await call('insuranceAgentCorrect', { requestId: r.requestId, zone: 'other', vehicleType: 'truck', driverScope: 'unlimited', reason: 'техпаспорт: юк' }, AGENT);
+    assert.strictEqual(c1.price, 610000);
+    await call('insurancePayRequest', { requestId: r.requestId }, W);
+    // Тўланган — нарх ўзгарса рад (бекор қилиш шарт); ўзгармаса — рухсат.
+    const e = await expectCode(call('insuranceAgentCorrect', { requestId: r.requestId, zone: 'tashkent', vehicleType: 'truck', driverScope: 'unlimited', reason: 'техпаспорт' }, AGENT), 'PRICE_CHANGED_CANCEL_REQUIRED');
+    assert.deepStrictEqual([e.details.newPrice, e.details.price], [722000, 610000]);
+    const same = await call('insuranceAgentCorrect', { requestId: r.requestId, zone: 'other', vehicleType: 'truck', driverScope: 'unlimited', reason: 'текширилди' }, AGENT);
+    assert.strictEqual(same.price, 610000);
+    const ev = (await db.collection('insurance_events').where('requestId', '==', r.requestId).get()).docs.map((x) => x.data().type);
+    assert.ok(ev.includes('corrected') && ev.includes('techpass_back'));
+    // Бекор — 30 кундан кейин расмлар ўчади (идемпотент).
+    await call('insuranceAgentCancel', { requestId: r.requestId, reason: 'маълумот нотўғри' }, AGENT);
+    const purgeAfter = (await get(`insurance_techpass_files/${r.requestId}`)).purgeAfter.toMillis();
+    assert.ok(Math.abs(purgeAfter - (fakeNow + 30 * 86400000)) < 5000);
+    await api.runTechPassPurge(fakeNow + 29 * 86400000); // аввалги тестлардаги эски ёзувлар тозаланади
+    assert.ok(await get(`insurance_techpass_files/${r.requestId}`), '29-кун — ҳали ўчмайди');
+    removed.length = 0;
+    const pr = await api.runTechPassPurge(fakeNow + 31 * 86400000);
+    assert.strictEqual(pr.purged >= 1, true);
+    assert.strictEqual(removed.length >= 2, true);
+    assert.strictEqual(await get(`insurance_techpass_files/${r.requestId}`), undefined);
+    assert.deepStrictEqual((await get(`insurance_requests/${r.requestId}`)).techPassport.purged, true);
+    assert.strictEqual((await api.runTechPassPurge(fakeNow + 31 * 86400000)).purged, 0);
   });
 
   const passed = results.filter(Boolean).length;

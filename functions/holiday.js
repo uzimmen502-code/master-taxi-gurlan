@@ -329,6 +329,17 @@ function validateOccasion(o) {
   }
   return { ok: errors.length === 0, errors };
 }
+/** Юборилмаган (undefined) reminderTexts/theme — мавжуд ҳужжатдан (соф; [clean] ўзгаради). */
+const PRESERVE_KEYS = Object.freeze(['reminderTexts', 'theme']);
+function preserveOmitted(clean, input, cur) {
+  for (const k of PRESERVE_KEYS) {
+    if (input && input[k] === undefined && cur && cur[k] != null) {
+      if (k === 'reminderTexts' && clean.kind !== 'holiday') continue;
+      clean[k] = cur[k];
+    }
+  }
+  return clean;
+}
 /** Сақланадиган шакл (бўш майдонлар нормаллашади). */
 function normalizeOccasion(o) {
   const out = {
@@ -713,8 +724,11 @@ function attachHoliday(exportsObj, deps) {
     const ref = db.collection(OCCASIONS).doc(clean.id);
     const out = await db.runTransaction(async (t) => {
       const [snap, bSnap] = await Promise.all([t.get(ref), t.get(db.collection(BASKETS).where('occasionId', '==', clean.id))]);
-      const cur = snap.exists ? (snap.data() || {}) : null;
+      const cur0 = snap.exists ? (snap.data() || {}) : null;
+      const cur = cur0;
       const pick = (o) => (o ? Object.fromEntries(OCC_KEYS.map((k) => [k, o[k] === undefined ? null : o[k]])) : null);
+      // Эга 2026-11-28: формада йўқ майдон (reminderTexts/theme) ЮБОРИЛМАСА — мавжуд қиймати сақланади; null — тозалаш.
+      preserveOmitted(clean, occ, cur);
       if (cur && sm.stableStringify(pick(cur)) === sm.stableStringify(pick(clean))) return { changed: false, version: cur.version || 1 };
       const version = (cur && Number.isInteger(cur.version) ? cur.version : 0) + 1;
       const visible = clean.stage === 'public';
@@ -1111,6 +1125,7 @@ function attachHoliday(exportsObj, deps) {
 }
 
 module.exports = {
+  preserveOmitted,
   REMINDER_DEDUP, reminderSuppressed, withTheme, THEME_MAX,
   attachHoliday,
   // тоза (тестлар)

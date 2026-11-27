@@ -334,6 +334,20 @@ check('P31 эслатма такрорланмайди: 31-декабр ёқил
   assert.strictEqual(h.withTheme({ ru: { title: 't', body: 'b' } }, null).ru.body, 'b');
 });
 
+check('P32 админ қайта сақлаш (эга 2026-11-28): юборилмаган reminderTexts/theme сақланади; null — тозалайди; туғилган кунда reminderTexts йўқ', () => {
+  const RT = { uz_Cyrl: { title: 'Т', body: 'Б' }, uz_Latn: { title: 'T', body: 'B' }, ru: { title: 'Т', body: 'Б' } };
+  const TH = { uz_Cyrl: 'м', uz_Latn: 'm', ru: 'м' };
+  const cur = { id: 'q', kind: 'holiday', reminderTexts: RT, theme: TH };
+  const input = { id: 'q', kind: 'holiday', names: N, stage: 'public', order: 1, dateRule: { type: 'list', dates: [] } };
+  const kept = h.preserveOmitted(h.normalizeOccasion(input), input, cur);
+  assert.deepStrictEqual([kept.reminderTexts, kept.theme], [RT, TH]);
+  const cleared = h.preserveOmitted(h.normalizeOccasion({ ...input, reminderTexts: null }), { ...input, reminderTexts: null }, cur);
+  assert.strictEqual(cleared.reminderTexts, null);
+  const bd = { id: 'b', kind: 'birthday', names: N, stage: 'public', order: 1 };
+  assert.strictEqual(h.preserveOmitted(h.normalizeOccasion(bd), bd, { ...cur, kind: 'birthday' }).reminderTexts, null);
+  assert.strictEqual(h.preserveOmitted(h.normalizeOccasion(input), input, null).reminderTexts, null);
+});
+
 const failed = results.filter((x) => !x).length;
 console.log(`\n${results.length - failed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

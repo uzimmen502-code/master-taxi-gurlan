@@ -41,6 +41,8 @@ const { MODES: COURIER_AUTH_MODES, makeCourierAuth } = require('./courier_auth')
 const { makeProcurementCatalog } = require('./procurement_catalog');
 // AVA дўкони улгуржи поғоналари (эга қарори 2026-10-06) — ягона қоида.
 const platformPricing = require('./platform_pricing');
+// AVA дўкони етказиш ҳақи — ягона манба (T-1, эга 2026-11-28).
+const platformDeliveryFee = require('./platform_delivery_fee');
 const marketImages = require('./market_images');
 // MEDIUM-4 (аудит 2026-10-31): модул дарвозаси серверда ҳам (клиент `ServiceConfigHolder` нусхаси).
 const moduleGate = require('./module_gate');
@@ -3423,26 +3425,18 @@ async function repriceBreadOrderFromCatalog(orderBase) {
  * сонлар учун аввалги `Math.round(itemsTotal × pct / 100)` билан АЙНАН тенг.
  */
 function platformDeliveryFeeFromSettings(settings, itemsTotal) {
-  const raw = (settings || {}).platformDeliveryFeePercent;
-  const pctIn = (typeof raw === 'number' || (typeof raw === 'string' && raw.trim() !== ''))
-    ? Number(raw)
-    : NaN;
-  if (!Number.isFinite(pctIn) || pctIn < 0) {
+  // T-1 (ega 2026-11-28): қоида ЯГОНА манбада — `platform_delivery_fee.js` (жонли семантика айнан).
+  const cfg = platformDeliveryFee.feeConfigFromApp(settings);
+  if (!cfg) {
     console.error(JSON.stringify({
-      action: 'placeOrderPostPaid', result: 'denied', errorCode: 'TARIFF_NOT_CONFIGURED',
+      action: 'placeOrderPostPaid', result: 'denied', errorCode: platformDeliveryFee.TARIFF_NOT_CONFIGURED,
       reason: 'platformDeliveryFeePercent missing/invalid',
     }));
-    throw new functions.https.HttpsError('failed-precondition', 'TARIFF_NOT_CONFIGURED',
-        { code: 'TARIFF_NOT_CONFIGURED' });
+    throw new functions.https.HttpsError('failed-precondition', platformDeliveryFee.TARIFF_NOT_CONFIGURED,
+        { code: platformDeliveryFee.TARIFF_NOT_CONFIGURED });
   }
-  // Аввалги хатти-ҳаракат сақланади: 100 % дан юқори — 100 %.
-  const percent = Math.min(pctIn, 100);
-  const bps = Math.round(percent * 100);
-  const total = Number(itemsTotal) || 0;
-  const fee = Math.floor((total * bps + 5000) / 10000);
-  const verRaw = Number((settings || {}).platformDeliveryFeeVersion);
-  const version = Number.isInteger(verRaw) && verRaw > 0 ? verRaw : 0;
-  return { percent, bps, fee, version };
+  const fee = platformDeliveryFee.feeOf(Number(itemsTotal) || 0, cfg.bps);
+  return { percent: cfg.percent, bps: cfg.bps, fee, version: cfg.version };
 }
 
 /** Буюртма + омбор; bread/platform нарх каталогдан; ҳамён (ixtiyoriy) ledger орқали. */

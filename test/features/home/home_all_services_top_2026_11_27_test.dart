@@ -35,16 +35,16 @@ Future<List<ServiceSpotlightItem>> _catalog(WidgetTester t) async {
   return items;
 }
 
-/// Расми (PNG/SVG) йўқ — фақат иконка билан чиқадиган хизматлар (эгага рўйхат: расм керак).
-const _kIconOnly = <String>{
-  'jobs_services',
-  'tv_market',
-  'dating',
-  'chatgpt',
-  'logistics',
-  'realty',
-  'wholesale_market',
-  'china_market',
+/// Эга 2026-11-27 (2-тур): аввал расмсиз бўлган 8 хизмат — энди эга расмлари билан.
+const _kOwnerPhotos = <String, String>{
+  'jobs_services': 'assets/images/home/card_services_market_v1.webp',
+  'tv_market': 'assets/images/services/service_tv_market_v1.webp',
+  'dating': 'assets/images/home/card_dating_v1.webp',
+  'chatgpt': 'assets/images/services/service_chatgpt_v1.webp',
+  'logistics': 'assets/images/home/card_post_v1.webp',
+  'realty': 'assets/images/markets/market_realty_v2.webp',
+  'wholesale_market': 'assets/images/markets/market_wholesale_v2.webp',
+  'china_market': 'assets/images/markets/market_china_v2.webp',
 };
 
 void main() {
@@ -164,15 +164,25 @@ void main() {
         expect(e.icon, isNotNull, reason: '${e.moduleId}: расм ҳам, иконка ҳам йўқ');
         continue;
       }
-      expect(asset.startsWith('assets/images/services/'), isTrue, reason: asset);
+      expect(asset.startsWith('assets/images/'), isTrue, reason: asset);
       expect(File(asset).existsSync(), isTrue, reason: 'файл йўқ: $asset');
       expect(File(asset).lengthSync(), greaterThan(0), reason: asset);
       // Эски кўриниш: ServiceCircleTile жадвали билан бир хил расм.
       expect(e.imagePath ?? '', serviceImageFor(e.moduleId) ?? '', reason: e.moduleId);
       expect(e.svgPath ?? '', serviceSvgFor(e.moduleId) ?? '', reason: e.moduleId);
     }
-    expect(iconOnly, _kIconOnly);
-    expect(File('pubspec.yaml').readAsStringSync().contains('- assets/images/services/'), isTrue);
+    // Расмсиз (фақат иконка) хизмат қолмади.
+    expect(iconOnly, isEmpty);
+    final byId = {for (final e in items) e.moduleId: e};
+    _kOwnerPhotos.forEach((id, path) {
+      expect(byId[id]!.imagePath, path, reason: id);
+      expect(isServicePhoto(path), isTrue, reason: id);
+      expect(File(path).lengthSync(), lessThan(120 * 1024), reason: path);
+    });
+    final pubspec = File('pubspec.yaml').readAsStringSync();
+    for (final dir in ['services', 'home', 'markets']) {
+      expect(pubspec.contains('- assets/images/$dir/'), isTrue, reason: dir);
+    }
   });
 
   // Эга расмлари 2026-11-27: Мой алмаштириш (oil_change) ва Менинг яқинларим (circles).

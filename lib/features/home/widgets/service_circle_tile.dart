@@ -348,6 +348,15 @@ const _kServiceImages = <String, String>{
   'carpet_wash': 'assets/images/services/service_carpet_wash.png',
   'ev_charging': 'assets/images/services/service_ev_charging.png',
   'pay_paynet': 'assets/images/services/service_pay_paynet.png',
+  // Эга 2026-11-27: расмсиз 8 хизмат — эга расмлари (webp фото, доирани қоплайди).
+  'jobs_services': 'assets/images/home/card_services_market_v1.webp',
+  'tv_market': 'assets/images/services/service_tv_market_v1.webp',
+  'dating': 'assets/images/home/card_dating_v1.webp',
+  'chatgpt': 'assets/images/services/service_chatgpt_v1.webp',
+  'logistics': 'assets/images/home/card_post_v1.webp',
+  'realty': 'assets/images/markets/market_realty_v2.webp',
+  'wholesale_market': 'assets/images/markets/market_wholesale_v2.webp',
+  'china_market': 'assets/images/markets/market_china_v2.webp',
 };
 
 const _kServiceSvgs = <String, String>{
@@ -356,15 +365,8 @@ const _kServiceSvgs = <String, String>{
 };
 
 const _kServiceIcons = <String, IconData>{
-  // «Хизматлар» — `jobs` модулининг иккинчи плиткаси (дарвоза `jobs`).
-  'jobs_services': Icons.handyman_rounded,
-  'tv_market': Icons.play_circle_filled_rounded,
-  'dating': Icons.favorite_rounded,
-  'chatgpt': Icons.auto_awesome_rounded,
-  'wholesale_market': Icons.warehouse_outlined,
-  'china_market': Icons.local_shipping_outlined,
-  'realty': Icons.apartment_rounded,
-  'logistics': Icons.local_post_office_rounded,
+  // jobs_services, tv_market, dating, chatgpt, wholesale_market, china_market, realty, logistics —
+  // эга 2026-11-27 дан расм билан (_kServiceImages); модулга битта манба.
   // Плитка йўқ — фақат админ рўйхати ва тест жадвали учун.
   'demand_intent': Icons.support_agent_rounded,
   'business_map': Icons.add_business_rounded,

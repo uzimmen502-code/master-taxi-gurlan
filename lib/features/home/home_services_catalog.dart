@@ -183,6 +183,7 @@ List<ServiceSpotlightItem> buildHomeServices(
       moduleId: JobsSections.servicesTileId,
       gateId: JobsSections.gateId,
       label: context.tr(JobsSections.titleKeyFor(AdKind.service)),
+      imagePath: 'assets/images/home/card_services_market_v1.webp',
       icon: Icons.handyman_rounded,
       iconColor: Colors.white,
       onTap: () {
@@ -208,6 +209,7 @@ List<ServiceSpotlightItem> buildHomeServices(
     ServiceSpotlightItem(
       moduleId: 'tv_market',
       label: context.tr('home_module_tv_market'),
+      imagePath: 'assets/images/services/service_tv_market_v1.webp',
       icon: Icons.play_circle_filled_rounded,
       iconColor: const Color(0xFFFF1744),
       onTap: () {
@@ -244,6 +246,7 @@ List<ServiceSpotlightItem> buildHomeServices(
     ServiceSpotlightItem(
       moduleId: 'dating',
       label: context.tr('dating_short_label'),
+      imagePath: 'assets/images/home/card_dating_v1.webp',
       icon: Icons.favorite_rounded,
       iconColor: const Color(0xFFE53935),
       iconScale: 1.05,
@@ -252,6 +255,7 @@ List<ServiceSpotlightItem> buildHomeServices(
     ServiceSpotlightItem(
       moduleId: 'chatgpt',
       label: context.tr('home_module_chatgpt'),
+      imagePath: 'assets/images/services/service_chatgpt_v1.webp',
       icon: Icons.auto_awesome_rounded,
       iconColor: const Color(0xFF10A37F),
       onTap: () => openAssistantEntry(
@@ -288,6 +292,7 @@ List<ServiceSpotlightItem> buildHomeServices(
     ServiceSpotlightItem(
       moduleId: 'logistics',
       label: context.tr('home_module_logistics'),
+      imagePath: 'assets/images/home/card_post_v1.webp',
       icon: Icons.local_post_office_rounded,
       iconColor: Colors.white,
       onTap: () async {
@@ -346,6 +351,7 @@ List<ServiceSpotlightItem> buildHomeServices(
     ServiceSpotlightItem(
       moduleId: 'realty',
       label: context.tr('home_module_realty'),
+      imagePath: 'assets/images/markets/market_realty_v2.webp',
       icon: Icons.apartment_rounded,
       onTap: () => a.push(const RealtyScreen()),
     ),
@@ -370,6 +376,7 @@ List<ServiceSpotlightItem> buildHomeServices(
     ServiceSpotlightItem(
       moduleId: 'wholesale_market',
       label: context.tr('home_module_wholesale'),
+      imagePath: 'assets/images/markets/market_wholesale_v2.webp',
       icon: Icons.warehouse_outlined,
       iconColor: const Color(0xFF6D4C41),
       onTap: () {
@@ -387,6 +394,7 @@ List<ServiceSpotlightItem> buildHomeServices(
     ServiceSpotlightItem(
       moduleId: 'china_market',
       label: context.tr('home_module_china'),
+      imagePath: 'assets/images/markets/market_china_v2.webp',
       icon: Icons.local_shipping_outlined,
       iconColor: const Color(0xFF0E7C72),
       onTap: () {

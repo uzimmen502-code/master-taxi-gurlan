@@ -292,6 +292,48 @@ check('P16 3 тил матнлари: ҳар тилда title/body, жойлаг
   for (const l of ['uz_Cyrl', 'uz_Latn', 'ru']) assert.ok(!/\d|\{date\}/.test(h.GIFT_TEXT[l].body), l); // нарх/сана йўқ (курьер олганда)
 });
 
+// Эга 2026-11-28: байрамлар seed v2 — 11 байрам + туғилган кун, ҳаммаси public, мавзу изоҳи 3 тилда.
+check('P30 seed v2: валидатор ўтади, саналар, ой тақвими рўйхати, катта байрам 10 кун, мавзу 3 тилда, ҳаммаси public', () => {
+  const seed = JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'tools', 'data', 'holiday_seed_v2.json'), 'utf8'));
+  const byId = Object.fromEntries(seed.occasions.map((o) => [o.id, o]));
+  for (const o of seed.occasions) {
+    const v = h.validateOccasion(o);
+    assert.ok(v.ok, `${o.id}: ${v.errors.join(', ')}`);
+    assert.strictEqual(o.stage, 'public', o.id);
+  }
+  const fixed = { new_year: '01-01', vatan_himoyachilari: '01-14', sevishganlar: '02-14', xotin_qizlar: '03-08', navruz: '03-21', bolalar: '06-01', mustaqillik: '09-01', oqituvchilar: '10-01', new_year_eve: '12-31' };
+  for (const [id, md] of Object.entries(fixed)) assert.deepStrictEqual(byId[id].dateRule, { type: 'fixed', md }, id);
+  assert.deepStrictEqual(byId.hayit_ramazon.dateRule, { type: 'list', dates: ['2027-03-09', '2027-03-10'] });
+  assert.deepStrictEqual(byId.qurbon_hayit.dateRule, { type: 'list', dates: ['2027-05-16', '2027-05-17'] });
+  assert.strictEqual(byId.qurbon_hayit.target.market, 'livestock', 'Мол бозори мақсади сақланди');
+  for (const id of ['new_year', 'xotin_qizlar', 'hayit_ramazon', 'navruz', 'qurbon_hayit', 'mustaqillik']) {
+    assert.deepStrictEqual([byId[id].bigHoliday, byId[id].remindDaysBefore], [true, 10], id);
+  }
+  for (const id of ['vatan_himoyachilari', 'sevishganlar', 'bolalar', 'oqituvchilar']) assert.strictEqual(byId[id].remindDaysBefore, 5, id);
+  assert.strictEqual(byId.new_year_eve.remindDaysBefore, 10);
+  assert.strictEqual(seed.occasions.filter((o) => o.kind === 'holiday').length, 11);
+  for (const o of seed.occasions.filter((x) => x.kind === 'holiday')) {
+    for (const l of ['uz_Cyrl', 'uz_Latn', 'ru']) assert.ok(o.theme[l] && o.theme[l].length <= h.THEME_MAX, `${o.id}.${l}`);
+    assert.ok(!/o'|g'|sh|ch/i.test(o.theme.uz_Latn + o.names.uz_Latn), o.id);
+  }
+  assert.ok(seed.baskets.every((b) => byId[b.occasionId]), 'саватлар маълум байрамга');
+  assert.ok(!h.validateOccasion({ ...byId.navruz, theme: { uz_Cyrl: 'x' } }).ok, 'мавзу 3 тилда шарт');
+  assert.ok(!h.validateOccasion({ ...byId.navruz, theme: { uz_Cyrl: 'x'.repeat(121), uz_Latn: 'x', ru: 'x' } }).ok);
+  assert.ok(h.normalizeOccasion(byId.navruz).theme.ru);
+});
+
+check('P31 эслатма такрорланмайди: 31-декабр ёқилган бўлса 1-январ — йўқ; ўчиқ бўлса — бор; мавзу матнга қўшилади', () => {
+  const ny = { id: 'new_year', kind: 'holiday', stage: 'public' };
+  const eve = { id: 'new_year_eve', kind: 'holiday', stage: 'public' };
+  assert.strictEqual(h.reminderSuppressed(ny, [ny, eve]), true);
+  assert.strictEqual(h.reminderSuppressed(ny, [ny, { ...eve, stage: 'off' }]), false);
+  assert.strictEqual(h.reminderSuppressed(ny, [ny]), false);
+  assert.strictEqual(h.reminderSuppressed(eve, [ny, eve]), false);
+  const t = h.withTheme(h.HOLIDAY_TEXT || { uz_Cyrl: { title: 't', body: 'b' } }, { uz_Cyrl: 'гуллар', uz_Latn: 'gullar', ru: 'цветы' });
+  assert.ok(t.uz_Cyrl.body.endsWith('(гуллар)'));
+  assert.strictEqual(h.withTheme({ ru: { title: 't', body: 'b' } }, null).ru.body, 'b');
+});
+
 const failed = results.filter((x) => !x).length;
 console.log(`\n${results.length - failed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

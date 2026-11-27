@@ -1,6 +1,7 @@
 /**
- * «Туғилган кун ва байрам саватчаси» — бошланғич holiday_occasions (4) ва holiday_baskets (12), ҳаммаси stage=off (эга 2026-11-26).
- * Таркиб — PROPOSED (tools/data/holiday_seed_v1.json); ўзгартириш — админ callable'лари (adminUpsertHolidayOccasion/Basket).
+ * «Туғилган кун ва байрам саватчаси» — бошланғич holiday_occasions ва holiday_baskets (12).
+ * v1 (эга 2026-11-26): 4 байрам, stage=off. v2 (эга 2026-11-28, сукут): 11 байрам + туғилган кун, stage=public, мавзу изоҳи.
+ * Таркиб — tools/data/holiday_seed_v2.json (ой тақвими саналари PROPOSED); ўзгартириш — админ callable'лари (adminUpsertHolidayOccasion/Basket).
  *
  * Хавфсизлик (27, 28, 41-банд): DRY RUN — сукут; лойиҳа ФАҚАТ `--project <id>` билан; `--apply` фақат ЙЎҚ ҳужжатни яратади
  * (бор бўлса тегилмайди), ҳар яратилган ҳужжатга admin_audit. Текширув — holiday.js валидаторлари (callable билан бир хил),
@@ -17,8 +18,12 @@ const fs = require('fs');
 const h = require('../holiday');
 const sm = require('../supermarket');
 
-const SEED = path.join(__dirname, 'data', 'holiday_seed_v1.json');
-const ACTOR = 'seed:holiday_v1';
+// v2 (эга 2026-11-28): 11 байрам + туғилган кун, ҲАММАСИ stage public; эски файл — `--seed v1`.
+// Фақат ЙЎҚ ҳужжатлар яратилади: олдин v1 билан яратилган (stage off) байрамлар ЎЗГАРМАЙДИ — админда ёқилади.
+const SEED_NAME = process.argv.includes('--seed') ? process.argv[process.argv.indexOf('--seed') + 1] : 'v2';
+if (!/^v\d+$/.test(String(SEED_NAME))) throw new Error('--seed v1|v2');
+const SEED = path.join(__dirname, 'data', `holiday_seed_${SEED_NAME}.json`);
+const ACTOR = `seed:holiday_${SEED_NAME}`;
 
 function groupsOf(tax) {
   const g = {};
@@ -77,7 +82,7 @@ async function main() {
       t.create(ref, { ...p.data, createdAt: ts, updatedAt: ts });
       t.create(db.collection('admin_audit').doc(), {
         kind: p.path.startsWith(h.OCCASIONS) ? 'holiday_occasion_set' : 'holiday_basket_set', actor: ACTOR,
-        target: `${p.path} v1`, before: null, after: p.data, reason: 'seed holiday_seed_v1', at: ts,
+        target: `${p.path} v1`, before: null, after: p.data, reason: `seed holiday_seed_${SEED_NAME}`, at: ts,
       });
     });
     created += 1;

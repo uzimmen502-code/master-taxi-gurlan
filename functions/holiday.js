@@ -84,6 +84,25 @@ const HOLIDAY_TEXT = Object.freeze({
   uz_Latn: { title: 'Bayram yaqinlaşmoqda', body: '{holiday}ga {days} kun qoldi — bayram savatçasini tayyorlaymizmi?' },
   ru: { title: 'Скоро праздник', body: 'До праздника «{holiday}» осталось {days} дн. — соберём праздничную корзину?' },
 });
+/**
+ * Эслатма такрорланмасин (эга 2026-11-28): «Янги йил арафаси» (31-декабр, 10 кун олдин) ёқилган бўлса — «Янги йил»
+ * (1-январ) эслатмаси ЮБОРИЛМАЙДИ (кунлари деярли бир хил). Калит — ёпиладиган, қиймат — устун байрам.
+ */
+const REMINDER_DEDUP = Object.freeze({ new_year: 'new_year_eve' });
+function reminderSuppressed(occ, occasions) {
+  const winner = REMINDER_DEDUP[occ && occ.id];
+  return !!winner && (occasions || []).some((o) => o && o.id === winner && o.kind === 'holiday' && o.stage && o.stage !== 'off');
+}
+/** Умумий эслатма матнига байрам мавзуси қўшилади (бўлса). */
+function withTheme(texts, theme) {
+  if (!isObj(theme)) return texts;
+  const out = {};
+  for (const l of Object.keys(texts)) {
+    const t = typeof theme[l] === 'string' ? theme[l].trim() : '';
+    out[l] = t ? { ...texts[l], body: `${texts[l].body} (${t})` } : texts[l];
+  }
+  return out;
+}
 // Совға олувчига — курьер олиб йўлга чиққанда (эга 2026-11-27: буюртма берилганда ЭМАС). Нарх йўқ.
 const GIFT_TEXT = Object.freeze({
   uz_Cyrl: { title: 'Сизга совға!', body: 'Сизга AVA орқали совға юборилди. Курьер уни олиб йўлга чиқди ва олдиндан қўнғироқ қилади.' },
@@ -262,12 +281,15 @@ function checkSelfReminders(list, errors) {
 }
 
 const OCC_KEYS = ['id', 'names', 'kind', 'bigHoliday', 'dateRule', 'remindDaysBefore', 'stage', 'order', 'image',
-  'selfReminders', 'target', 'reminderTexts'];
+  'selfReminders', 'target', 'reminderTexts', 'theme'];
+/** Мавзу изоҳи (эга 2026-11-28): саватча сарлавҳаси ва эслатмада — «гуллар, шоколад, совғалар» (3 тил, ≤ 120). */
+const THEME_MAX = 120;
 function validateOccasion(o) {
   const errors = [];
   if (!isObj(o)) return { ok: false, errors: ['OCCASION_NOT_OBJECT'] };
   for (const k of Object.keys(o)) if (!OCC_KEYS.includes(k)) errors.push(`UNKNOWN_KEY ${k}`);
   if (o.target != null) checkTarget(o.target, 'target', errors);
+  if (o.theme != null) checkNames(o.theme, 'theme', errors, THEME_MAX);
   if (o.reminderTexts != null) {
     if (o.kind !== 'holiday') errors.push('REMINDER_TEXTS_FORBIDDEN reminderTexts'); // туғилган кун (қариндош) — исмли қатъий матн
     else checkTexts(o.reminderTexts, 'reminderTexts', errors);
@@ -312,7 +334,7 @@ function normalizeOccasion(o) {
   const out = {
     id: o.id, names: o.names, kind: o.kind, bigHoliday: o.bigHoliday === true, stage: o.stage, order: o.order,
     remindDaysBefore: remindDaysOf(o), image: o.image || '', dateRule: o.kind === 'holiday' ? o.dateRule : null,
-    target: o.target || null, reminderTexts: o.reminderTexts || null,
+    target: o.target || null, reminderTexts: o.reminderTexts || null, theme: o.theme || null,
     // null — сукут (DEFAULT_SELF_REMINDERS); [] — ўчирилган.
     selfReminders: o.kind === 'birthday' && Array.isArray(o.selfReminders) ? o.selfReminders : null,
   };
@@ -755,7 +777,7 @@ function attachHoliday(exportsObj, deps) {
       .sort((a, b) => (a.order - b.order) || String(a.id).localeCompare(String(b.id)))
       .map((o) => ({
         id: o.id, names: o.names, kind: o.kind, bigHoliday: o.bigHoliday === true, image: o.image || '', order: o.order,
-        remindDaysBefore: remindDaysOf(o), nextDate: o.kind === 'holiday' ? occasionNextDate(o, today) : null,
+        remindDaysBefore: remindDaysOf(o), nextDate: o.kind === 'holiday' ? occasionNextDate(o, today) : null, theme: o.theme || null,
         target: o.target || null,
       }));
     const ids = occasions.map((o) => o.id);
@@ -920,6 +942,7 @@ function attachHoliday(exportsObj, deps) {
     const stat = { sent: 0, skipped: 0, scanned: 0, occasions: 0 };
     for (const occ of occasions) {
       if (occ.kind !== 'holiday' || occ.stage === 'off') continue;
+      if (reminderSuppressed(occ, occasions)) { stat.skipped += 1; continue; }
       const due = holidayDue(occ, today);
       if (!due.due) continue;
       stat.occasions += 1;
@@ -933,7 +956,7 @@ function attachHoliday(exportsObj, deps) {
         try {
           // Админ матни (масалан Қурбон ҳайит → Мол бозори) ва CTA мақсади бўлса — шу; йўқ бўлса — умумий сават матни.
           const tp = targetPush(occ.target || { type: 'holiday_basket', occasionId: occ.id });
-          await notifyText(uid, u.appLang, occ.reminderTexts || HOLIDAY_TEXT, params(u), {
+          await notifyText(uid, u.appLang, occ.reminderTexts || withTheme(HOLIDAY_TEXT, occ.theme), params(u), {
             source: 'holiday_reminder', dataType: 'holiday_reminder', screen: tp.screen,
             extraNews: { occasionId: occ.id, target: occ.target || null }, extraData: { occasionId: occ.id, ...tp.data },
           });
@@ -1088,6 +1111,7 @@ function attachHoliday(exportsObj, deps) {
 }
 
 module.exports = {
+  REMINDER_DEDUP, reminderSuppressed, withTheme, THEME_MAX,
   attachHoliday,
   // тоза (тестлар)
   dateKeyOf, validDateKey, addDays, daysBetween, startOfKeyMs, mdOfBirth, birthdayMdTargets, remindDaysOf, occasionNextDate,

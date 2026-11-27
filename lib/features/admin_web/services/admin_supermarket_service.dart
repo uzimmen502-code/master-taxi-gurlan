@@ -11,11 +11,12 @@
 // Харид нархи — `platform_products/{id}/private/cost` (фақат админ ўқийди).
 
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:flutter/services.dart';
 
+import '../../../repositories/service_config_repository.dart';
 import '../../supermarket/domain/sm_offer.dart';
 import '../../supermarket/domain/sm_qty.dart';
 import '../../supermarket/domain/sm_taxonomy.dart';
@@ -169,6 +170,83 @@ String hhmm(int m) => '${(m ~/ 60).toString().padLeft(2, '0')}:${(m % 60).toStri
 
 String slotLines(List<SmSlotDraft> slots) => slots.map((s) => '${hhmm(s.startMin)}-${hhmm(s.endMin)}').join('\n');
 
+/// «ҲҲ:ДД» → дақиқа (00:00..23:59); нотўғри/чала — `null` (эга 2026-11-27).
+int? parseHhMm(String raw) {
+  final m = RegExp(r'^(\d{2}):(\d{2})$').firstMatch(raw.trim());
+  if (m == null) return null;
+  final h = int.parse(m[1]!);
+  final min = int.parse(m[2]!);
+  if (h > 23 || min > 59) return null;
+  return h * 60 + min;
+}
+
+/// Вақт маскаси: фақат рақам, 2 рақамдан кейин «:» ўзи қўйилади, кўпи билан 5 белги («0930» → «09:30»).
+class HhMmInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    var digits = newValue.text.replaceAll(RegExp(r'\D'), '');
+    if (digits.length > 4) digits = digits.substring(0, 4);
+    final growing = newValue.text.length > oldValue.text.length;
+    final text = digits.length > 2
+        ? '${digits.substring(0, 2)}:${digits.substring(2)}'
+        : (digits.length == 2 && growing ? '$digits:' : digits);
+    return TextEditingValue(text: text, selection: TextSelection.collapsed(offset: text.length));
+  }
+}
+
+/// Бошланиш/тугаш жуфтларидан слотлар (ҳар иккиси бўш қатор — ташлаб кетилади). id ва тартиб —
+/// [parseSlotLines] орқали (сервер `SLOT_ID_RE`); [keepNames] — аввалги слот номлари id бўйича сақланади.
+({List<SmSlotDraft> slots, List<String> errors}) slotsFromPairs(
+  List<(String, String)> pairs, {
+  List<SmSlotDraft> keepNames = const [],
+}) {
+  final errors = <String>[];
+  final lines = <String>[];
+  for (final (a, b) in pairs) {
+    if (a.trim().isEmpty && b.trim().isEmpty) continue;
+    final s = parseHhMm(a);
+    final e = parseHhMm(b);
+    if (s == null || e == null) {
+      errors.add('${a.trim()}-${b.trim()} (ҲҲ:ДД, 00:00..23:59)');
+    } else if (e <= s) {
+      errors.add('${a.trim()}-${b.trim()} (тугаш бошланишдан кейин бўлсин)');
+    } else {
+      lines.add('${hhmm(s)}-${hhmm(e)}');
+    }
+  }
+  final parsed = parseSlotLines(lines.join('\n'));
+  final names = {for (final k in keepNames) k.id: k.names};
+  final slots = [
+    for (final s in parsed.slots) SmSlotDraft(id: s.id, startMin: s.startMin, endMin: s.endMin, names: names[s.id] ?? const {}),
+  ];
+  return (slots: slots, errors: [...errors, ...parsed.errors]);
+}
+
+/// Туман танлагич варианти: `geo_districts` id + «Гурлан тумани (Хоразм)» (Кирилл).
+class SmDistrictOption {
+  const SmDistrictOption({required this.id, required this.label, this.search = ''});
+  final String id;
+  final String label;
+
+  /// Кичик ҳарфли қидирув матни (3 тилдаги номлар + id).
+  final String search;
+}
+
+/// Номи/id бўйича қидирув (танланганлар чиқарилади), кўпи билан [limit] та.
+List<SmDistrictOption> filterSmDistricts(
+  List<SmDistrictOption> all,
+  String query, {
+  Set<String> exclude = const {},
+  int limit = 20,
+}) {
+  final q = query.trim().toLowerCase();
+  if (q.isEmpty) return const [];
+  return all
+      .where((o) => !exclude.contains(o.id) && (o.search.contains(q) || o.label.toLowerCase().contains(q)))
+      .take(limit)
+      .toList();
+}
+
 /// Таклиф формаси → `adminUpsertSupermarketOffer.offer` (сервер `OFFER_KEYS`).
 class SmOfferDraft {
   SmOfferDraft({
@@ -304,6 +382,29 @@ class AdminSupermarketService {
         'offer': draft.toOffer(),
         if (purchasePrice != null) 'cost': {'purchasePrice': purchasePrice, 'supplier': supplier ?? ''},
       });
+
+  /// Туман танлагич учун `geo_regions` + `geo_districts` (мавжуд [ServiceConfigRepository]; ўқиш очиқ).
+  /// Хато — бўш рўйхат (майдон фақат id чипларини кўрсатади).
+  Future<List<SmDistrictOption>> loadDistrictOptions() async {
+    try {
+      final repo = ServiceConfigRepository(db: _db);
+      final regions = {for (final r in await repo.fetchRegions(activeOnly: false)) r.id: r};
+      final out = <SmDistrictOption>[];
+      for (final d in await repo.fetchAllDistricts(activeOnly: false)) {
+        final r = regions[d.regionId];
+        final rn = r?.nameFor('uz_Cyrl') ?? '';
+        out.add(SmDistrictOption(
+          id: d.id,
+          label: rn.isEmpty ? d.nameFor('uz_Cyrl') : '${d.nameFor('uz_Cyrl')} ($rn)',
+          search: [d.id, d.name, d.nameUz, d.nameRu, d.nameFor('uz_Cyrl')].join(' ').toLowerCase(),
+        ));
+      }
+      out.sort((a, b) => a.label.compareTo(b.label));
+      return out;
+    } catch (_) {
+      return const [];
+    }
+  }
 
   Future<SmSettings> loadSettings() async =>
       SmSettings.fromMap((await _db.collection('settings').doc('supermarket').get()).data());

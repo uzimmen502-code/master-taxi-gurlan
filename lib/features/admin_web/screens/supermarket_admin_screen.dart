@@ -879,8 +879,14 @@ class SmSettingsAdminTab extends StatefulWidget {
 class _SmSettingsAdminTabState extends State<SmSettingsAdminTab> {
   String _stage = 'off';
   final _testers = TextEditingController();
-  final _districts = TextEditingController();
-  final _slots = TextEditingController();
+  /// Танланган туман id'лари (`geo_districts`; эга 2026-11-27 — қўлда ёзиш ўрнига қидирув).
+  List<String> _districtIds = [];
+  List<SmDistrictOption> _districtOptions = const [];
+  final _districtQuery = TextEditingController();
+
+  /// Етказиш вақтлари: ҳар қатор — бошланиш/тугаш «ҲҲ:ДД» (сақланиши — startMin/endMin, аввалгидек).
+  final _slotRows = <(TextEditingController, TextEditingController)>[];
+  List<SmSlotDraft> _loadedSlots = const [];
   final _cutoff = TextEditingController();
   final _holdPct = TextEditingController();
   final _reason = TextEditingController();
@@ -899,6 +905,39 @@ class _SmSettingsAdminTabState extends State<SmSettingsAdminTab> {
   void initState() {
     super.initState();
     _load();
+    widget.service.loadDistrictOptions().then((o) {
+      if (mounted) setState(() => _districtOptions = o);
+    });
+  }
+
+  @override
+  void dispose() {
+    _districtQuery.dispose();
+    for (final (a, b) in _slotRows) {
+      a.dispose();
+      b.dispose();
+    }
+    super.dispose();
+  }
+
+  void _setSlotRows(List<SmSlotDraft> slots) {
+    for (final (a, b) in _slotRows) {
+      a.dispose();
+      b.dispose();
+    }
+    _slotRows
+      ..clear()
+      ..addAll([
+        for (final s in slots) (TextEditingController(text: hhmm(s.startMin)), TextEditingController(text: hhmm(s.endMin))),
+      ]);
+    if (_slotRows.isEmpty) _slotRows.add((TextEditingController(), TextEditingController()));
+  }
+
+  String _districtLabel(String id) {
+    for (final o in _districtOptions) {
+      if (o.id == id) return o.label;
+    }
+    return id;
   }
 
   Future<void> _load() async {
@@ -909,8 +948,9 @@ class _SmSettingsAdminTabState extends State<SmSettingsAdminTab> {
         _stage = s.stage;
         _version = s.version;
         _testers.text = s.testerIds.join('\n');
-        _districts.text = s.districtIds.join('\n');
-        _slots.text = slotLines(s.slots);
+        _districtIds = [...s.districtIds];
+        _loadedSlots = s.slots;
+        _setSlotRows(s.slots);
         _cutoff.text = '${s.cutoffMin}';
         _holdPct.text = '${s.weighHoldPercent}';
         final cp = s.courierPayout;
@@ -926,7 +966,7 @@ class _SmSettingsAdminTabState extends State<SmSettingsAdminTab> {
   Future<void> _save() async {
     final testers = parseTesterPhones(_testers.text);
     final bad = invalidTesterPhones(testers);
-    final slots = parseSlotLines(_slots.text);
+    final slots = slotsFromPairs([for (final (a, b) in _slotRows) (a.text, b.text)], keepNames: _loadedSlots);
     final cutoff = int.tryParse(_cutoff.text.trim().isEmpty ? '0' : _cutoff.text.trim()) ?? -1;
     final hold = int.tryParse(_holdPct.text.trim()) ?? -1;
     final cpVal = int.tryParse(_cpValue.text.trim()) ?? -1;
@@ -938,7 +978,7 @@ class _SmSettingsAdminTabState extends State<SmSettingsAdminTab> {
     final settings = SmSettings(
       stage: _stage,
       testerIds: testers,
-      districtIds: _districts.text.split(RegExp(r'[\s,;]+')).map((e) => e.trim()).where((e) => e.isNotEmpty).toSet().toList(),
+      districtIds: List<String>.of(_districtIds),
       slots: slots.slots,
       cutoffMin: cutoff,
       weighHoldPercent: hold,
@@ -983,8 +1023,8 @@ class _SmSettingsAdminTabState extends State<SmSettingsAdminTab> {
           ]),
         ),
         _area('testers', 'Синовчилар (телефон, ҳар қаторда биттадан)', _testers),
-        _area('districts', 'Туманлар (districtId, масалан gurlan)', _districts),
-        _area('slots', 'Етказиш вақтлари (ҳар қаторда 10:00-12:00)', _slots),
+        _districtsEditor(),
+        _slotsEditor(),
         _field('cutoff', 'Бугунги вақт бошланишидан неча дақиқа олдин қабул тўхтайди (0..720)', _cutoff),
         _field('hold_pct', 'Тортиладиган маҳсулот учун вақтинча ушлаш, % (0..50; эга қарори — 10)', _holdPct),
         Padding(
@@ -1046,6 +1086,97 @@ class _SmSettingsAdminTabState extends State<SmSettingsAdminTab> {
       ],
     );
   }
+
+  Widget _districtsEditor() {
+    final hits = filterSmDistricts(_districtOptions, _districtQuery.text, exclude: _districtIds.toSet());
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: InputDecorator(
+        decoration: const InputDecoration(labelText: 'Туманлар', border: OutlineInputBorder()),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (_districtIds.isEmpty)
+            const Text('Туман танланмаган', style: TextStyle(color: Colors.black54))
+          else
+            Wrap(spacing: 6, runSpacing: 6, children: [
+              for (final id in _districtIds)
+                InputChip(
+                  key: ValueKey('sm_admin_district_chip_$id'),
+                  label: Text(_districtLabel(id)),
+                  deleteIcon: const Icon(Icons.close, size: 18),
+                  onDeleted: () => setState(() => _districtIds.remove(id)),
+                ),
+            ]),
+          const SizedBox(height: 8),
+          TextField(
+            key: const ValueKey('sm_admin_district_search'),
+            controller: _districtQuery,
+            decoration: InputDecoration(
+              isDense: true,
+              prefixIcon: const Icon(Icons.search),
+              hintText: _districtOptions.isEmpty ? 'Туманлар рўйхати юкланмоқда…' : 'Туман номини ёзинг (масалан, Гурлан)',
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+          for (final o in hits)
+            ListTile(
+              key: ValueKey('sm_admin_district_opt_${o.id}'),
+              dense: true,
+              leading: const Icon(Icons.add_location_alt_outlined),
+              title: Text(o.label),
+              onTap: () => setState(() {
+                _districtIds.add(o.id);
+                _districtQuery.clear();
+              }),
+            ),
+          if (_districtQuery.text.trim().isNotEmpty && hits.isEmpty && _districtOptions.isNotEmpty)
+            const Padding(padding: EdgeInsets.only(top: 6), child: Text('Топилмади', style: TextStyle(color: Colors.black54))),
+        ]),
+      ),
+    );
+  }
+
+  Widget _timeField(String key, String label, TextEditingController c) => TextField(
+        key: ValueKey(key),
+        controller: c,
+        keyboardType: TextInputType.number,
+        inputFormatters: [HhMmInputFormatter()],
+        decoration: InputDecoration(isDense: true, labelText: label, hintText: 'ҲҲ:ДД', border: const OutlineInputBorder()),
+      );
+
+  Widget _slotsEditor() => Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: InputDecorator(
+          decoration: const InputDecoration(labelText: 'Етказиш вақтлари', border: OutlineInputBorder()),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            for (var i = 0; i < _slotRows.length; i++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(children: [
+                  Expanded(child: _timeField('sm_admin_slot_start_$i', 'Бошланиш', _slotRows[i].$1)),
+                  const Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('—')),
+                  Expanded(child: _timeField('sm_admin_slot_end_$i', 'Тугаш', _slotRows[i].$2)),
+                  IconButton(
+                    key: ValueKey('sm_admin_slot_remove_$i'),
+                    tooltip: 'Ўчириш',
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: () => setState(() {
+                      final (a, b) = _slotRows.removeAt(i);
+                      a.dispose();
+                      b.dispose();
+                    }),
+                  ),
+                ]),
+              ),
+            if (_slotRows.length < 12)
+              TextButton.icon(
+                key: const ValueKey('sm_admin_slot_add'),
+                onPressed: () => setState(() => _slotRows.add((TextEditingController(), TextEditingController()))),
+                icon: const Icon(Icons.add),
+                label: const Text('Вақт қўшиш'),
+              ),
+          ]),
+        ),
+      );
 
   Widget _field(String key, String label, TextEditingController c) => Padding(
         padding: const EdgeInsets.only(top: 8),

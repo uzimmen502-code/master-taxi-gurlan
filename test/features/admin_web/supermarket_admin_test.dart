@@ -64,6 +64,12 @@ class _FakeAdmin extends AdminSupermarketService {
         version: 4,
       );
   @override
+  Future<List<SmDistrictOption>> loadDistrictOptions() async => const [
+        SmDistrictOption(id: 'gurlan', label: 'Гурлан тумани (Хоразм)', search: 'gurlan гурлан гурлен'),
+        SmDistrictOption(id: 'urganch', label: 'Урганч тумани (Хоразм)', search: 'urganch урганч ургенч'),
+        SmDistrictOption(id: 'yangiariq', label: 'Янгиариқ тумани (Хоразм)', search: 'yangiariq янгиариқ'),
+      ];
+  @override
   Future<void> saveSettings(SmSettings s, {required int expectedVersion, required String reason}) async =>
       savedSettings = (s: s, v: expectedVersion, reason: reason);
   @override
@@ -301,15 +307,19 @@ void main() {
       final s = _FakeAdmin();
       await t.pumpWidget(MaterialApp(home: Scaffold(body: SmSettingsAdminTab(service: s))));
       await t.pumpAndSettle();
-      expect(find.text('10:00-12:00'), findsOneWidget);
+      expect(find.text('10:00'), findsOneWidget);
+      expect(find.text('12:00'), findsOneWidget);
       expect(find.text('60'), findsOneWidget);
-      await t.enterText(_k('sm_admin_slots'), '10:00-12:00\n18-20');
+      await t.tap(_k('sm_admin_slot_add'));
+      await t.pumpAndSettle();
+      await t.enterText(_k('sm_admin_slot_start_1'), '18');
       await t.tap(_k('sm_admin_settings_save'));
       await t.pumpAndSettle();
       expect(s.savedSettings, isNull);
       expect(find.textContaining('Нотўғри вақт'), findsOneWidget);
       expect(find.textContaining('Сабаб ёзинг'), findsOneWidget);
-      await t.enterText(_k('sm_admin_slots'), '10:00-12:00\n15:00-17:00');
+      await t.enterText(_k('sm_admin_slot_start_1'), '1500');
+      await t.enterText(_k('sm_admin_slot_end_1'), '1700');
       await t.enterText(_k('sm_admin_cutoff'), '721');
       await t.enterText(_k('sm_admin_reason'), 'Гурлан пилот');
       await t.tap(_k('sm_admin_settings_save'));
@@ -327,6 +337,81 @@ void main() {
       expect(saved.s.districtIds, ['gurlan']);
       expect(saved.s.cutoffMin, 90);
       expect(saved.s.weighHoldPercent, 10);
+    });
+
+    testWidgets('туманлар: номи бўйича қидирув → танлаш → id сақланади; чипни ўчириш (эга 2026-11-27)', (t) async {
+      await _big(t);
+      final s = _FakeAdmin();
+      await t.pumpWidget(MaterialApp(home: Scaffold(body: SmSettingsAdminTab(service: s))));
+      await t.pumpAndSettle();
+      expect(find.text('Гурлан тумани (Хоразм)'), findsOneWidget, reason: 'мавжуд id номи билан');
+      await t.enterText(_k('sm_admin_district_search'), 'ургенч');
+      await t.pumpAndSettle();
+      expect(_k('sm_admin_district_opt_urganch'), findsOneWidget);
+      expect(_k('sm_admin_district_opt_gurlan'), findsNothing);
+      await t.tap(_k('sm_admin_district_opt_urganch'));
+      await t.pumpAndSettle();
+      expect(_k('sm_admin_district_chip_urganch'), findsOneWidget);
+      await t.enterText(_k('sm_admin_district_search'), 'гурлан');
+      await t.pumpAndSettle();
+      expect(_k('sm_admin_district_opt_gurlan'), findsNothing, reason: 'танланган қайта чиқмайди');
+      await t.enterText(_k('sm_admin_district_search'), 'yangi');
+      await t.pumpAndSettle();
+      await t.tap(_k('sm_admin_district_opt_yangiariq'));
+      await t.pumpAndSettle();
+      await t.tap(find.descendant(of: _k('sm_admin_district_chip_gurlan'), matching: find.byIcon(Icons.close)));
+      await t.pumpAndSettle();
+      await t.enterText(_k('sm_admin_reason'), 'туманлар');
+      await t.tap(_k('sm_admin_settings_save'));
+      await t.pumpAndSettle();
+      expect(s.savedSettings!.s.districtIds, ['urganch', 'yangiariq']);
+    });
+
+    testWidgets('вақт маскаси: «0930» → «09:30» → 570; 25:00 ва тугаш ≤ бошланиш рад (эга 2026-11-27)', (t) async {
+      await _big(t);
+      final s = _FakeAdmin();
+      await t.pumpWidget(MaterialApp(home: Scaffold(body: SmSettingsAdminTab(service: s))));
+      await t.pumpAndSettle();
+      await t.enterText(_k('sm_admin_reason'), 'вақтлар');
+      await t.enterText(_k('sm_admin_slot_start_0'), '0930');
+      await t.enterText(_k('sm_admin_slot_end_0'), '11ab30999');
+      await t.pumpAndSettle();
+      expect(find.text('09:30'), findsOneWidget);
+      expect(find.text('11:30'), findsOneWidget, reason: 'фақат рақам, 5 белги');
+      await t.enterText(_k('sm_admin_slot_start_0'), '2500');
+      await t.tap(_k('sm_admin_settings_save'));
+      await t.pumpAndSettle();
+      expect(s.savedSettings, isNull);
+      expect(find.textContaining('25:00-11:30'), findsOneWidget);
+      await t.enterText(_k('sm_admin_slot_start_0'), '1130');
+      await t.tap(_k('sm_admin_settings_save'));
+      await t.pumpAndSettle();
+      expect(s.savedSettings, isNull, reason: 'тугаш = бошланиш');
+      expect(find.textContaining('тугаш бошланишдан кейин'), findsOneWidget);
+      await t.enterText(_k('sm_admin_slot_start_0'), '1200');
+      await t.tap(_k('sm_admin_settings_save'));
+      await t.pumpAndSettle();
+      expect(s.savedSettings, isNull, reason: 'тугаш < бошланиш');
+      await t.enterText(_k('sm_admin_slot_start_0'), '0930');
+      await t.tap(_k('sm_admin_settings_save'));
+      await t.pumpAndSettle();
+      final slot = s.savedSettings!.s.slots.single;
+      expect((slot.id, slot.startMin, slot.endMin), ('s0930_1130', 570, 690));
+    });
+
+    test('parseHhMm / HhMmInputFormatter чегаралари', () {
+      expect(parseHhMm('00:00'), 0);
+      expect(parseHhMm('23:59'), 1439);
+      expect(parseHhMm('24:00'), isNull);
+      expect(parseHhMm('12:60'), isNull);
+      expect(parseHhMm('9:30'), isNull);
+      final f = HhMmInputFormatter();
+      TextEditingValue up(String o, String n) =>
+          f.formatEditUpdate(TextEditingValue(text: o), TextEditingValue(text: n));
+      expect(up('0', '09').text, '09:');
+      expect(up('09:', '09').text, '09', reason: 'ўчиришда «:» қайта қўшилмайди');
+      expect(up('09:3', '09:30').text, '09:30');
+      expect(up('09:30', '09:301').text, '09:30');
     });
 
     testWidgets('таксономия: хулоса; фақат categories + expectedVersion; нотўғри JSON сақланмайди', (t) async {

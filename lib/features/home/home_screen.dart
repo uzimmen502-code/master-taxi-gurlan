@@ -81,6 +81,9 @@ import '../intercity_taxi/driver/intercity_driver_resume.dart';
 import '../intercity_taxi/passenger/screens/intercity_taxi_screen.dart';
 import '../../models/job_ad.dart';
 import '../jobs/screens/jobs_screen.dart';
+import '../factories/screens/factories_screen.dart';
+import '../vacancies/screens/vacancies_screen.dart';
+import '../vacancies/screens/vacancy_detail_screen.dart';
 import '../local_taxi/passenger/screens/local_taxi_active_trip_screen.dart';
 import '../local_taxi/passenger/screens/local_taxi_screen.dart';
 import '../local_taxi/passenger/screens/searching_screen.dart';
@@ -1914,6 +1917,35 @@ class _HomeViewState extends State<_HomeView> {
                               title: context.tr('home_lite_section_transport'),
                               cards: _transportCards(),
                             ),
+                            // «Ишлаб чиқарувчи завод/фабрикалар» ва «Иш ўринлари — Вакансиялар» — алоҳида бўлимлар (эга 2026-11-28).
+                            HomeLiteSection(
+                              key: const ValueKey('home_section_factories'),
+                              title: context.tr('home_lite_section_factories'),
+                              cards: [
+                                if (homeFactoriesCardVisible(HomeModuleGate.showInGrid))
+                                  HomeLiteCardData(
+                                    id: 'factories',
+                                    title: context.tr('factory_title'),
+                                    caption: context.tr('home_lite_factories_caption'),
+                                    imagePath: kHomeFactoriesCardImage,
+                                    onTap: () => _openGated('business_map', const FactoriesScreen()),
+                                  ),
+                              ],
+                            ),
+                            HomeLiteSection(
+                              key: const ValueKey('home_section_vacancies'),
+                              title: context.tr('home_lite_section_vacancies'),
+                              cards: [
+                                if (homeVacanciesCardVisible(HomeModuleGate.showInGrid))
+                                  HomeLiteCardData(
+                                    id: 'vacancies',
+                                    title: context.tr('vac_title'),
+                                    caption: context.tr('home_lite_vacancies_caption'),
+                                    imagePath: kHomeVacanciesCardImage,
+                                    onTap: () => _openGated('jobs', const VacanciesScreen()),
+                                  ),
+                              ],
+                            ),
                             // Ресторанлар тасмаси (кафе карточкалари, «Уй таоми» белгиси) — аввалгидек (эга 2026-11-20 «б»), [kHomeShowRestaurantsStrip].
                             if (kHomeShowRestaurantsStrip) ...[
                               const SizedBox(height: AvaSpace.homeSection),
@@ -1956,6 +1988,8 @@ class _HomeViewState extends State<_HomeView> {
                                     highlightAdId: ad.id,
                                   ),
                                 ),
+                                // Янги вакансия (≤ 1 кун) — шу тасмада ҳам (эга 2026-11-28).
+                                onOpenVacancy: (ad) => _push(VacancyDetailScreen(ad: ad)),
                                 onOpenShopItem: _openHomeShopItem,
                                 onOpenRealty: _openAralashRealty,
                                 onOpenRestaurant: (r) => _push(

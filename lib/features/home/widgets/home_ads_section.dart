@@ -11,6 +11,7 @@ import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/fair_mix.dart';
 import '../../../core/utils/session_shuffle.dart';
 import '../../../models/job_ad.dart';
+import '../../vacancies/domain/job_vacancy.dart';
 import '../../../models/realty_listing.dart';
 import '../../../repositories/jobs_repository.dart';
 import '../../../repositories/realty_repository.dart';
@@ -41,8 +42,21 @@ class HomeAdsSection extends StatefulWidget {
     this.onOpenShopItem,
     this.onOpenRealty,
     this.onOpenRestaurant,
+    this.onOpenVacancy,
     this.watchJobs,
+    this.watchVacancies,
   });
+
+  /// «Вакансиялар» (эга 2026-11-28): янги вакансия (≤ [JobVacancy.newWindow]) шу тасмада ҳам — фақат `adType == 'ad'`;
+  /// кейин фақат «Вакансиялар» бўлимида. `null` — кўрсатилмайди.
+  final void Function(JobAd vacancy)? onOpenVacancy;
+
+  /// Тест учун вакансиялар оқими (сукут — [JobsRepository.watchVacancies]).
+  @visibleForTesting
+  final Stream<List<JobAd>> Function()? watchVacancies;
+
+  /// Тасмадаги янги вакансиялар сони.
+  static const newVacanciesLimit = 3;
 
   /// «Яқиндаги эълонлар» қўшимчалари (фақат `adType == 'ad'`, эга 2026-11-16/17): мол/мошина (таксономия
   /// `showInNearbyAds`), деҳқон (дўкон эмас), ишлатилган хусусий электроника/маиший техника, ҳар қандай
@@ -92,6 +106,7 @@ class _HomeAdsSectionState extends State<HomeAdsSection> {
 
   List<NearbyAdExtra> _extras = const [];
   List<Restaurant> _newCooks = const [];
+  List<JobAd> _newVacancies = const [];
 
   bool get _withExtras => widget.adType == 'ad';
 
@@ -101,6 +116,17 @@ class _HomeAdsSectionState extends State<HomeAdsSection> {
     _listen();
     if (_withExtras && (widget.onOpenShopItem != null || widget.onOpenRealty != null)) unawaited(_loadExtras());
     if (_withExtras && widget.onOpenRestaurant != null) unawaited(_loadNewCooks());
+    if (_withExtras && widget.onOpenVacancy != null) unawaited(_loadNewVacancies());
+  }
+
+  Future<void> _loadNewVacancies() async {
+    final list = await _safe(
+        () => (widget.watchVacancies?.call() ?? _repo.watchVacancies(GeoContext.homeScopeFor('jobs'), limit: 10))
+            .first,
+        const <JobAd>[],
+        'HOME_ADS_VACANCIES_FAILED');
+    if (!mounted) return;
+    setState(() => _newVacancies = newVacanciesForStrip(list, DateTime.now(), limit: HomeAdsSection.newVacanciesLimit));
   }
 
   static Future<T> _safe<T>(Future<T> Function() f, T fallback, String code) async {
@@ -235,7 +261,7 @@ class _HomeAdsSectionState extends State<HomeAdsSection> {
       keys: widget.adType == 'service'
           ? HomeDemoFeed.serviceKeys
           : HomeDemoFeed.adKeys,
-      realCount: _items.length + _extras.length + _newCooks.length,
+      realCount: _items.length + _extras.length + _newCooks.length + _newVacancies.length,
       random: _rnd,
     );
     return AvaSection(
@@ -258,6 +284,13 @@ class _HomeAdsSectionState extends State<HomeAdsSection> {
                 title: newHomeCookTitle(context.tr('home_ads_new_home_cook'), r),
                 badge: context.tr('home_badge_home_food'),
                 onTap: () => _openNewCook(r),
+              ),
+            for (final v in _newVacancies)
+              _AdTitleRow(
+                key: ValueKey('home_ads_vacancy_${v.id}'),
+                title: v.titleOrText,
+                badge: context.tr('home_badge_vacancy'),
+                onTap: () => widget.onOpenVacancy?.call(v),
               ),
             // Иш/хизмат эълонлари аввалгидек; қўшимчалар навбатма-навбат аралашади.
             for (final entry in FairMix.roundRobin<Object>([_items, _extras]))
@@ -332,4 +365,12 @@ class _AdTitleRow extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Тасмага тушадиган вакансиялар (соф функция): тузилмали, муддати ўтмаган, ≤ [JobVacancy.newWindow] эски;
+/// энг янгиси биринчи, [limit] гача.
+List<JobAd> newVacanciesForStrip(Iterable<JobAd> all, DateTime now, {int limit = 3}) {
+  final list = [for (final a in all) if (a.isVacancy && !a.isExpired && JobVacancy.isNew(a.createdAt, now)) a]
+    ..sort((a, b) => b.createdAt!.compareTo(a.createdAt!));
+  return list.take(limit).toList(growable: false);
 }

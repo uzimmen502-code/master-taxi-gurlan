@@ -256,3 +256,15 @@ List<String> homeTransportCardIds(bool Function(String moduleId) isVisible) => [
       for (final id in kHomeTransportModuleIds)
         if (isVisible(id)) id,
     ];
+
+/// «Ишлаб чиқарувчи завод/фабрикалар» бўлими (эга 2026-11-28): завод = бизнес харитаси объекти, шунинг учун
+/// `business_map` дарвозаси. Расм — эга расми (30.webp → 400×230, тепадаги бўш осмон кесилган).
+const kHomeFactoriesCardImage = 'assets/images/home/card_factories_v1.webp';
+
+bool homeFactoriesCardVisible(bool Function(String moduleId) isVisible) => isVisible('business_map');
+
+/// «Иш ўринлари — Вакансиялар» бўлими (эга 2026-11-28): мавжуд `jobs` модули (`ads` type `work`).
+/// Расм — эга расми (33.webp «IŞGA TAKLIF!», ўзгаришсиз).
+const kHomeVacanciesCardImage = 'assets/images/home/card_vacancies_v1.webp';
+
+bool homeVacanciesCardVisible(bool Function(String moduleId) isVisible) => isVisible('jobs');

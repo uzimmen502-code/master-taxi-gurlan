@@ -44,6 +44,7 @@ import 'wholesale_moderation_screen.dart';
 import 'wholesale_orders_admin_screen.dart';
 import 'china_inquiries_admin_screen.dart';
 import 'business_admin_screen.dart';
+import 'producer_verification_admin_screen.dart';
 import 'shop_admin_screen.dart';
 import 'marshrut_admin_screen.dart';
 import 'marshrut_dispatch_history_screen.dart';
@@ -428,6 +429,13 @@ class _AdminShellState extends State<AdminShell> {
       icon: Icons.add_business_outlined,
       description: 'Эгалар қўшган объектлар — таҳрирлаш ва ўчириш',
     ),
+    // Эга қарори 2026-11-28: «Тасдиқланган ишлаб чиқарувчи» — АВТО/ҚЎЛДА + тасдиқ рўйхати, AVA'га таъминотчилар.
+    _AdminSection(
+      group: 'Бозорлар ва эълонлар',
+      label: 'Ишлаб чиқарувчилар',
+      icon: Icons.factory_outlined,
+      description: 'Заводларни тасдиқлаш (авто/қўлда), AVA\'га таъминотчи бўлишга тайёрлар',
+    ),
     // Эга қарори 2026-10-25: битта сотувчининг онлайн дўкони, йўналишлари ва маҳсулотлари — блоклаш/очиш бир жойда.
     _AdminSection(
       group: 'Бозорлар ва эълонлар',
@@ -745,6 +753,9 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'Бизнес харитаси') {
       return const BusinessAdminScreen();
+    }
+    if (section.label == 'Ишлаб чиқарувчилар') {
+      return const ProducerVerificationAdminScreen();
     }
     if (section.label == 'Онлайн дўконлар') {
       return const ShopAdminScreen();

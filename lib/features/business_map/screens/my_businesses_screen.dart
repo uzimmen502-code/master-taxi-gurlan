@@ -5,6 +5,8 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/celebration_dialog.dart';
+import '../../factories/domain/factory_profile.dart';
+import '../../factories/screens/factory_manage_screen.dart';
 import '../../my_shop/shop_opened_celebration.dart';
 import '../../tv_market/repositories/tv_shop_repository.dart';
 import '../business_food_flow.dart' show openBusinessMenuFlow;
@@ -272,6 +274,16 @@ class _MyBusinessesScreenState extends State<MyBusinessesScreen> {
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      // Завод (эга 2026-11-28): тури «Ишлаб чиқариш» — уланишлар ва тасдиқ ([FactoryManageScreen]).
+                      if (isFactoryBusiness(b))
+                        IconButton(
+                          key: ValueKey('my_biz_factory_${b.id}'),
+                          tooltip: context.tr('factory_manage_title'),
+                          icon: const Icon(Icons.factory_rounded),
+                          onPressed: () => Navigator.of(context).push<void>(
+                            MaterialPageRoute(builder: (_) => FactoryManageScreen(business: b)),
+                          ),
+                        ),
                       IconButton(
                         key: ValueKey('my_biz_edit_${b.id}'),
                         tooltip: context.tr('edit'),

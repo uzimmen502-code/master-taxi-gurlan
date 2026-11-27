@@ -20,6 +20,7 @@ class JobAdService {
     String priceText = '',
     bool isUrgent = false,
     String requestId = '',
+    Map<String, Object?>? vacancy,
   }) async {
     final res = await _fn.httpsCallable('submitJobAd').call({
       ...ServiceConfigHolder.moduleGeoField,
@@ -29,6 +30,8 @@ class JobAdService {
       if (priceText.isNotEmpty) 'priceText': priceText,
       'isUrgent': isUrgent,
       if (requestId.isNotEmpty) 'requestId': requestId,
+      // «Вакансиялар» (эга 2026-11-28): type `work` — сервер шарт қилади (`JobVacancy.payload`).
+      if (vacancy != null) 'vacancy': vacancy,
     });
     final data = Map<String, dynamic>.from(res.data as Map);
     return (

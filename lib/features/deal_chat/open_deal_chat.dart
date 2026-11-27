@@ -22,6 +22,9 @@ abstract final class DealChatSource {
   /// «Менинг бизнесим» объекти (`businesses`): `productId` = объект ID, чат ID `bz-{businessId}_{харидор}`
   /// (сервер 2026-11-03). Объект варағи ва объект саҳифасидаги «Ёзиш».
   static const business = 'business';
+
+  /// «Вакансиялар» (эга 2026-11-28): «Ариза бериш» — productId = вакансия (ds, type work), чат ID c-….
+  static const vacancy = 'vacancy';
 }
 
 /// Объект чатида сервер кодлари маҳсулот эмас, объект ҳақида гапиради.

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../factories/domain/factory_profile.dart';
 import 'business_category.dart';
 
 /// `businesses/{id}` — тадбиркорлик объекти (эга ўзи қўшади; ёзув фақат Cloud Functions орқали).
@@ -28,7 +29,15 @@ class Business {
     this.online = false,
     this.branchOf = '',
     this.restaurantId = '',
+    this.factoryOptions = FactoryOptions.none,
+    this.producerStatus = ProducerStatus.none,
   });
+
+  /// Завод танлови (`factory`, эга 2026-11-28) — ФАҚАТ сервер `setMyFactoryOptions` ёзади; [toCallable]да йўқ.
+  final FactoryOptions factoryOptions;
+
+  /// «Тасдиқланган ишлаб чиқарувчи» ҳолати (`producerVerification.status`) — фақат сервер; '' — сўралмаган.
+  final String producerStatus;
 
   /// Фақат онлайн йўналиш (жисмоний жойи йўқ): координатасиз, харитада чизилмайди ([lat]/[lng] = 0).
   final bool online;
@@ -119,8 +128,19 @@ class Business {
       online: online,
       branchOf: _s(d['branchOf']),
       restaurantId: _s(d['restaurantId']),
+      factoryOptions: FactoryOptions.fromMap(d['factory']),
+      producerStatus: ProducerStatus.fromMap(d['producerVerification']),
     );
   }
+
+  /// Завод танлови/тасдиқ ҳолати янгиланган нусха (`setMyFactoryOptions` жавобидан кейин экранда).
+  Business withFactory({FactoryOptions? options, String? producer}) => Business(
+        id: id, ownerId: ownerId, name: name, category: category, phone: phone, lat: lat, lng: lng,
+        subtype: subtype, description: description, address: address, regionId: regionId, districtId: districtId,
+        openingHours: openingHours, website: website, createdAt: createdAt, updatedAt: updatedAt, status: status,
+        online: online, branchOf: branchOf, restaurantId: restaurantId,
+        factoryOptions: options ?? factoryOptions, producerStatus: producer ?? producerStatus,
+      );
 
   /// `upsertMyBusiness` / `adminUpdateBusiness` майдонлари (id, clientRequestId, reason — чақирувчида).
   Map<String, Object?> toCallable() => {

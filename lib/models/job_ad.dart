@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../features/vacancies/domain/job_vacancy.dart';
+
 /// Эълон тури — иш, хизмат, оддий эълон (Иш топ doskasi).
 enum AdKind { work, service, ad }
 
@@ -109,7 +111,14 @@ class JobAd {
     this.moderatedBy = '',
     this.districtId = '',
     this.regionId = '',
+    this.vacancy,
   });
+
+  /// «Вакансиялар» (эга 2026-11-28): type `work` + сервер ёзган `vacancy`; бошқаларда `null`.
+  final JobVacancy? vacancy;
+
+  /// Тузилмали иш берувчи вакансияси (эски «Иш бор» эълонлари эмас).
+  bool get isVacancy => type == 'work' && vacancy != null;
 
   final String id;
 
@@ -220,6 +229,7 @@ class JobAd {
       moderatedBy: (d['moderatedBy'] ?? '') as String,
       districtId: ((d['districtId'] ?? '') as String).trim(),
       regionId: ((d['regionId'] ?? '') as String).trim(),
+      vacancy: d['type'] == 'work' ? JobVacancy.tryParse(d['vacancy']) : null,
     );
   }
 }

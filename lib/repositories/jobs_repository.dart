@@ -99,6 +99,26 @@ class JobsRepository {
   }
 
 
+  /// «Вакансиялар» (эга 2026-11-28): ҳудуд ҳалқалари бўйича фаол вакансиялар — [watchScoped] (`work` тури,
+  /// мавжуд индекслар) + фақат тузилмали `vacancy` (эски «Иш бор» эълонлари чиқмайди).
+  Stream<List<JobAd>> watchVacancies(GeoScope scope, {int limit = 200}) =>
+      watchScoped(scope, types: const ['work'], limit: limit)
+          .map((list) => list.where((a) => a.isVacancy).toList(growable: false));
+
+  /// Иш берувчининг (завод саҳифаси) фаол вакансиялари: `vacancy.employerKey` + `status` — фақат тенглик
+  /// филтрлари (композит индекс керак эмас); тартиб ва муддат — мижозда.
+  Future<List<JobAd>> fetchEmployerVacancies(String employerKey, {int limit = 30}) async {
+    if (employerKey.isEmpty) return const [];
+    final snap = await _ads
+        .where('vacancy.employerKey', isEqualTo: employerKey)
+        .where('status', isEqualTo: 'active')
+        .limit(limit)
+        .get();
+    final list = snap.docs.map(JobAd.fromDoc).where((a) => a.isVacancy && !a.isExpired).toList();
+    list.sort((a, b) => (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)));
+    return list;
+  }
+
   /// Иш / хизмат / эълон feed (актив) — энг янгилари (`orderBy` — юқорига
   /// қаранг).
   Stream<List<JobAd>> watchAllActive({int limit = 500}) {

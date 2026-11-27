@@ -951,3 +951,8 @@ HolidayOccasion? holidayThemeNow(Iterable<HolidayOccasion> occasions, DateTime t
   }
   return best;
 }
+/// Совға/байрам етказиш санаси (эга 2026-11-28, вақт оралиғисиз): бугун..+[maxDays] (сервер ҳам текширади).
+List<DateTime> smDeliveryDates(DateTime today, {int maxDays = kSmDeliveryMaxDays}) {
+  final t = DateTime(today.year, today.month, today.day);
+  return [for (var i = 0; i <= maxDays; i++) DateTime(t.year, t.month, t.day + i)];
+}

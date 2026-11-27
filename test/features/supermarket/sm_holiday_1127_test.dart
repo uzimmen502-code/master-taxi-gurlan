@@ -115,7 +115,6 @@ void main() {
         pickArea: (_) async => null,
       )));
       await t.pumpAndSettle();
-      await t.tap(_k('sm_slot_s1'));
       await t.enterText(_k('sm_addr_phone'), '+998 90 123 45 67');
       await t.pump();
       expect(_k('sm_incentive_estimate'), findsOneWidget);
@@ -126,7 +125,7 @@ void main() {
       await t.tap(_k('sm_confirm'));
       await t.pumpAndSettle();
       expect(api.payloads.single['useIncentive'], isTrue);
-      expect(api.payloads.single['day'], 'today');
+      expect(api.payloads.single.containsKey('day'), isFalse);
 
       await t.pumpWidget(const SizedBox());
       final c2 = _controller()..addToCart('p1', 1000);
@@ -156,7 +155,6 @@ void main() {
         pickArea: (_) async => null,
       )));
       await t.pumpAndSettle();
-      await t.tap(_k('sm_slot_s1'));
       await t.enterText(_k('sm_addr_phone'), '+998 90 123 45 67');
       await t.pump();
       await t.ensureVisible(_k('sm_confirm'));

@@ -187,8 +187,6 @@ void main() {
     Future<void> fill(WidgetTester t) async {
       await t.pumpAndSettle();
       await t.enterText(_k('sm_addr_phone'), '+998 90 123 45 67');
-      await t.ensureVisible(_k('sm_slot_s1'));
-      await t.tap(_k('sm_slot_s1'));
       await t.pump();
     }
 
@@ -204,7 +202,9 @@ void main() {
         pickArea: (_) async => null,
       )));
       await t.pumpAndSettle();
-      expect(t.widget<FilledButton>(_k('sm_confirm')).onPressed, isNull, reason: 'вақт танланмаган');
+      // Эга 2026-11-28: вақт оралиғи йўқ — «имкон қадар тез» матни, танлаш шарт эмас.
+      expect(_k('sm_delivery_asap'), findsOneWidget);
+      expect(_k('sm_slot_s1'), findsNothing);
       await fill(t);
       await t.ensureVisible(_k('sm_confirm'));
       await t.tap(_k('sm_confirm'));
@@ -213,8 +213,8 @@ void main() {
       await t.tap(_k('sm_confirm'));
       await t.pumpAndSettle();
       expect(api.payloads.map((p) => p['clientRequestId']), ['key-1', 'key-1']);
-      expect(api.payloads.last['slotId'], 's1');
-      expect(api.payloads.last['day'], 'today');
+      expect(api.payloads.last.containsKey('slotId'), isFalse); // эга 2026-11-28: вақт оралиғи йўқ
+      expect(api.payloads.last.containsKey('day'), isFalse);
       expect((api.payloads.last['address'] as Map)['phone'], '+998 90 123 45 67');
       expect(_k('sm_order_done'), findsOneWidget);
       expect(c.cart.isEmpty, isTrue);
@@ -312,7 +312,6 @@ void main() {
       await t.pumpWidget(_app(SmCheckoutScreen(controller: c, balance: Stream.value(1000000))));
       await t.pumpAndSettle();
       await t.enterText(_k('sm_addr_phone'), '+998901234567');
-      await t.tap(_k('sm_slot_s1'));
       await t.pump();
       await t.tap(_k('sm_confirm'));
       await t.pumpAndSettle();

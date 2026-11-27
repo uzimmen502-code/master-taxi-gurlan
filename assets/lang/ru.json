@@ -6182,6 +6182,7 @@
   "sm_addr_landmark": "Ориентир",
   "sm_addr_phone": "Телефон",
   "sm_delivery_time": "Время доставки",
+  "sm_delivery_asap": "Доставим как можно быстрее — сообщим, когда курьер выедет.",
   "sm_no_slots": "Пока нет свободного времени",
   "sm_day_today": "Сегодня",
   "sm_day_tomorrow": "Завтра",

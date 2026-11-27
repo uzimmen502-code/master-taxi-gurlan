@@ -324,8 +324,6 @@ void main() {
     await t.enterText(find.byKey(const ValueKey('sm_addr_mahalla')), 'Наврўз МФЙ');
     await t.enterText(find.byKey(const ValueKey('sm_addr_street')), 'Мустақиллик кўчаси');
     await t.enterText(find.byKey(const ValueKey('sm_addr_house')), '12');
-    await t.ensureVisible(find.byKey(const ValueKey('sm_slot_s15')));
-    await t.tap(find.byKey(const ValueKey('sm_slot_s15')));
     FocusManager.instance.primaryFocus?.unfocus();
     await t.pump(const Duration(milliseconds: 300));
   }

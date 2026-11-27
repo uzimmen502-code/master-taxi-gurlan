@@ -247,6 +247,15 @@ void main() {
       expect(o('a', '2027-02-12', theme: false).toAdminMap().containsKey('theme'), isFalse);
     });
 
+    test('сана (эга 2026-11-28, вақт оралиғисиз): бугун..+14 — 15 кун, ой/йил чегараси; оддий payload slotId/day ЙЎҚ', () {
+      final d = smDeliveryDates(DateTime(2026, 12, 25), maxDays: 14);
+      expect([d.length, smIsoDate(d.first), smIsoDate(d.last)], [15, '2026-12-25', '2027-01-08']);
+      final p = smOrderPayload(clientRequestId: 'k', cart: SmCart.empty.add('p1', 1000), address: const {});
+      expect([p.containsKey('slotId'), p.containsKey('day')], [false, false]);
+      final h = smHolidayOrderPayload(clientRequestId: 'k', cart: SmCart.empty.add('p1', 1000), address: const {}, deliveryDate: '2026-12-30');
+      expect([h['deliveryDate'], h.containsKey('slotId')], ['2026-12-30', false]);
+    });
+
     // Эга 2026-11-28: ҳафталик саватча — байрамга боғлиқ эмас, фақат супермаркет рухсати.
     test('ҳафталик саватча картаси: супермаркет очиқ + рухсат (байрам шарт ЭМАС)', () {
       expect(holidayCardVisible(smOpenable: true, smAllowed: true), isTrue);
@@ -491,9 +500,10 @@ void main() {
       expect(_k('sm_date_2026-12-20'), findsNothing, reason: '14 кундан кейин');
       expect(_k('sm_gift_info'), findsOneWidget);
 
+      await t.ensureVisible(_k('sm_date_2026-12-05'));
+      await t.pumpAndSettle();
       await t.tap(_k('sm_date_2026-12-05'));
       await t.pump();
-      await t.tap(_k('sm_slot_s9'));
       await t.enterText(_k('sm_addr_phone'), '+998 90 123 45 67');
       await t.pump();
       // Совға телефони йўқ — босилганда хато кўрсатилади, сервер чақирилмайди.
@@ -511,7 +521,7 @@ void main() {
       await t.pumpAndSettle();
       final p = api.payloads.single;
       expect(p['deliveryDate'], '2026-12-05');
-      expect(p['slotId'], 's9');
+      expect(p.containsKey('slotId'), isFalse); // эга 2026-11-28: фақат сана
       expect(p['origin'], 'holiday');
       expect(p['useIncentive'], isTrue);
       expect(p['occasionId'], 'birthday');

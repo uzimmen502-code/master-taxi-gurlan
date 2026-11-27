@@ -206,8 +206,9 @@ Map<String, dynamic> smOrderPayload({
   required String clientRequestId,
   required SmCart cart,
   required Map<String, dynamic> address,
-  required String slotId,
-  required String day,
+  // Эга 2026-11-28: вақт оралиғи йўқ — имкон қадар тез (сервер slotId'сиз = бугун). Эски шакл учун ихтиёрий.
+  String slotId = '',
+  String day = '',
   String origin = smOriginCatalog,
 }) =>
     {
@@ -216,8 +217,8 @@ Map<String, dynamic> smOrderPayload({
         for (final l in cart.lines) {'productId': l.productId, 'qty': smFromMilli(l.qtyMilli)},
       ],
       'address': address,
-      'slotId': slotId,
-      'day': day,
+      if (slotId.isNotEmpty) 'slotId': slotId,
+      if (slotId.isNotEmpty && day.isNotEmpty) 'day': day,
       'origin': smOrigins.contains(origin) ? origin : smOriginCatalog,
       // Эга 2026-11-27: бонус ҲАММА супермаркет буюртмасида — қанча қўлланишини сервер ҳал қилади.
       'useIncentive': true,
@@ -229,7 +230,7 @@ Map<String, dynamic> smHolidayOrderPayload({
   required String clientRequestId,
   required SmCart cart,
   required Map<String, dynamic> address,
-  required String slotId,
+  String slotId = '',
   required String deliveryDate,
   SmGift? gift,
   String occasionId = '',
@@ -242,7 +243,7 @@ Map<String, dynamic> smHolidayOrderPayload({
         for (final l in cart.lines) {'productId': l.productId, 'qty': smFromMilli(l.qtyMilli)},
       ],
       'address': address,
-      'slotId': slotId,
+      if (slotId.isNotEmpty) 'slotId': slotId,
       'deliveryDate': deliveryDate,
       // Эга 2026-11-28: ҳафталик саватчадан — 'weekly' (сервер deliveryDate'ни ҳар қандай манбада қабул қилади).
       'origin': origin == smOriginWeekly ? smOriginWeekly : smOriginHoliday,

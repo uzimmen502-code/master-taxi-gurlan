@@ -57,6 +57,8 @@ const TECHPASS = 'insurance_techpass_files';
 const TECHPASS_SIDES = Object.freeze(['front', 'back']);
 /** Полис берилгач/ариза бекор қилингач шунча кундан кейин расмлар ўчирилади (PII, 40-банд; PROPOSED). */
 const TECHPASS_PURGE_DAYS = 30;
+/** Техпаспорт ҳаволаси амал қилиш вақти (эга 2026-11-28: ≤ 10 дақ, ҳар чақирувда янги). */
+const TECHPASS_LINK_TTL_MS = 10 * 60 * 1000;
 const EXPIRY = 'insurance_expiry_index';
 const REMIND_LOG = 'insurance_reminder_log';
 const REPORTS = 'insurance_service_reports';
@@ -536,11 +538,21 @@ function attachCarInsurance(exportsObj, deps) {
   const tail = (p) => `***${String(p || '').slice(-4)}`;
   /** Storage: {save(path, buf, contentType) → {token, bucket}}; тестда алмаштирилади. */
   const storage = deps.storage || {
-    async save(path, buf, contentType) {
+    async save(path, buf, contentType, opts = {}) {
       const bucket = admin.storage().bucket();
+      // opts.noToken — download token ЙЎҚ (техпаспорт: доимий ҳавола бўлмасин; кўриш — қисқа муддатли signed URL).
+      if (opts.noToken) {
+        await bucket.file(path).save(buf, { resumable: false, metadata: { contentType } });
+        return { token: null, bucket: bucket.name };
+      }
       const token = crypto.randomUUID();
       await bucket.file(path).save(buf, { resumable: false, metadata: { contentType, metadata: { firebaseStorageDownloadTokens: token } } });
       return { token, bucket: bucket.name };
+    },
+    /** V4 signed URL (ўқиш, [ttlMs]). Талаб: функция хизмат ҳисобига iam.serviceAccounts.signBlob (Token Creator). */
+    async signedUrl(path, ttlMs) {
+      const [url] = await admin.storage().bucket().file(path).getSignedUrl({ version: 'v4', action: 'read', expires: Date.now() + ttlMs });
+      return url;
     },
     async remove(path) {
       await admin.storage().bucket().file(path).delete({ ignoreNotFound: true });
@@ -989,13 +1001,13 @@ function attachCarInsurance(exportsObj, deps) {
     if (!pre.exists || pre.data().uid !== key) throw fail('not-found', 'REQUEST_NOT_FOUND');
     if (pre.data().status !== 'requested') throw fail('failed-precondition', 'REQUEST_CLOSED');
     const path = `insurance_techpass/${requestId}/${side}_${crypto.randomUUID()}.${kind.ext}`;
-    const saved = await storage.save(path, buf, kind.contentType);
+    const saved = await storage.save(path, buf, kind.contentType, { noToken: true });
     const fileRef = db.collection(TECHPASS).doc(requestId);
     const old = await db.runTransaction(async (t) => {
       const [rs, fs] = await Promise.all([t.get(reqRef), t.get(fileRef)]);
       if (rs.data().status !== 'requested') throw fail('failed-precondition', 'REQUEST_CLOSED');
       const prev = fs.exists ? (fs.data() || {})[side] : null;
-      t.set(fileRef, { requestId, uid: key, [side]: { path, bucket: saved.bucket, token: saved.token, contentType: kind.contentType, size: buf.length, at: TS.fromMillis(now()) } }, { merge: true });
+      t.set(fileRef, { requestId, uid: key, [side]: { path, bucket: saved.bucket, contentType: kind.contentType, size: buf.length, at: TS.fromMillis(now()) } }, { merge: true });
       t.update(reqRef, { [`techPassport.${side}`]: true, 'techPassport.updatedAt': ts(), updatedAt: ts() });
       event(t, requestId, `techpass_${side}`, key, { size: buf.length });
       return prev && prev.path ? prev.path : null;
@@ -1007,7 +1019,10 @@ function attachCarInsurance(exportsObj, deps) {
     return { ok: true, side };
   });
 
-  /** Техпаспорт ҳаволалари (ариза эгаси ёки агент/админ): { requestId } → { front, back } URL ёки ''. */
+  /**
+   * Техпаспорт ҳаволалари (ариза эгаси ёки агент/админ): { requestId } → { front, back, expiresInSec }. Эга 2026-11-28 (хавфсизлик):
+   * ДОИМИЙ download-token ЭМАС — ҳар чақирувда [TECHPASS_LINK_TTL_MS] (10 дақ) амал қиладиган V4 signed URL.
+   */
   exportsObj.insuranceGetTechPassportLinks = functions.https.onCall(async (data, context) => {
     const key = callerKey(context);
     const requestId = String((data && data.requestId) || '');
@@ -1017,8 +1032,10 @@ function attachCarInsurance(exportsObj, deps) {
     if (rs.data().uid !== key) await requireAgent(context);
     const fs = await db.collection(TECHPASS).doc(requestId).get();
     const f = fs.exists ? (fs.data() || {}) : {};
-    const url = (x) => (x && x.path ? `https://firebasestorage.googleapis.com/v0/b/${x.bucket}/o/${encodeURIComponent(x.path)}?alt=media&token=${x.token}` : '');
-    return { ok: true, front: url(f.front), back: url(f.back) };
+    const url = async (x) => (x && x.path ? storage.signedUrl(x.path, TECHPASS_LINK_TTL_MS) : '');
+    const [front, back] = await Promise.all([url(f.front), url(f.back)]);
+    log({ action: 'insuranceGetTechPassportLinks', userId: tail(key), result: 'ok', sides: [front ? 'front' : '', back ? 'back' : ''].filter(Boolean) });
+    return { ok: true, front, back, expiresInSec: Math.floor(TECHPASS_LINK_TTL_MS / 1000) };
   });
 
   /**
@@ -1484,7 +1501,7 @@ function attachCarInsurance(exportsObj, deps) {
 module.exports = {
   attachCarInsurance,
   normalizePlate, dateOk, addDaysKey, tashkentYear, displayDate, validateConfig, validateTariffRows, findTariffRow,
-  tariffOptionsFor, techPassportRequired, techPassportComplete, sniffImage, correctionDecision, TECHPASS, TECHPASS_PURGE_DAYS, zoneForRegion, findZoneTariffRow, zoneTariffOptions, ownerDraftRows, validOilSteps, oilDiscountPct, oilGoal, validateCampaign, computePayment, canTransition,
+  tariffOptionsFor, techPassportRequired, techPassportComplete, sniffImage, correctionDecision, TECHPASS, TECHPASS_PURGE_DAYS, TECHPASS_LINK_TTL_MS, zoneForRegion, findZoneTariffRow, zoneTariffOptions, ownerDraftRows, validOilSteps, oilDiscountPct, oilGoal, validateCampaign, computePayment, canTransition,
   reminderTargets, sniffFile, requestView, messagesOf,
   STAGES, POLICY_TYPES, VEHICLE_TYPES, ZONES, DRIVER_SCOPES, CIS_VEHICLE_TYPES, TASHKENT_REGION_IDS, TARIFF_SCHEMA,
   OSAGO_OWNER_TABLE_2026_11_28, STATUSES, TRANSITIONS, OPEN_STATUSES, OPTIONS, REMIND_DAYS, BONUS_PROGRAM, NOTICE,

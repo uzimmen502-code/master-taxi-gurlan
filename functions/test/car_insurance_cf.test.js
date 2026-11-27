@@ -31,6 +31,7 @@ let fakeNow = Date.UTC(2026, 10, 28, 6); // 2026-11-28 11:00 Тошкент
 const sent = [];
 const saved = [];
 const removed = [];
+const signed = [];
 const local = {};
 const api = ci.attachCarInsurance(local, {
   functions, db, admin, nowMs: () => fakeNow,
@@ -44,7 +45,11 @@ const api = ci.attachCarInsurance(local, {
     return uid;
   },
   notifyUserInApp: async (m) => { sent.push(m); },
-  storage: { async save(path, buf, contentType) { saved.push({ path, size: buf.length, contentType }); return { token: 'tok123', bucket: 'demo-bucket' }; }, async remove(path) { removed.push(path); } },
+  storage: {
+    async save(path, buf, contentType, opts = {}) { saved.push({ path, size: buf.length, contentType, noToken: !!opts.noToken }); return { token: opts.noToken ? null : 'tok123', bucket: 'demo-bucket' }; },
+    async remove(path) { removed.push(path); },
+    async signedUrl(path, ttlMs) { signed.push({ path, ttlMs }); return `https://storage.googleapis.com/demo-bucket/${path}?X-Goog-Expires=${ttlMs / 1000}&X-Goog-Signature=sig`; },
+  },
 });
 const call = (name, data, who) => local[name].run(data, ctxOf(who));
 
@@ -346,7 +351,14 @@ async function main() {
     assert.deepStrictEqual([doc.techPassport.front, doc.techPassport.back], [true, true]);
     assert.strictEqual(JSON.stringify(doc).includes('tok123'), false, 'ариза ҳужжатида ҳавола/token йўқ');
     const own = await call('insuranceGetTechPassportLinks', { requestId: r.requestId }, W);
-    assert.ok(own.front.includes('insurance_techpass') && own.back.includes('token=tok123'));
+    // Эга 2026-11-28: доимий token ЭМАС — қисқа муддатли (≤10 дақ) signed URL, ҳар чақирувда янги; файлларда token йўқ.
+    assert.ok(own.front.includes('insurance_techpass') && own.back.includes('X-Goog-Signature'));
+    assert.ok(!own.front.includes('token='));
+    assert.strictEqual(own.expiresInSec, 600);
+    assert.ok(signed.every((x) => x.ttlMs <= 10 * 60 * 1000));
+    assert.ok(saved.filter((x) => x.path.startsWith('insurance_techpass/')).every((x) => x.noToken));
+    const tf = await get(`insurance_techpass_files/${r.requestId}`);
+    assert.strictEqual(JSON.stringify(tf).includes('token'), false);
     assert.ok((await call('insuranceGetTechPassportLinks', { requestId: r.requestId }, AGENT)).front);
     await expectCode(call('insuranceGetTechPassportLinks', { requestId: r.requestId }, V), 'PERMISSION_DENIED');
     // Тўланмаган — агент тузатади, нарх қайта (v3: бошқа ҳудуд/юк/чекланмаган = 560 000 + 50 000).

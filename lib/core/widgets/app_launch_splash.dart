@@ -9,13 +9,13 @@ import '../theme/ava_tokens.dart';
 
 /// Илова очилишидаги РЕКЛАМА ЎРНИ (эга 2026-11-28; аввалги ~1.8 с лого анимацияси ўрнига).
 ///
-///  * Аниқ [displayDuration] (2 с) кўринади, «Ўтказиб юбориш» тугмаси ЙЎҚ.
+///  * Аниқ [displayDuration] (3 с; эга 2026-11-28: 2 с → 3 с) кўринади, «Ўтказиб юбориш» тугмаси ЙЎҚ.
 ///  * «Реклама бериш» тугмаси — [onAdvertise] (splash дарров ёпилади, кейин мавжуд йўл очилади).
 ///  * Креатив ФАҚАТ кешдан ([launch], `main()` да олдиндан ўқилган) — тармоқ кутилмайди; йўқ бўлса
 ///    сукут матни «Бу ерда сизнинг рекламангиз бўлиши мумкин».
 ///  * OS native launch screen ўзгармайди.
 ///
-/// Тил/биринчи кадр: [child] (`MaterialApp`) оверлей остида шаффоф ҳолда қурилади — таржималар шу 2 с
+/// Тил/биринчи кадр: [child] (`MaterialApp`) оверлей остида шаффоф ҳолда қурилади — таржималар шу 3 с
 /// ичида юкланади, қурилма тили «лип» этиб кўринмайди. Оверлей матнлари [lang] бўйича (main()да
 /// prefs'дан синхрон олинган тил), чунки бу ерда `AppLocalizations` ҳали йўқ.
 class AppLaunchSplash extends StatefulWidget {
@@ -50,8 +50,8 @@ class AppLaunchSplash extends StatefulWidget {
   /// Рекламачи креативи экранга чиқди (кўрсатишлар йиғмаси учун) — бир марта.
   final ValueChanged<SplashAd>? onShown;
 
-  /// Эга 2026-11-28: аниқ 2 сония.
-  static const Duration displayDuration = Duration(seconds: 2);
+  /// Эга 2026-11-28: аниқ 3 сония (аввал 2 с).
+  static const Duration displayDuration = Duration(seconds: 3);
 
   static const Key overlayKey = ValueKey('splash-ad-overlay');
   static const Key advertiseKey = ValueKey('splash-ad-advertise');
@@ -70,7 +70,7 @@ class _AppLaunchSplashState extends State<AppLaunchSplash> {
   @override
   void initState() {
     super.initState();
-    // Таймер биринчи кадр чизилгач — реклама экранда ТЎЛИҚ 2 с туради.
+    // Таймер биринчи кадр чизилгач — реклама экранда ТЎЛИҚ 3 с туради.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_overlayVisible) return;
       _timer = Timer(AppLaunchSplash.displayDuration, _finish);

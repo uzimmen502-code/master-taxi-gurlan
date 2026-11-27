@@ -155,13 +155,13 @@ class _FakeAreas implements SplashAreaSource {
 }
 
 void main() {
-  group('AppLaunchSplash — 2 с, ўтказиш йўқ, «Реклама бериш»', () {
-    testWidgets('аниқ 2 сония кўринади, кейин бир марта onFinished', (t) async {
+  group('AppLaunchSplash — 3 с (эга 2026-11-28), ўтказиш йўқ, «Реклама бериш»', () {
+    testWidgets('аниқ 3 сония кўринади, кейин бир марта onFinished', (t) async {
       var finished = 0;
       await t.pumpWidget(_app(onFinished: () => finished++));
-      expect(AppLaunchSplash.displayDuration, const Duration(seconds: 2));
+      expect(AppLaunchSplash.displayDuration, const Duration(seconds: 3));
       expect(find.byKey(AppLaunchSplash.overlayKey), findsOneWidget);
-      await t.pump(const Duration(milliseconds: 1999));
+      await t.pump(const Duration(milliseconds: 2999));
       expect(find.byKey(AppLaunchSplash.overlayKey), findsOneWidget);
       expect(finished, 0);
       await t.pump(const Duration(milliseconds: 1));
@@ -183,7 +183,7 @@ void main() {
       await t.tap(find.byKey(AppLaunchSplash.placeholderKey));
       await t.pump(const Duration(milliseconds: 500));
       expect(find.byKey(AppLaunchSplash.overlayKey), findsOneWidget);
-      await t.pump(const Duration(seconds: 2));
+      await t.pump(const Duration(seconds: 3));
     });
 
     testWidgets('«Реклама бериш» — splash дарров ёпилади ва onAdvertise чақирилади', (t) async {
@@ -202,12 +202,12 @@ void main() {
       await t.pumpWidget(_app(lang: 'uz_Latn'));
       expect(find.text('Bu yerda sizning reklamangiz bölişi mumkin'), findsOneWidget);
       expect(find.text('Reklama beriş'), findsOneWidget);
-      await t.pump(const Duration(seconds: 2));
+      await t.pump(const Duration(seconds: 3));
       await t.pumpWidget(const SizedBox());
       await t.pumpWidget(_app(lang: 'ru'));
       expect(find.text('Здесь может быть ваша реклама'), findsOneWidget);
       expect(find.text('Разместить рекламу'), findsOneWidget);
-      await t.pump(const Duration(seconds: 2));
+      await t.pump(const Duration(seconds: 3));
     });
 
     testWidgets('кешдаги креатив: расм + «Реклама» белгиси, onShown бир марта; ҳавола босилса ёпилади', (t) async {
@@ -234,7 +234,7 @@ void main() {
       await t.pumpWidget(_app(launch: SplashAdLaunch(ad: _ad()), lang: 'uz_Latn'));
       expect(find.byKey(AppLaunchSplash.textKey), findsOneWidget);
       expect(find.text('Gurlan non'), findsOneWidget);
-      await t.pump(const Duration(seconds: 2));
+      await t.pump(const Duration(seconds: 3));
     });
   });
 
@@ -621,6 +621,9 @@ void main() {
       await t.pump();
       expect(find.text(SplashBuyTexts.of('needContent', 'uz_Cyrl')), findsOneWidget);
       expect(svc.quotes, isEmpty);
+      // Эга 2026-11-28: креатив талаби расм танлаш ёнида.
+      expect(find.byKey(SplashAdPurchaseScreen.creativeSpecKey), findsOneWidget);
+      expect(find.text(SplashAdTexts.creativeSpec('uz_Cyrl')), findsOneWidget);
       await t.pumpAndSettle();
       await t.tap(find.text(SplashBuyTexts.of('image', 'uz_Cyrl')));
       await t.pumpAndSettle();

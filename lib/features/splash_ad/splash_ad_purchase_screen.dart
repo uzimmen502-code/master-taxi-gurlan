@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/l10n/l10n_extension.dart';
 import '../../core/utils/formatters.dart';
 import '../../repositories/service_config_repository.dart';
+import 'splash_ad.dart';
 import 'splash_ad_purchase_service.dart';
 
 /// Ҳудуд манбаи (тестда сохтаси): вилоятлар ва вилоят туманлари, фойдаланувчи тилида.
@@ -149,6 +150,7 @@ class SplashAdPurchaseScreen extends StatefulWidget {
   static const quoteKey = Key('splash-buy-quote');
   static const payKey = Key('splash-buy-pay');
   static const textKey = Key('splash-buy-text');
+  static const creativeSpecKey = Key('splash-buy-creative-spec');
 
   @override
   State<SplashAdPurchaseScreen> createState() => _SplashAdPurchaseScreenState();
@@ -470,7 +472,14 @@ class _SplashAdPurchaseScreenState extends State<SplashAdPurchaseScreen> {
         ),
         _section(
           _t('imageTitle'),
-          Row(children: [
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(
+              SplashAdTexts.creativeSpec(_lang),
+              key: SplashAdPurchaseScreen.creativeSpecKey,
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+            ),
+            const SizedBox(height: 8),
+            Row(children: [
             if (_imageBytes != null)
               Padding(
                 padding: const EdgeInsets.only(right: 12),
@@ -491,6 +500,7 @@ class _SplashAdPurchaseScreenState extends State<SplashAdPurchaseScreen> {
                         }),
                 child: Text(_t('imageRemove')),
               ),
+            ]),
           ]),
         ),
         const SizedBox(height: 12),

@@ -241,7 +241,23 @@ class SplashAdTexts {
     'ru': 'Чтобы разместить рекламу, зарегистрируйтесь.',
   };
 
+  /// Рекламачи учун креатив талаби (эга 2026-11-28). Асос: `AppLaunchSplash` — креатив `BoxFit.contain`
+  /// (кесилмайди), майдон 360×800 экранда 320×573 dp ≈ 9:16; клиент кеши 1 расм ≤ 1500 КБ (катта бўлса
+  /// кўрсатилмайди), web кеши жами 2 МБ. Харид экрани ва админ «Splash реклама» формасида кўрсатилади.
+  static const Map<String, String> _creativeSpec = {
+    'uz_Cyrl': 'Тик расм 1080×1920 px (9:16), JPG, WebP ёки PNG, 500 КБ гача (энг кўпи 1,5 МБ). '
+        'Расм кесилмайди: қисқа экранда ён томонлари, узун экранда юқори-пасти AVA ранги билан тўлади. '
+        'Матн ва логони четдан камида 60 px ичкарида жойланг.',
+    'uz_Latn': 'Tik rasm 1080×1920 px (9:16), JPG, WebP yoki PNG, 500 KB gaça (eng köpi 1,5 MB). '
+        'Rasm kesilmaydi: qisqa ekranda yon tomonlari, uzun ekranda yuqori-pasti AVA rangi bilan töladi. '
+        'Matn va logoni çetdan kamida 60 px içkarida joylang.',
+    'ru': 'Вертикальное изображение 1080×1920 px (9:16), JPG, WebP или PNG, до 500 КБ (максимум 1,5 МБ). '
+        'Изображение не обрезается: на коротком экране поля по бокам, на длинном — сверху и снизу цвета AVA. '
+        'Текст и логотип — не ближе 60 px к краям.',
+  };
+
   static String _of(Map<String, String> m, String lang) => m[lang] ?? m['uz_Cyrl']!;
+  static String creativeSpec(String lang) => _of(_creativeSpec, lang);
   static String placeholder(String lang) => _of(_placeholder, lang);
   static String advertise(String lang) => _of(_advertise, lang);
   static String adLabel(String lang) => _of(_adLabel, lang);

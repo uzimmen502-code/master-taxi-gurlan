@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../bread/services/bread_image_storage.dart';
+import '../../splash_ad/splash_ad.dart';
 import '../services/admin_splash_ads_service.dart';
 import '../utils/web_image_compress.dart';
 
@@ -594,10 +595,11 @@ class _SplashAdEditorState extends State<_SplashAdEditor> {
               if (_imageUrl.isNotEmpty)
                 TextButton(onPressed: _busy ? null : () => setState(() => _imageUrl = ''), child: const Text('Расмсиз')),
             ]),
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              child: Text('Расм ёки камида кирилл матн шарт. Тик расм тавсия этилади (≤ 1.5 МБ).',
-                  style: TextStyle(color: Colors.black54, fontSize: 12)),
+            Padding(
+              key: const ValueKey('splash-admin-creative-spec'),
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text('Расм ёки камида кирилл матн шарт. ${SplashAdTexts.creativeSpec('uz_Cyrl')}',
+                  style: const TextStyle(color: Colors.black54, fontSize: 12)),
             ),
             _field(_cyr, 'Матн (кирилл)', max: 140),
             _field(_lat, 'Матн (лотин) — бўш бўлса кириллдан автоматик', max: 140),

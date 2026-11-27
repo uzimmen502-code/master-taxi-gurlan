@@ -1462,6 +1462,8 @@ class _HomeViewState extends State<_HomeView> {
           'assets/images/home/card_marshrut_v1.webp', HomeLiteImageFit.cover),
       'yuk_local': ('home_lite_yuk_local_title', 'home_lite_yuk_local_caption',
           'assets/images/home/card_yuk_local_v1.webp', HomeLiteImageFit.cover),
+      'yuk_intercity': ('home_lite_yuk_intercity_title', 'home_lite_yuk_intercity_caption',
+          kHomeYukIntercityCardImage, HomeLiteImageFit.cover),
     };
     return [
       for (final id in homeTransportCardIds(HomeModuleGate.showInGrid))

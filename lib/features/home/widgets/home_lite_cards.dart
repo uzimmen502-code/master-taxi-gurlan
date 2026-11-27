@@ -225,8 +225,12 @@ List<String> homeAdsServicesCardIds({
       if (restaurantsAllowed) 'restaurants',
     ];
 
-/// «Транспорт ва логистика» бўлими (эга 2026-11-20), шу тартибда. Халқаро такси/юк — кейинга қолдирилган.
-const kHomeTransportModuleIds = <String>['intercity', 'local_taxi', 'marshrut', 'yuk_local'];
+/// «Транспорт ва логистика» бўлими (эга 2026-11-20), шу тартибда. Халқаро такси — кейинга қолдирилган.
+/// Эга 2026-11-27: «Юк ташиш — шаҳарлараро / халқаро» (мавжуд `yuk_intercity` модули) — `yuk_local`дан кейин.
+const kHomeTransportModuleIds = <String>['intercity', 'local_taxi', 'marshrut', 'yuk_local', 'yuk_intercity'];
+
+/// `yuk_intercity` карточкаси расми (эга расми, 2026-11-27; 400×276 webp). Алмашса — янги ном (`_v2`), hosting кэши туфайли.
+const kHomeYukIntercityCardImage = 'assets/images/home/card_yuk_intercity_v1.webp';
 
 List<String> homeTransportCardIds(bool Function(String moduleId) isVisible) => [
       for (final id in kHomeTransportModuleIds)

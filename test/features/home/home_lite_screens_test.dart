@@ -191,6 +191,8 @@ class _Preview extends StatelessWidget {
           image: 'assets/images/home/card_marshrut_v1.webp'),
       'yuk_local': card('yuk_local', 'home_lite_yuk_local_title', 'home_lite_yuk_local_caption',
           image: 'assets/images/home/card_yuk_local_v1.webp'),
+      'yuk_intercity': card('yuk_intercity', 'home_lite_yuk_intercity_title', 'home_lite_yuk_intercity_caption',
+          image: kHomeYukIntercityCardImage),
     };
     bool all(String _) => true;
     return Scaffold(

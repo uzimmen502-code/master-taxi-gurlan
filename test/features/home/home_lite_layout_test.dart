@@ -91,10 +91,18 @@ void main() {
   });
 
   group('«Транспорт ва логистика»', () {
-    test('тартиб: Шаҳарлараро · Маҳаллий · Маршрут · Юк (туман ичида); халқаро йўқ', () {
-      expect(homeTransportCardIds(_all), ['intercity', 'local_taxi', 'marshrut', 'yuk_local']);
+    test('тартиб: Шаҳарлараро · Маҳаллий · Маршрут · Юк (туман ичида) · Юк (шаҳарлараро/халқаро)', () {
+      expect(homeTransportCardIds(_all), ['intercity', 'local_taxi', 'marshrut', 'yuk_local', 'yuk_intercity']);
       expect(homeTransportCardIds((id) => id == 'marshrut'), ['marshrut']);
-      expect(kHomeTransportModuleIds.contains('yuk_intercity'), isFalse);
+    });
+
+    test('yuk_intercity (эга 2026-11-27): yuk_local дан кейин; модул яширин бўлса — карточка йўқ', () {
+      expect(homeTransportCardIds((id) => id == 'yuk_local' || id == 'yuk_intercity'), ['yuk_local', 'yuk_intercity']);
+      expect(homeTransportCardIds((id) => id != 'yuk_intercity'), ['intercity', 'local_taxi', 'marshrut', 'yuk_local']);
+      expect(homeTransportCardIds((id) => id == 'yuk_intercity'), ['yuk_intercity']);
+      expect(homeTransportCardIds((_) => false), isEmpty);
+      expect(kHomeYukIntercityCardImage, startsWith('assets/images/home/'));
+      expect(File(kHomeYukIntercityCardImage).existsSync(), isTrue);
     });
   });
 
@@ -226,6 +234,8 @@ void main() {
       'home_lite_marshrut_caption',
       'home_lite_yuk_local_title',
       'home_lite_yuk_local_caption',
+      'home_lite_yuk_intercity_title',
+      'home_lite_yuk_intercity_caption',
       'home_lite_avagram_caption',
       'home_lite_business_map_title',
       'home_lite_business_map_caption',
@@ -255,6 +265,8 @@ void main() {
     expect(cyr['home_lite_local_taxi_title'], 'Маҳаллий такси');
     expect(cyr['home_lite_marshrut_title'], 'Маршрут такси');
     expect(cyr['home_lite_yuk_local_title'], 'Юк ташиш — туман ичида');
+    expect(cyr['home_lite_yuk_intercity_title'], 'Юк ташиш — шаҳарлараро / халқаро');
+    expect(cyr['home_lite_yuk_intercity_caption'], 'Вилоятлар ва чет элга юк жўнатиш');
     expect(cyr['home_banner_default_title'], 'Мижозлар сизни AVAдан топсин');
     expect(cyr['home_banner_default_caption'], 'Хизматингизни эълон қилинг');
     expect(cyr['home_banner_cta'], 'Эълон бериш →');

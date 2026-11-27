@@ -44,6 +44,8 @@ const platformPricing = require('./platform_pricing');
 // AVA дўкони етказиш ҳақи — ягона манба (T-1, эга 2026-11-28).
 const platformDeliveryFee = require('./platform_delivery_fee');
 const marketImages = require('./market_images');
+// F-1 (ega 2026-11-28): eski «Аралаш» e'lonlari yopiq — yagona manba.
+const marketAdRetired = require('./market_ad_retired');
 // MEDIUM-4 (аудит 2026-10-31): модул дарвозаси серверда ҳам (клиент `ServiceConfigHolder` нусхаси).
 const moduleGate = require('./module_gate');
 // Admin «Аҳоли бозори» рўйхати — саҳифалар ва «Яна юклаш» (2026-10-08).
@@ -1676,6 +1678,25 @@ exports.onAdUpdate = functions.firestore
     if (before.status === after.status) return;
 
     const isMarket = String(after.type || '') === 'cheap_product';
+    // F-1 (ega 2026-11-28): eski bozor e'lonlari yopiq — muddat UZAYTIRILMAYDI (mavjud TTL bilan tugaydi).
+    const marketRetired = isMarket && marketAdRetired.MARKET_ADS_RETIRED;
+
+    // F-1: QAYTA JOYLASHTIRISH (`inactive → pending`: ega to'g'ridan-to'g'ri yozuvi — rules
+    // `cheapProductOwnerUpdateOk` — yoki eski ilova) yopiq → `inactive`ga qaytariladi, jim (push yo'q).
+    // Admin yozuvi (`moderatedAt` o'zgaradi) tegilmaydi.
+    if (marketRetired && before.status === 'inactive' && after.status === 'pending'
+        && !tsChanged(before.moderatedAt, after.moderatedAt)) {
+      console.warn(JSON.stringify({
+        module: 'market', action: 'onAdUpdate', result: 'reverted',
+        errorCode: marketAdRetired.MARKET_AD_RETIRED, adId: change.after.id,
+      }));
+      await change.after.ref.update({
+        status: 'inactive',
+        retiredRevertedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      return null;
+    }
 
     // Авто: pending → active (янги эълон / қайта модерация).
     if (
@@ -1684,14 +1705,16 @@ exports.onAdUpdate = functions.firestore
       && before.status !== 'pending'
       && (await isMarketAutoApproveEnabled())
     ) {
-      await change.after.ref.update({
+      const patch = {
         status: 'active',
         publishedAt: admin.firestore.FieldValue.serverTimestamp(),
-        expiresAt: marketActiveExpiresAt(),
         moderatedAt: admin.firestore.FieldValue.serverTimestamp(),
         moderatedBy: 'auto',
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      };
+      // F-1: eski e'lon tahriri qayta tasdiqlansa ham `expiresAt` o'sha-o'sha.
+      if (!marketRetired) patch.expiresAt = marketActiveExpiresAt();
+      await change.after.ref.update(patch);
       return null;
     }
 
@@ -1710,6 +1733,8 @@ exports.onAdUpdate = functions.firestore
     // Авто-тасдиқ ёқиқ бўлса юқоридаги тармоқ аллақачон `active` қилиб,
     // ўз муддатини ёзган ва бу ергача етиб келмайди.
     if (isMarket && after.status === 'pending' && before.status !== 'pending') {
+      // F-1: eski e'lon — muddat yangilanmaydi (tahrir moderatsiyada, lekin TTL o'sha-o'sha).
+      if (marketRetired) return null;
       await change.after.ref.update({
         expiresAt: marketPendingExpiresAt(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -1760,6 +1785,8 @@ exports.onAdUpdate = functions.firestore
         // тушиб, жимгина қайтиб кетарди — сотувчи 60 кундан кейин эълони
         // лентадан тушганини УМУМАН билмасди (аудит, 2026-09-27).
         const autoExpired = tsChanged(before.autoExpiredAt, after.autoExpiredAt);
+        // F-1: qayta joylashtirish qaytarildi (yuqorida) — jim.
+        if (tsChanged(before.retiredRevertedAt, after.retiredRevertedAt)) return;
         // Owner hide — jim; admin reject/hide ва автомат тугаш — хабар.
         if (autoExpired) {
           title = '⏳ Бозор эълонингиз муддати тугади';
@@ -1771,7 +1798,7 @@ exports.onAdUpdate = functions.firestore
           return;
         }
         body = autoExpired
-          ? (preview || 'Қайта жойлаштириш — «Менинг эълонларим»да')
+          ? (preview || (marketRetired ? 'Маҳсулотни «＋» орқали қўшинг' : 'Қайта жойлаштириш — «Менинг эълонларим»да'))
           : (preview || after.adminNote || 'Менинг эълонларимда кўринг');
         dataType = autoExpired ? 'market_ad_expired' : 'market_ad_moderation';
         break;
@@ -8854,6 +8881,15 @@ exports.submitMarketAd = functions.https.onCall(async (data, context) => {
   const uid = canonicalUid(callerPhone(context));
   if (!uid || uid.length < 9) {
     throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
+  }
+  // F-1 (ega 2026-11-28): eski «Аралаш» e'loni YANGI yaratilmaydi — mahsulot «＋» orqali.
+  // O'qish/yozuvdan OLDIN (hech narsa yozilmaydi, limit so'rovlari ham yo'q).
+  if (marketAdRetired.MARKET_ADS_RETIRED) {
+    console.warn(JSON.stringify({
+      module: 'market', action: 'submitMarketAd', result: 'rejected',
+      errorCode: marketAdRetired.MARKET_AD_RETIRED, callerTail: uid.slice(-4),
+    }));
+    throw marketAdRetired.marketAdRetiredError(functions.https.HttpsError);
   }
 
   const title = String((data && data.title) || '').trim();

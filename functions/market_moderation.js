@@ -37,6 +37,7 @@
 
 const { stableStringify, PRICE_UNITS } = require('./market_taxonomy');
 const { normalizeLang, langOfPhone } = require('./notif_i18n');
+const marketAdRetired = require('./market_ad_retired');
 
 const MODULE = 'market_moderation';
 const ADMIN_ROLES = Object.freeze(['admin', 'superadmin']);
@@ -693,6 +694,11 @@ function attachMarketModeration(exportsObj, deps) {
     if (!(await isOwner(collection, ref, pre.data() || {}, uid))) {
       log({ action: 'renewMarketListing', collection, listingId: id, userId: uid, result: 'error', errorCode: 'NOT_OWNER' });
       throw fail('permission-denied', 'NOT_OWNER');
+    }
+    // F-1 (ega 2026-11-28): eski «Аралаш» e'loni (`ads`) qayta joylashtirilmaydi — mahsulot «＋» orqali.
+    if (collection === 'ads' && marketAdRetired.MARKET_ADS_RETIRED) {
+      log({ action: 'renewMarketListing', collection, listingId: id, userId: uid, result: 'error', errorCode: marketAdRetired.MARKET_AD_RETIRED });
+      throw marketAdRetired.marketAdRetiredError(HttpsError);
     }
     const out = await db.runTransaction(async (t) => {
       const snap = await t.get(ref);

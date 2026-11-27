@@ -45,7 +45,24 @@ const _kOwnerPhotos = <String, String>{
   'realty': 'assets/images/markets/market_realty_v2.webp',
   'wholesale_market': 'assets/images/markets/market_wholesale_v2.webp',
   'china_market': 'assets/images/markets/market_china_v2.webp',
+  // Эга 2026-11-28: «Барча хизматлар»даги эски кичик иконкалар ўрнига бош саҳифа карточкаларининг эга расмлари.
+  'intercity': 'assets/images/home/card_intercity_v1.webp',
+  'yuk_local': 'assets/images/home/card_yuk_local_v1.webp',
+  'yuk_intercity': 'assets/images/home/card_yuk_intercity_v1.webp',
+  'restaurants': 'assets/images/home/card_restaurants_v1.webp',
+  'jobs': 'assets/images/home/card_new_ads_v1.webp',
+  'cheap_products_home': 'assets/images/markets/market_aralash_v2.webp',
 };
+
+/// Эга 2026-11-28: шу модулларнинг эски PNG иконкалари энди ҲЕЧ ҚАЙСИ манбада йўқ (модулга битта расм).
+const _kRetiredIcons = <String>[
+  'assets/images/services/service_taxi_intercity.png',
+  'assets/images/services/service_yuk_local.png',
+  'assets/images/services/service_yuk_birja.png',
+  'assets/images/services/service_restaurants.png',
+  'assets/images/services/service_jobs.png',
+  'assets/images/services/service_market.png',
+];
 
 void main() {
   tearDown(ServiceConfigHolder.resetForTest);
@@ -178,7 +195,17 @@ void main() {
       expect(byId[id]!.imagePath, path, reason: id);
       expect(isServicePhoto(path), isTrue, reason: id);
       expect(File(path).lengthSync(), lessThan(120 * 1024), reason: path);
+      expect(serviceImageFor(id), path, reason: id);
     });
+    for (final e in items) {
+      expect(_kRetiredIcons.contains(e.imagePath), isFalse, reason: '${e.moduleId}: эски иконка');
+    }
+    for (final src in ['lib/features/home/home_services_catalog.dart', 'lib/features/home/widgets/service_circle_tile.dart']) {
+      final code = File(src).readAsStringSync();
+      for (final old in _kRetiredIcons) {
+        expect(code.contains(old), isFalse, reason: '$src: $old');
+      }
+    }
     final pubspec = File('pubspec.yaml').readAsStringSync();
     for (final dir in ['services', 'home', 'markets']) {
       expect(pubspec.contains('- assets/images/$dir/'), isTrue, reason: dir);

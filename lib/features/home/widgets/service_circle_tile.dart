@@ -329,15 +329,15 @@ class ServiceCircleBadge extends StatelessWidget {
 
 const _kServiceImages = <String, String>{
   'local_taxi': 'assets/images/services/service_taxi_local.png',
-  'intercity': 'assets/images/services/service_taxi_intercity.png',
+  'intercity': 'assets/images/home/card_intercity_v1.webp',
   'marshrut': 'assets/images/services/service_marshrut.png',
-  'yuk_local': 'assets/images/services/service_yuk_local.png',
-  'yuk_intercity': 'assets/images/services/service_yuk_birja.png',
-  // «Кафе-Ресторан» (D-REST-6): эски `service_food.png` нусхаси —
-  // алоҳида брендли иконка эга қарори билан алмаштирилади.
-  'restaurants': 'assets/images/services/service_restaurants.png',
-  'jobs': 'assets/images/services/service_jobs.png',
-  'cheap_products_home': 'assets/images/services/service_market.png',
+  'yuk_local': 'assets/images/home/card_yuk_local_v1.webp',
+  'yuk_intercity': 'assets/images/home/card_yuk_intercity_v1.webp',
+  // Эга 2026-11-28: intercity, yuk_local, yuk_intercity, restaurants, jobs, cheap_products_home — эски кичик
+  // PNG иконкалар ўрнига бош саҳифа карточкаларининг эга расмлари (webp, доирани қоплайди); модулга битта манба.
+  'restaurants': 'assets/images/home/card_restaurants_v1.webp',
+  'jobs': 'assets/images/home/card_new_ads_v1.webp',
+  'cheap_products_home': 'assets/images/markets/market_aralash_v2.webp',
   'bread': 'assets/images/services/service_bread.png',
   'oil_change': 'assets/images/services/service_oil_change_v2.webp',
   'circles': 'assets/images/services/service_relatives_v2.webp',

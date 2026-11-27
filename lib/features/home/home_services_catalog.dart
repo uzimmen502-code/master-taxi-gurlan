@@ -116,7 +116,7 @@ List<ServiceSpotlightItem> buildHomeServices(
     ServiceSpotlightItem(
       moduleId: 'intercity',
       label: context.tr('home_module_intercity'),
-      imagePath: 'assets/images/services/service_taxi_intercity.png',
+      imagePath: 'assets/images/home/card_intercity_v1.webp',
       onTap: () => a.openModule(
         HomeModulesCatalog.byId('intercity'),
       ),
@@ -132,7 +132,7 @@ List<ServiceSpotlightItem> buildHomeServices(
     ServiceSpotlightItem(
       moduleId: 'yuk_local',
       label: context.tr('home_module_yuk_local'),
-      imagePath: 'assets/images/services/service_yuk_local.png',
+      imagePath: 'assets/images/home/card_yuk_local_v1.webp',
       onTap: () => a.openYukModule(
         'yuk_local',
         const YukLocalScreen(),
@@ -141,7 +141,7 @@ List<ServiceSpotlightItem> buildHomeServices(
     ServiceSpotlightItem(
       moduleId: 'yuk_intercity',
       label: context.tr('home_module_yuk_intercity'),
-      imagePath: 'assets/images/services/service_yuk_birja.png',
+      imagePath: 'assets/images/home/card_yuk_intercity_v1.webp',
       onTap: () => a.openYukModule(
         'yuk_intercity',
         const YukIntercityScreen(),
@@ -153,7 +153,7 @@ List<ServiceSpotlightItem> buildHomeServices(
     ServiceSpotlightItem(
       moduleId: 'restaurants',
       label: context.tr('home_module_restaurants'),
-      imagePath: 'assets/images/services/service_restaurants.png',
+      imagePath: 'assets/images/home/card_restaurants_v1.webp',
       onTap: () async {
         final openable = ServiceConfigHolder.isOpenable('restaurants');
         if (!openable && !await RestaurantsRepository().hasAccess()) {
@@ -170,7 +170,7 @@ List<ServiceSpotlightItem> buildHomeServices(
       moduleId: JobsSections.adsTileId,
       gateId: JobsSections.gateId,
       label: context.tr(JobsSections.titleKeyFor(AdKind.ad)),
-      imagePath: 'assets/images/services/service_jobs.png',
+      imagePath: 'assets/images/home/card_new_ads_v1.webp',
       onTap: () {
         if (!ServiceConfigHolder.isOpenable(JobsSections.gateId)) {
           a.showComingSoon();
@@ -197,7 +197,7 @@ List<ServiceSpotlightItem> buildHomeServices(
     ServiceSpotlightItem(
       moduleId: 'cheap_products_home',
       label: context.tr('home_module_cheap_products'),
-      imagePath: 'assets/images/services/service_market.png',
+      imagePath: 'assets/images/markets/market_aralash_v2.webp',
       onTap: () => a.openModule(
         HomeModulesCatalog.byId('cheap_products_home'),
       ),

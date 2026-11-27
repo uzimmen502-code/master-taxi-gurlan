@@ -9,7 +9,12 @@ import '../../supermarket/domain/sm_holiday.dart';
 /// (эга 2026-11-26). Кўриниш қоидалари — `sm_holiday.dart` (тоза, тестланади).
 @immutable
 class HomeHolidayState {
-  const HomeHolidayState({this.holiday = false, this.birthdays = kRelativesPromptHideAt, this.bonusActive = false});
+  const HomeHolidayState({
+    this.holiday = false,
+    this.birthdays = kRelativesPromptHideAt,
+    this.bonusActive = false,
+    this.market,
+  });
 
   static const none = HomeHolidayState();
 
@@ -22,14 +27,26 @@ class HomeHolidayState {
   /// «Яқинлар» бонус дастури фаол ва шу фойдаланувчига тегишли (сервер `NOT_ENOUGH_RELATIVES` жавоби).
   final bool bonusActive;
 
+  /// Бозор мақсадли фаол байрам (Қурбон ҳайит → Мол бозори) — супермаркет рухсатига БОҒЛИҚ ЭМАС (эга 2026-11-28).
+  /// [holiday] (саватча) ва «Яқинлар» карточкасига таъсир қилмайди.
+  final HolidayOccasion? market;
+
   bool get showRelativesPrompt => relativesPromptVisible(holidayAvailable: holiday, birthdaysCount: birthdays);
 
   @override
   bool operator ==(Object other) =>
-      other is HomeHolidayState && other.holiday == holiday && other.birthdays == birthdays && other.bonusActive == bonusActive;
+      other is HomeHolidayState &&
+      other.holiday == holiday &&
+      other.birthdays == birthdays &&
+      other.bonusActive == bonusActive &&
+      other.market?.id == market?.id &&
+      other.market?.target?.market == market?.target?.market;
 
   @override
-  int get hashCode => Object.hash(holiday, birthdays, bonusActive);
+  int get hashCode => Object.hash(holiday, birthdays, bonusActive, market?.id, market?.target?.market);
+
+  HomeHolidayState withMarket(HolidayOccasion? m) =>
+      HomeHolidayState(holiday: holiday, birthdays: birthdays, bonusActive: bonusActive, market: m);
 }
 
 /// Ҳолатни йиғади. Тармоқ хатоси — карточка кўрсатилмайди (хавфсиз томон). Бонус ҳолати (`claimRelativesBonus`,
@@ -39,17 +56,33 @@ class HomeHolidayCards {
     Future<bool> Function()? holidayCheck,
     Future<int> Function(String userId)? countBirthdays,
     Future<Object?> Function()? claimBonus,
+    Future<HolidayOccasion?> Function()? marketCheck,
   })  : _holidayCheck = holidayCheck,
         _count = countBirthdays,
-        _claim = claimBonus;
+        _claim = claimBonus,
+        _marketCheck = marketCheck;
 
   final Future<bool> Function()? _holidayCheck;
+  final Future<HolidayOccasion?> Function()? _marketCheck;
   final Future<int> Function(String userId)? _count;
   final Future<Object?> Function()? _claim;
 
   bool? _bonusActive;
 
+  /// Саватча ([_basket], супермаркет рухсати керак) ва бозор мақсадли байрам (рухсатсиз) — алоҳида; бирининг хатоси
+  /// иккинчисини яширмайди.
   Future<HomeHolidayState> resolve({required bool smOpenable, required String phone}) async {
+    final basket = await _basket(smOpenable: smOpenable, phone: phone);
+    HolidayOccasion? market;
+    try {
+      market = await (_marketCheck?.call() ?? holidayMarketAvailable());
+    } catch (e) {
+      debugPrint('[Home] HOLIDAY_MARKET_CHECK_FAILED: $e');
+    }
+    return basket.withMarket(market);
+  }
+
+  Future<HomeHolidayState> _basket({required bool smOpenable, required String phone}) async {
     try {
       final ok = await (_holidayCheck?.call() ?? holidayAvailable(smOpenable: smOpenable));
       if (!ok) return HomeHolidayState.none;

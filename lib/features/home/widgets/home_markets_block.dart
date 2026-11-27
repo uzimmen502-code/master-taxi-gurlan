@@ -4,6 +4,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../markets/data/market_taxonomy_repository.dart';
 import '../../markets/domain/market_taxonomy.dart';
 import '../../supermarket/data/supermarket_repository.dart';
+import '../../supermarket/domain/sm_holiday.dart';
 import '../home_module_gate.dart';
 import 'home_lite_cards.dart';
 
@@ -168,6 +169,33 @@ String taxonomyMarketSlogan(
   return localizedName(def.slogan, lang);
 }
 
+/// Бозор мақсадли фаол байрам карточкаси (эга 2026-11-28): сарлавҳа — байрам номи, расм — шу бозор карточкаси
+/// расми ([kHomeMarketEntries] `taxonomyMarketId` бўйича), дарвоза — шу бозор модули. Супермаркетга боғлиқ эмас.
+/// Байрам йўқ / мақсад бозор эмас / бозор модули яширин — `null`.
+HomeLiteCardData? holidayMarketCardFor(
+  HolidayOccasion? occasion, {
+  required String lang,
+  required String caption,
+  required bool Function(String moduleId) isVisible,
+  required void Function(HolidayTarget target) onOpen,
+}) {
+  final t = occasion?.target;
+  if (occasion == null || t == null || !t.isMarket) return null;
+  HomeMarketEntry? entry;
+  for (final e in kHomeMarketEntries) {
+    if (e.taxonomyMarketId == t.market) entry = e;
+  }
+  if (entry != null && !isVisible(entry.moduleId)) return null;
+  return HomeLiteCardData(
+    id: 'holiday_market',
+    title: occasion.name(lang),
+    caption: caption,
+    imagePath: entry?.imagePath,
+    icon: Icons.celebration_rounded,
+    onTap: () => onOpen(t),
+  );
+}
+
 /// Дарвоза бўйича кўринадиган карточкалар — [kHomeMarketEntries] тартибида.
 /// Супермаркет — модул дарвозаси ВА [supermarketAllowed] (сервер рухсати) бирга.
 List<HomeMarketEntry> visibleHomeMarkets(
@@ -187,7 +215,12 @@ class HomeMarketsBlock extends StatefulWidget {
     this.loadTaxonomy,
     this.loadSupermarketAccess,
     this.basketCard,
+    this.holidayMarketCard,
   });
+
+  /// Бозор мақсадли фаол байрам карточкаси (Қурбон ҳайит → Мол бозори; эга 2026-11-28) — саватчадан кейин.
+  /// Супермаркет рухсатига БОҒЛИҚ ЭМАС; дарвоза — [holidayMarketCardFor]; `null` — йўқ.
+  final HomeLiteCardData? holidayMarketCard;
 
   /// «Туғилган кун саватчаси / Менинг ҳафталик харид саватчам» (эга 2026-11-28: «Эълон ва хизматлар»дан шу ерга) —
   /// Супермаркетдан кейин (у бўлмаса — биринчи). Дарвоза ва сарлавҳа/расм — чақирувчида; `null` — карточка йўқ.
@@ -249,7 +282,8 @@ class _HomeMarketsBlockState extends State<HomeMarketsBlock> {
     }
     final items = visibleHomeMarkets(isVisible, supermarketAllowed: _smAllowed);
     final basket = widget.basketCard;
-    if (items.isEmpty && basket == null) return const SizedBox.shrink();
+    final occasion = widget.holidayMarketCard;
+    if (items.isEmpty && basket == null && occasion == null) return const SizedBox.shrink();
     final basketAt = items.isNotEmpty && items.first.id == 'supermarket' ? 1 : 0;
     return HomeLiteSection(
       key: const ValueKey('home_markets_block'),
@@ -264,7 +298,7 @@ class _HomeMarketsBlockState extends State<HomeMarketsBlock> {
             icon: e.icon,
             onTap: () => widget.onOpen(e),
           ),
-      ]..insertAll(basketAt, [if (basket != null) basket]),
+      ]..insertAll(basketAt, [if (basket != null) basket, if (occasion != null) occasion]),
     );
   }
 }

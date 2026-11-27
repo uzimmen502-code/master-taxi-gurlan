@@ -242,7 +242,7 @@ void main() {
       final confirm = src.indexOf('const CustomerConfirmBanner()');
       final order = src.indexOf('_ActiveOrderSlot(onOpen:');
       final ticker = src.indexOf('HomeWalletTickerSlot(');
-      final block = src.indexOf('HomeMarketsBlock(onOpen: _openHomeMarket, basketCard: _basketCard())');
+      final block = src.indexOf('HomeMarketsBlock(onOpen: _openHomeMarket, basketCard: _basketCard(), holidayMarketCard: _holidayMarketCard())');
       final adMarkets = src.indexOf('_adCarousel(HomeAdPlacement.markets)');
       final adServices = src.indexOf('_adCarousel(HomeAdPlacement.services)');
       final adTransport = src.indexOf('_adCarousel(HomeAdPlacement.transport)');

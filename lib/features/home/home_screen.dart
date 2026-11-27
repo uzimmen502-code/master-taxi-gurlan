@@ -138,7 +138,7 @@ import '../relatives/widgets/family_prompt.dart' show maybeShowFamilyPrompt;
 import '../supermarket/data/sm_basket_birthdays.dart' show loadSmBasketBirthdays;
 import '../supermarket/domain/sm_basket.dart' show smBasketBirthdayMode, smBasketImage, smBasketTitleKey;
 import '../supermarket/domain/sm_holiday.dart' show smTashkentDate;
-import '../supermarket/screens/sm_holiday_screen.dart' show openHolidayBasket;
+import '../supermarket/screens/sm_holiday_screen.dart' show openHolidayBasket, openHolidayMarketTarget;
 import '../supermarket/domain/sm_holiday.dart' show relativesBonusProgress;
 import 'controllers/home_holiday_cards.dart';
 import '../markets/data/market_taxonomy_repository.dart';
@@ -1373,6 +1373,15 @@ class _HomeViewState extends State<_HomeView> {
           onTap: () => openHolidayBasket(Navigator.of(context)),
         );
 
+  /// Бозор мақсадли фаол байрам (Қурбон ҳайит → Мол бозори) — супермаркет рухсатисиз (эга 2026-11-28).
+  HomeLiteCardData? _holidayMarketCard() => holidayMarketCardFor(
+        _holidayState.market,
+        lang: context.contentLang,
+        caption: context.tr('hb_home_market_caption'),
+        isVisible: HomeModuleGate.showInGrid,
+        onOpen: (t) => openHolidayMarketTarget(context, t),
+      );
+
   // «Суғурта» карточкаси (эга 2026-11-28) — ҳуклар `home_lite_cards.dart` да ([homeInsuranceVisible] / [homeInsuranceCard]).
   bool _insuranceVisible = false;
 
@@ -1942,7 +1951,7 @@ class _HomeViewState extends State<_HomeView> {
                             ),
                             // «Бозорлар» (эга 2026-11-20): 11 карточка эга тартибида, ҳар бири ўз дарвозаси билан.
                             // Эга 2026-11-28: саватча карточкаси Супермаркетдан кейин, «Заводлар» Улгуржидан кейин; «Аралаш бозор» карточкаси йўқ.
-                            HomeMarketsBlock(onOpen: _openHomeMarket, basketCard: _basketCard()),
+                            HomeMarketsBlock(onOpen: _openHomeMarket, basketCard: _basketCard(), holidayMarketCard: _holidayMarketCard()),
                             // Реклама каруселлари (эга 2026-11-28): «Бозорлар» / «Эълон ва хизматлар» / «Транспорт» дан кейин.
                             _adCarousel(HomeAdPlacement.markets),
                             // Аралаш маҳсулот тасмаси — «Бозорлар»дан кейин (эга 2026-11-20 қайтарилди; аввалгидек).

@@ -6337,6 +6337,7 @@
   "hb_change_drop": "{group} убрано — не вошло в бюджет (−{saving})",
   "hb_home_title": "Праздничная корзина",
   "hb_home_caption": "День рождения, Навруз, Хайит, Новый год — ваша корзина",
+  "hb_home_market_caption": "Объявления к празднику на рынке",
   "hb_rel_home_title": "Добавьте дни рождения близких",
   "hb_rel_home_caption": "Напомним и подготовим корзину",
   "hb_rel_progress": "{n}/{goal} — до бонуса ещё {left}",

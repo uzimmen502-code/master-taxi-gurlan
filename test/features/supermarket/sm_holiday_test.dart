@@ -2,6 +2,7 @@ import 'package:ava_gurlan/core/geo/geo_context.dart';
 import 'package:ava_gurlan/core/utils/idempotency_keys.dart';
 import 'package:ava_gurlan/features/home/controllers/home_holiday_cards.dart';
 import 'package:ava_gurlan/features/home/widgets/home_lite_cards.dart';
+import 'package:ava_gurlan/features/home/widgets/home_markets_block.dart';
 import 'package:ava_gurlan/features/supermarket/data/holiday_repository.dart';
 import 'package:ava_gurlan/features/supermarket/data/supermarket_repository.dart';
 import 'package:ava_gurlan/features/supermarket/domain/sm_access.dart';
@@ -20,6 +21,24 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'sm_fixture.dart';
 
 // ─── Сохта манбалар ──────────────────────────────────────────────────────────
+
+class _FakeHolidayApi implements HolidayApi {
+  _FakeHolidayApi(this.catalog);
+  final HolidayCatalog catalog;
+  int loads = 0;
+
+  @override
+  Future<HolidayCatalog> loadCatalog() async {
+    loads++;
+    return catalog;
+  }
+
+  @override
+  Future<HolidayBuildResult> build({required String basketId, int? guests, int? budget}) => throw UnimplementedError();
+
+  @override
+  Future<Object?> claimRelativesBonus() async => null;
+}
 
 Map<String, String> _n(String s) => {'uz_Cyrl': s, 'uz_Latn': '$s-lat', 'ru': '$s-ru'};
 
@@ -301,6 +320,71 @@ void main() {
       expect(claims, 2);
       final err = HomeHolidayCards(holidayCheck: () async => throw Exception('x'));
       expect(await err.resolve(smOpenable: true, phone: '998901234567'), HomeHolidayState.none);
+    });
+
+    // Эга 2026-11-28: бозор мақсадли байрам (Қурбон ҳайит → Мол бозори) супермаркет рухсатига боғлиқ эмас.
+    group('бозор мақсадли байрам — супермаркетсиз', () {
+      HolidayOccasion occ(String id, {String next = '2027-05-20', Map<String, Object?>? target, String stage = ''}) =>
+          HolidayOccasion.fromMap({
+            'id': id, 'names': _n(id), 'kind': 'holiday', 'order': 1, 'remindDaysBefore': 5, 'nextDate': next,
+            'stage': stage, 'target': target,
+          })!;
+      const market = {'type': 'market', 'market': 'livestock', 'categories': ['cattle']};
+      final today = DateTime(2027, 5, 10);
+
+      test('holidayMarketOccasion: давр 0..15 кун; ўтган/узоқ/ўчиқ/саватча мақсади — йўқ', () {
+        expect(holidayMarketOccasion([occ('qurbon_hayit', target: market)], today)?.id, 'qurbon_hayit');
+        expect(holidayMarketOccasion([occ('qurbon_hayit', next: '2027-05-10', target: market)], today)?.id, 'qurbon_hayit');
+        expect(holidayMarketOccasion([occ('qurbon_hayit', next: '2027-05-25', target: market)], today)?.id, 'qurbon_hayit');
+        expect(holidayMarketOccasion([occ('qurbon_hayit', next: '2027-05-26', target: market)], today), isNull, reason: '16 кун');
+        expect(holidayMarketOccasion([occ('qurbon_hayit', next: '2027-05-09', target: market)], today), isNull, reason: 'ўтган');
+        expect(holidayMarketOccasion([occ('qurbon_hayit', target: market, stage: 'off')], today), isNull);
+        expect(holidayMarketOccasion([occ('navruz', target: const {'type': 'holiday_basket', 'occasionId': 'navruz'})], today), isNull);
+        expect(holidayMarketOccasion([occ('navruz')], today), isNull);
+        expect(holidayMarketOccasion(const [], today), isNull);
+      });
+
+      test('repo: супермаркет ёпиқ — саватча йўқ, бозор байрами БОР (сервер каталоги уни беради)', () async {
+        HolidayCatalogCache.resetForTest();
+        addTearDown(HolidayCatalogCache.resetForTest);
+        final api = _FakeHolidayApi(HolidayCatalog(occasions: [occ('qurbon_hayit', target: market)]));
+        expect(await holidayAvailable(smOpenable: false, api: api), isFalse);
+        final m = await holidayMarketAvailable(api: api, today: today);
+        expect([m?.id, m?.target?.market], ['qurbon_hayit', 'livestock']);
+        expect(api.loads, 1);
+      });
+
+      test('HomeHolidayCards: саватча ёпиқ + бозор байрами — фақат бозор карточкаси; қариндошлар йўқ; хато ажралган', () async {
+        final q = occ('qurbon_hayit', target: market);
+        final s = await HomeHolidayCards(holidayCheck: () async => false, marketCheck: () async => q)
+            .resolve(smOpenable: false, phone: '998901234567');
+        expect([s.holiday, s.showRelativesPrompt, s.market?.id], [false, false, 'qurbon_hayit']);
+        expect(s == HomeHolidayState.none, isFalse);
+        final both = await HomeHolidayCards(
+          holidayCheck: () async => true,
+          countBirthdays: (_) async => 5,
+          marketCheck: () async => q,
+        ).resolve(smOpenable: true, phone: '998901234567');
+        expect([both.holiday, both.market?.id], [true, 'qurbon_hayit']);
+        final basketErr = await HomeHolidayCards(holidayCheck: () async => throw Exception('x'), marketCheck: () async => q)
+            .resolve(smOpenable: true, phone: '998901234567');
+        expect([basketErr.holiday, basketErr.market?.id], [false, 'qurbon_hayit']);
+        final marketErr = await HomeHolidayCards(holidayCheck: () async => false, marketCheck: () async => throw Exception('y'))
+            .resolve(smOpenable: true, phone: '998901234567');
+        expect(marketErr, HomeHolidayState.none);
+      });
+
+      test('holidayMarketCardFor: байрам номи, Мол бозори расми, дарвоза — бозор модули; босилса мақсад', () {
+        HolidayTarget? opened;
+        final q = occ('qurbon_hayit', target: market);
+        final c = holidayMarketCardFor(q, lang: 'uz_Latn', caption: 'cap', isVisible: (_) => true, onOpen: (t) => opened = t)!;
+        expect([c.id, c.title, c.caption, c.imagePath], ['holiday_market', 'qurbon_hayit-lat', 'cap', 'assets/images/markets/market_livestock_v3.webp']);
+        c.onTap();
+        expect([opened?.market, opened?.initialCategory], ['livestock', 'cattle']);
+        expect(holidayMarketCardFor(q, lang: 'uz_Cyrl', caption: '', isVisible: (id) => id != 'livestock_market', onOpen: (_) {}), isNull);
+        expect(holidayMarketCardFor(null, lang: 'uz_Cyrl', caption: '', isVisible: (_) => true, onOpen: (_) {}), isNull);
+        expect(holidayMarketCardFor(occ('navruz'), lang: 'uz_Cyrl', caption: '', isVisible: (_) => true, onOpen: (_) {}), isNull);
+      });
     });
   });
 

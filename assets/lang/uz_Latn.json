@@ -6337,6 +6337,7 @@
   "hb_change_drop": "{group} olib taşlandi — byudjetga siğmadi (−{saving})",
   "hb_home_title": "Bayram savatçasi",
   "hb_home_caption": "Tuğilgan kun, Navröz, Hayit, Yangi yil — öz savatçangiz",
+  "hb_home_market_caption": "Bayramga mos e'lonlar bozorda",
   "hb_rel_home_title": "Yaqinlaringiz tuğilgan kunini qöşing",
   "hb_rel_home_caption": "Eslatamiz va savatça tayyorlaymiz",
   "hb_rel_progress": "{n}/{goal} — bonus uçun yana {left} ta",

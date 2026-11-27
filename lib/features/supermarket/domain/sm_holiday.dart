@@ -808,6 +808,21 @@ List<DateTime> smSelectableDates(Map<String, List<SmSlot>> dateSlots, DateTime t
 bool holidayCardVisible({required bool smOpenable, required bool smAllowed, required Iterable<HolidayOccasion> occasions}) =>
     smOpenable && smAllowed && occasions.any((o) => o.isOn);
 
+/// Бозор мақсадли байрам (Қурбон ҳайит → Мол бозори) бош саҳифа карточкаси учун: супермаркет рухсатига БОҒЛИҚ ЭМАС
+/// (сервер `occasionVisibleFor` ҳам уни супермаркет дарвозасидан озод қилган, эга 2026-11-27/28). Давр — байрамгача
+/// 0..[kQurbonPeriodDays] кун (бозор баннери билан бир хил). Бир нечта бўлса — каталог тартибида биринчиси.
+HolidayOccasion? holidayMarketOccasion(Iterable<HolidayOccasion> occasions, DateTime today) {
+  final t0 = DateTime.utc(today.year, today.month, today.day);
+  for (final o in occasions) {
+    if (!o.isOn || !(o.target?.isMarket ?? false)) continue;
+    final d = nextOccasionDate(o, today);
+    if (d == null) continue;
+    final diff = DateTime.utc(d.year, d.month, d.day).difference(t0).inDays;
+    if (diff >= 0 && diff <= kQurbonPeriodDays) return o;
+  }
+  return null;
+}
+
 /// «Яқинлар» бонус дастури мақсади — прогресс ({n}/{goal}) учун (эга 2026-11-26). Карточка кўриниши — алоҳида
 /// [kRelativesPromptHideAt] (эга 2026-11-28 уни 5 га оширди; бонус мақсади ўзгармади).
 const int kRelativesBirthdayGoal = 3;

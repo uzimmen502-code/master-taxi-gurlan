@@ -84,14 +84,18 @@ void main() {
       expect(ids(ins: true).contains('car_insurance'), isTrue);
     });
 
-    testWidgets('суғурта ҳуклари ҳозир: карточка null, дарвоза false (клиент бошқа шохда)', (t) async {
+    // Merge'дан кейин (2026-11-28): ҳуклар car_insurance_home_section'га уланган.
+    testWidgets('суғурта ҳуклари: карточка = car_insurance; сервер ҳолатини ўқиб бўлмаса дарвоза false', (t) async {
       expect(await homeInsuranceVisible('998901234567'), isFalse);
-      HomeLiteCardData? got = _card('x');
+      expect(await homeInsuranceVisible(''), isFalse);
+      HomeLiteCardData? got;
       await t.pumpWidget(MaterialApp(home: Builder(builder: (c) {
         got = homeInsuranceCard(c, phone: '998901234567');
         return const SizedBox();
       })));
-      expect(got, isNull);
+      expect(got, isNotNull);
+      expect(got!.id, 'car_insurance');
+      expect(got!.imagePath, 'assets/images/services/card_car_insurance_v1.webp');
     });
 
     // Эга 2026-11-27: 18..60 (аввал 18..45).

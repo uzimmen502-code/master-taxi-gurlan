@@ -434,6 +434,9 @@ class _OccasionDialogState extends State<_OccasionDialog> {
       image: _image.text.trim(),
       target: birthday ? null : _target,
       selfReminders: self,
+      // Эга 2026-11-28: формада йўқ майдонлар қайта сақлашда йўқолмасин.
+      theme: _o?.theme ?? const {},
+      reminderTexts: birthday ? null : _o?.reminderTexts,
     );
     final p = [
       ...holidayOccasionProblems(o),

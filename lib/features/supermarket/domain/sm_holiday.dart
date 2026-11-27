@@ -249,7 +249,12 @@ class HolidayOccasion {
     this.target,
     this.selfReminders,
     this.theme = const {},
+    this.reminderTexts,
   });
+
+  /// Админ эслатма матни (сервер `reminderTexts` {uz_Cyrl|uz_Latn|ru: {title, body}}) — таҳрирловчи кўрсатмаса ҳам
+  /// қайта сақлашда ЙЎҚОЛМАСИН (эга 2026-11-28). null — йўқ.
+  final Map<String, Map<String, String>>? reminderTexts;
 
   /// Мавзу изоҳи (эга 2026-11-28; сервер 	heme): «гуллар, шоколад, совғалар» — саватча сарлавҳасида. Бўш — йўқ.
   final Map<String, String> theme;
@@ -316,6 +321,16 @@ class HolidayOccasion {
       nextDate: s(raw['nextDate']),
       target: HolidayTarget.fromMap(raw['target']),
       theme: raw['theme'] is Map ? smNames(raw['theme']) : const {},
+      reminderTexts: raw['reminderTexts'] is Map
+          ? {
+              for (final e in (raw['reminderTexts'] as Map).entries)
+                if (e.value is Map)
+                  '${e.key}': {
+                    for (final f in (e.value as Map).entries)
+                      if (f.value is String) '${f.key}': f.value as String,
+                  },
+            }
+          : null,
       selfReminders: raw['selfReminders'] is List
           ? [...(raw['selfReminders'] as List).map(HolidaySelfReminder.fromMap).whereType<HolidaySelfReminder>()]
           : null,
@@ -343,6 +358,7 @@ class HolidayOccasion {
         if (isBirthday && selfReminders != null) 'selfReminders': [for (final r in selfReminders!) r.toMap()],
         // Мавзу сақланиб қолсин (сервер йўқ майдонни тозалайди).
         if (theme.length == 3) 'theme': theme,
+        if (!isBirthday && reminderTexts != null) 'reminderTexts': reminderTexts,
       };
 }
 

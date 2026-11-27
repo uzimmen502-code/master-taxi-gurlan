@@ -256,6 +256,24 @@ void main() {
       expect([h['deliveryDate'], h.containsKey('slotId')], ['2026-12-30', false]);
     });
 
+    test('админ қайта сақлаши (эга 2026-11-28): reminderTexts ва theme сақланади; туғилган кунда reminderTexts юборилмайди', () {
+      final raw = {
+        'id': 'qurbon_hayit', 'names': _n('Қурбон'), 'kind': 'holiday', 'stage': 'public', 'order': 5,
+        'dateRule': {'type': 'list', 'dates': ['2027-05-16']},
+        'reminderTexts': {
+          'uz_Cyrl': {'title': 'Қурбонлик', 'body': 'Мол бозори'},
+          'uz_Latn': {'title': 'Qurbonlik', 'body': 'Mol bozori'},
+          'ru': {'title': 'Курбан', 'body': 'Скотный рынок'},
+        },
+        'theme': {'uz_Cyrl': 'т', 'uz_Latn': 't', 'ru': 'т'},
+      };
+      final m = HolidayOccasion.fromMap(raw)!.toAdminMap();
+      expect(m['reminderTexts'], raw['reminderTexts']);
+      expect(m['theme'], raw['theme']);
+      expect(HolidayOccasion.fromMap({...raw, 'kind': 'birthday'})!.toAdminMap().containsKey('reminderTexts'), isFalse);
+      expect(HolidayOccasion.fromMap({...raw}..remove('reminderTexts'))!.toAdminMap().containsKey('reminderTexts'), isFalse);
+    });
+
     // Эга 2026-11-28: ҳафталик саватча — байрамга боғлиқ эмас, фақат супермаркет рухсати.
     test('ҳафталик саватча картаси: супермаркет очиқ + рухсат (байрам шарт ЭМАС)', () {
       expect(holidayCardVisible(smOpenable: true, smAllowed: true), isTrue);

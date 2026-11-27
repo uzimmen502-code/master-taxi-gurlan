@@ -75,6 +75,10 @@ function toMillis(v) {
 function createCourierPush(deps) {
   const { db, canonicalUid } = deps;
   const nowFn = deps.now || (() => new Date());
+  // `provider_presence` ni har bir foydalanuvchi o'z hujjatiga yoza oladi
+  // (`firestore.rules`), shuning uchun «onlayn» ro'yxati capability bilan
+  // tasdiqlanadi (audit C-5). Berilmasa — eski xatti-harakat (faqat testlar).
+  const isWorking = typeof deps.isWorking === 'function' ? deps.isWorking : null;
 
   /** Бир одамнинг барча мумкин ID шакллари — такрорсиз. */
   function idForms(courierId) {
@@ -155,7 +159,14 @@ function createCourierPush(deps) {
     // `provider_presence`. Eski ilova versiyalari qo'llab-quvvatlanmaydi
     // (ega qarori, 2026-10-06).
 
-    return [...out.values()];
+    const rows = [...out.values()];
+    if (!isWorking) return rows;
+    // Capability: kuryer bo'lmagan odam soxta presence yozib push'ni (va
+    // «yaqin kuryerlar» slotini) egallab olmasin.
+    const verdicts = await Promise.all(rows.map(async (r) => {
+      try { return (await isWorking(r.id)) === true; } catch (_) { return false; }
+    }));
+    return rows.filter((_, i) => verdicts[i]);
   }
 
   /** Ҳозир онлайн курьерларнинг КАНОН ID рўйхати. */

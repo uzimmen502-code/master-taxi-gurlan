@@ -26,7 +26,7 @@ attachAssistant(exports, {
 // Kuryerga push — token va «kim onlayn» manbalari (13.6.4).
 // `canonicalUid` — hoisted function declaration (pastda).
 const { createCourierPush } = require('./courier_push');
-const courierPush = createCourierPush({ db, canonicalUid });
+const courierPush = createCourierPush({ db, canonicalUid, isWorking: (id) => courierAuth.isWorking(id) });
 // Capability lifecycle nusxasi (manba: functions_demand/core/capabilities.js,
 // paritet testi bilan). `resolveAuthorizedCourierUid` shu orqali tekshiradi.
 const capabilitiesModel = require('./capabilities_model');
@@ -148,6 +148,8 @@ attachRestaurantBookings(exports, {
 // ва админ бўлим рухсатлари (docs/barcha_buyurtmalar_taklifi_uz.md).
 const { attachOrderIndex } = require('./order_index');
 attachOrderIndex(exports, { db, admin });
+// Бизнес буюртмаси (`type: 'business'`) — ягона манба `business_order_states.js` (жонли `business_orders.js` ҳам шуни қайта экспорт қилади).
+const { isBusinessOrder } = require('./business_order_states');
 // Улгуржи бозор ҳудуди (сотувчи манзилидан) ва эски синов товарлари
 // (D-GEO-10/14, 2026-10-11).
 const { attachWholesaleGeo } = require('./wholesale_geo');
@@ -1044,6 +1046,127 @@ async function getOrderFlowMode(field, defaultValue = 'manual') {
   }
 }
 
+const notifI18n = require('./notif_i18n');
+const { tokenOk } = require('./courier_push');
+
+/**
+ * AVA дўкони (`type: platform`) курьер босқичи хабари калити (эга 2026-11-07), бошқа ҳолат — `null`.
+ * `ready` — «курьерни кутмоқда»; `in_delivery` — «курьерга топширилди» + кузатиш ҳаволаси.
+ */
+function platformCourierStepKey(orderType, status) {
+  if (String(orderType || '') !== 'platform') return null;
+  if (status === 'ready') return 'platform_order_awaiting_courier';
+  if (status === 'in_delivery') return 'platform_order_handed_courier';
+  return null;
+}
+
+/** №: ҳужжат ID'сининг охирги 6 белгиси (ягона рақам майдони йўқ). */
+function shortOrderNo(orderId) {
+  return String(orderId || '').slice(-6).toUpperCase();
+}
+
+/**
+ * Сотувчи томони — AVA дўкони ходимлари (admin/superadmin/dispatcher, `onOrderCreate` билан бир хил).
+ * Кузатиш ҳаволаси фақат админларга: `order_courier_live` ни rules бўйича фақат `isAdmin()` ўқийди.
+ * Хабар ҳар бирига ўз тилида; best-effort (хато буюртма оқимини тўхтатмайди).
+ */
+async function notifyPlatformStaff(orderId, order, status) {
+  const handed = status === 'in_delivery';
+  try {
+    const snap = await db.collection('users')
+      .where('role', 'in', ['admin', 'superadmin', 'dispatcher'])
+      .get();
+    const amount = new Intl.NumberFormat('uz-UZ').format(Math.round(Number(order.total) || 0));
+    const params = { no: shortOrderNo(orderId), amount };
+    const messages = [];
+    for (const d of snap.docs) {
+      const u = d.data() || {};
+      const token = u.fcmToken;
+      if (typeof token !== 'string' || token.length <= 10) continue;
+      const isAdminRole = u.role === 'admin' || u.role === 'superadmin';
+      const key = !handed ? 'platform_seller_awaiting_courier'
+        : (isAdminRole ? 'platform_seller_handed_courier' : 'platform_seller_handed_courier_nolink');
+      const lang = notifI18n.normalizeLang(u.appLang);
+      const labels = isSupermarketOrder(order) ? SUPERMARKET_LABELS : COURIER_ORDER_LABELS.platform;
+      const m = notifI18n.render(key, lang, { ...params, label: labels[lang] || labels.uz_Cyrl });
+      messages.push({
+        token,
+        notification: { title: m.title, body: m.body },
+        data: handed && isAdminRole
+          ? { type: 'order', status, screen: 'courier_tracking', orderId: String(orderId) }
+          : { type: 'new_order', status, orderId: String(orderId), orderType: 'platform' },
+        android: { priority: 'high' },
+      });
+    }
+    if (messages.length) await admin.messaging().sendEach(messages);
+    console.log(JSON.stringify({ action: 'platformStaffNotify', orderId, status, result: 'ok', recipients: messages.length }));
+  } catch (e) {
+    console.error(JSON.stringify({ action: 'platformStaffNotify', orderId, status, result: 'failed', errorCode: 'NOTIFY_FAILED', message: String((e && e.message) || e).slice(0, 160) }));
+  }
+}
+
+/** Курьер хабари учун буюртма тури номи — уч тилда (ички атама йўқ). */
+const COURIER_ORDER_LABELS = Object.freeze({
+  platform: { uz_Cyrl: 'AVA дўкони', uz_Latn: 'AVA do\'koni', ru: 'Магазин AVA' },
+  bread: { uz_Cyrl: 'Нон', uz_Latn: 'Non', ru: 'Хлеб' },
+});
+
+/**
+ * «Тайёр» буюртма → ҳудуддаги ОНЛАЙН курьерларга овозли/вибрацияли push (эга 2026-11-07).
+ * «Ҳудуд» — `courierListReadyOrders` билан БИР ХИЛ қоида (D-GEO-3): курьернинг жонли нуқтасидан
+ * [COURIER_READY_RADIUS_KM_DEFAULT] км; координатасиз буюртма ёки курьер — чекланмайди. Курьер рўйхатида
+ * кўринмайдиган буюртмалар (ресторан, бизнес, олиб кетиш/POS, ўз буюртмаси) — push ҳам йўқ.
+ * Онлайн рўйхати `courierPush.onlineCouriers()` (presence ≤120 с + capability + «Туман» тоифаси).
+ * Best-effort: хато буюртма оқимини тўхтатмайди. Чақирувчи уни бир марта чақиради (news gate).
+ */
+async function notifyCouriersOrderReady(orderId, order) {
+  try {
+    const type = String(order.type || 'bread');
+    if (type === 'restaurant' || isBusinessOrder(order) || isCourierExcludedFulfillment(order)) return { notified: 0 };
+    if ((order.courierId || '').toString().trim()) return { notified: 0 };
+    const oLat = Number(order.lat);
+    const oLng = Number(order.lng);
+    const orderGeo = Number.isFinite(oLat) && Number.isFinite(oLng) && !(oLat === 0 && oLng === 0)
+      && Math.abs(oLat) <= 90 && Math.abs(oLng) <= 180;
+    const radiusM = COURIER_READY_RADIUS_KM_DEFAULT * 1000;
+    const candidates = (await courierPush.onlineCouriers())
+      .filter((c) => !courierAuth.isOwnOrder(order, c.id))
+      .map((c) => ({ ...c, distanceM: orderGeo && c.lat != null && c.lng != null
+        ? localTaxiGeo.haversineMeters(c.lat, c.lng, oLat, oLng) : null }))
+      .filter((c) => c.distanceM == null || c.distanceM <= radiusM);
+    const amount = new Intl.NumberFormat('uz-UZ').format(Math.round(Number(order.total) || 0));
+    const seen = new Set();
+    const messages = [];
+    for (const c of candidates) {
+      const token = await courierPush.resolveToken(c.id);
+      if (!tokenOk(token) || seen.has(token)) continue;
+      seen.add(token);
+      const lang = await notifI18n.langOfPhone(db, c.id);
+      const labels = isSupermarketOrder(order) ? SUPERMARKET_LABELS : (COURIER_ORDER_LABELS[type] || COURIER_ORDER_LABELS.bread);
+      const km = c.distanceM == null ? '' : ` · ${(c.distanceM / 1000).toFixed(1)} ${lang === 'uz_Latn' ? 'km' : 'км'}`;
+      const m = notifI18n.render('courier_new_order', lang, { label: labels[lang] || labels.uz_Cyrl, amount, dist: km });
+      messages.push({
+        token,
+        notification: { title: m.title, body: m.body },
+        data: { type: 'courier_new_order', screen: 'courier', orderId: String(orderId) },
+        android: {
+          priority: 'high',
+          // Илова каналини яратади (овоз `incoming_ring` + вибрация); эски APK'да канал йўқ —
+          // Android стандарт каналда кўрсатади.
+          notification: { channelId: 'courier_new_order', sound: 'incoming_ring', defaultVibrateTimings: false, vibrateTimingsMillis: [0, 800, 400, 800, 400, 1200] },
+        },
+        apns: { payload: { aps: { sound: 'default' } } },
+      });
+    }
+    if (messages.length) await admin.messaging().sendEach(messages);
+    console.log(JSON.stringify({ action: 'courierNewOrderPush', orderId, type, candidates: candidates.length, result: 'ok', notified: messages.length }));
+    return { notified: messages.length };
+  } catch (e) {
+    console.error(JSON.stringify({ action: 'courierNewOrderPush', orderId, result: 'failed', errorCode: 'COURIER_PUSH_FAILED', message: String((e && e.message) || e).slice(0, 160) }));
+    return { notified: 0 };
+  }
+}
+
 // Буюртма статуси ўзгарганда
 exports.onOrderUpdate = functions.firestore
   .document('orders/{orderId}')
@@ -1054,6 +1177,8 @@ exports.onOrderUpdate = functions.firestore
     // Restoran buyurtmasi: xabarlar va o'tishlar `restaurant_orders.js` da
     // (auto `ready` ham qo'llanmaydi — restoran o'zi «Tayyor» deydi).
     if (String(after.type || '') === 'restaurant') return;
+    // Бизнес буюртмаси ҳам: хабарлар ва ўтишлар `business_orders.js` да (авто `ready` йўқ).
+    if (isBusinessOrder(after)) return;
 
     const afterStatus = after.status === 'courier' ? 'in_delivery' : after.status;
     if (
@@ -1112,7 +1237,17 @@ exports.onOrderUpdate = functions.firestore
 
     const orderType = after.type || 'bread';
     const typeLabel = orderTypeLabel(orderType, after.subtype);
-    const newsBody = [body, typeLabel].filter(Boolean).join('\n');
+    // AVA дўкони (эга 2026-11-07): «курьерни кутмоқда» / «курьерга топширилди» + кузатиш ҳаволаси,
+    // мижоз тилида (3 тил). Курьер олганда икки йўл ҳам `status: in_delivery` + `courier_picked` ёзади.
+    const platformKey = platformCourierStepKey(orderType, status);
+    const tracking = platformKey === 'platform_order_handed_courier';
+    if (platformKey) {
+      const lang = await notifI18n.langOfPhone(db, uid);
+      const m = notifI18n.render(platformKey, lang, {});
+      title = m.title;
+      body = m.body;
+    }
+    const newsBody = platformKey ? body : [body, typeLabel].filter(Boolean).join('\n');
     // Битта ўтиш (event) — битта хабар. eventId бўлмаса (эски runtime) —
     // аввалгидек тасодифий ID.
     const eventId = String((context && context.eventId) || '');
@@ -1129,10 +1264,18 @@ exports.onOrderUpdate = functions.firestore
       orderId: change.after.id,
       orderStatus: status,
       orderType,
+      // Илова «Хабарлар»да шу қаторни босганда курьерни кузатиш экранини очади.
+      ...(tracking ? { trackOrderId: change.after.id } : {}),
       priority: 8,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     if (!created) return;
+
+    // Сотувчи (AVA дўкони — админ/диспетчерлар; эга 2026-11-07, `onOrderCreate` билан бир хил қабул қилувчилар).
+    // Хабар бир марта ёзилгандан кейингина (триггер такрорида push қайта кетмайди).
+    if (platformKey) await notifyPlatformStaff(change.after.id, after, status);
+    // Ҳудуддаги онлайн курьерларга «янги буюртма» (овоз + вибрация) — фақат «тайёр» ўтишида, бир марта.
+    if (status === 'ready') await notifyCouriersOrderReady(change.after.id, after);
 
     const fcmTitle = `📢 ${title}`;
     const fcmBody = body || typeLabel;
@@ -1142,7 +1285,9 @@ exports.onOrderUpdate = functions.firestore
         await admin.messaging().send({
           token,
           notification: { title: fcmTitle, body: fcmBody },
-          data: { type: 'order', status, screen: 'news', tab: 'orders' },
+          data: tracking
+            ? { type: 'order', status, screen: 'courier_tracking', orderId: change.after.id }
+            : { type: 'order', status, screen: 'news', tab: 'orders' },
           android: { priority: 'high' },
         });
       } catch (e) {
@@ -1207,6 +1352,8 @@ exports.onOrderCreate = functions.firestore
     // Restoran buyurtmasi: restoran a'zolariga push `placeRestaurantOrder`
     // da; «pickup → barcha seller» yo'li unga tegishli emas.
     if (String(orderType) === 'restaurant') return;
+    // Бизнес буюртмаси: сотувчига push `placeBusinessOrder` да; «Non» чеки/админ FCM унга тегишли эмас.
+    if (isBusinessOrder(order)) return;
     const total = order.total || 0;
     const fmt = new Intl.NumberFormat('uz-UZ').format(total);
     const emoji = isSupermarketOrder(order) ? 'AVA Supermarket' : (orderType === 'platform' ? 'Ulgurji' : 'Non');
@@ -2756,6 +2903,17 @@ function assertCourierPhone(courierPhone) {
     throw new functions.https.HttpsError('invalid-argument', 'courierPhone');
   }
   return uid;
+}
+
+/**
+ * Курьер ОЛА олмайдиган буюртма тури: мижоз ўзи олиб кетади (`pickup`,
+ * `sellerMarkPickupReady` уни ҳам `status:'ready'` қилади) ёки дўконда
+ * жойида сотилган (`pos`). Майдони йўқ эски буюртма — етказиш (ўзгармайди).
+ * `courierListReadyOrders` ва `courierCreateRoute` — ЯГОНА манба (7-қоида).
+ */
+function isCourierExcludedFulfillment(od) {
+  const mode = String((od && od.fulfillmentMode) || '');
+  return mode === 'pickup' || mode === 'pos';
 }
 
 const courierAuth = makeCourierAuth({

@@ -666,7 +666,9 @@ async function main() {
       updatedAt: admin.firestore.Timestamp.now(),
     });
     const NEAR_NO_LIMIT = '998913000003';
-    await db.collection('users').doc(NEAR_NO_LIMIT).set({ role: 'user', bonusBalance: 0 });
+    // C-5: onlayn ro'yxat capability bilan tekshiriladi — bu haqiqiy (approved) kuryer.
+    ACC[NEAR_NO_LIMIT] = 'accCOURIER0000000000N';
+    await seedCourier(NEAR_NO_LIMIT, 'approved');
     await presence(COURIER_A, { lat: R_LOC.lat + 0.001, lng: R_LOC.lng }); // ~110 m
     await presence(COURIER_B, { lat: 41.3, lng: 69.2 }); // Toshkent — radiusdan tashqarida
     await presence(NEAR_NO_LIMIT, { lat: R_LOC.lat, lng: R_LOC.lng + 0.002 }); // yaqin, vykup limiti yo'q

@@ -1,20 +1,33 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
+import 'dart:async';
 
+import 'package:flutter/material.dart';
+
+import '../../features/splash_ad/splash_ad.dart';
+import '../../features/splash_ad/splash_ad_cache.dart';
 import '../brand_labels.dart';
 import '../theme/ava_tokens.dart';
 
-/// Бренд фони (AVA Primary `#FFA500`, эга тасдиғи 2026-10-08; аввал қора):
-/// лого нуқтадан ўсиб 3 марта экранга урилади, сўнг UI. Сарлавҳа тўқ —
-/// апельсин устида оқ матн 1.97 контраст беради.
-/// `splash_logo.png` — эски логотипнинг шаффоф фонли нусхаси.
+/// Илова очилишидаги РЕКЛАМА ЎРНИ (эга 2026-11-28; аввалги ~1.8 с лого анимацияси ўрнига).
 ///
-/// Юқори: AVA + туман. Паст сўзлар йўқ. ~1.8 с.
+///  * Аниқ [displayDuration] (2 с) кўринади, «Ўтказиб юбориш» тугмаси ЙЎҚ.
+///  * «Реклама бериш» тугмаси — [onAdvertise] (splash дарров ёпилади, кейин мавжуд йўл очилади).
+///  * Креатив ФАҚАТ кешдан ([launch], `main()` да олдиндан ўқилган) — тармоқ кутилмайди; йўқ бўлса
+///    сукут матни «Бу ерда сизнинг рекламангиз бўлиши мумкин».
+///  * OS native launch screen ўзгармайди.
+///
+/// Тил/биринчи кадр: [child] (`MaterialApp`) оверлей остида шаффоф ҳолда қурилади — таржималар шу 2 с
+/// ичида юкланади, қурилма тили «лип» этиб кўринмайди. Оверлей матнлари [lang] бўйича (main()да
+/// prefs'дан синхрон олинган тил), чунки бу ерда `AppLocalizations` ҳали йўқ.
 class AppLaunchSplash extends StatefulWidget {
   const AppLaunchSplash({
     super.key,
     required this.child,
     this.onFinished,
+    this.launch,
+    this.lang = 'uz_Cyrl',
+    this.onAdvertise,
+    this.onOpenAd,
+    this.onShown,
   });
 
   final Widget child;
@@ -22,234 +35,225 @@ class AppLaunchSplash extends StatefulWidget {
   /// Splash overlay yopilganda (bir marta) — FCM/notification shu paytda.
   final VoidCallback? onFinished;
 
-  /// Урилишлар ораси.
-  static const Duration hitInterval = Duration(milliseconds: 500);
-  static const int hitCount = 3;
-  static const Duration exitDuration = Duration(milliseconds: 280);
+  /// Кешдаги рекламачи креативи (`null` — сукут матни).
+  final SplashAdLaunch? launch;
 
-  static Duration get totalDuration => Duration(
-        milliseconds: hitInterval.inMilliseconds * hitCount +
-            exitDuration.inMilliseconds,
-      );
+  /// `uz_Cyrl` | `uz_Latn` | `ru`.
+  final String lang;
+
+  /// «Реклама бериш» босилди (splash аллақачон ёпилган).
+  final VoidCallback? onAdvertise;
+
+  /// Креатив босилди ва унда ҳавола бор (splash аллақачон ёпилган).
+  final ValueChanged<SplashAd>? onOpenAd;
+
+  /// Рекламачи креативи экранга чиқди (кунлик чегара ҳисоби учун) — бир марта.
+  final ValueChanged<SplashAd>? onShown;
+
+  /// Эга 2026-11-28: аниқ 2 сония.
+  static const Duration displayDuration = Duration(seconds: 2);
+
+  static const Key overlayKey = ValueKey('splash-ad-overlay');
+  static const Key advertiseKey = ValueKey('splash-ad-advertise');
+  static const Key imageKey = ValueKey('splash-ad-image');
+  static const Key textKey = ValueKey('splash-ad-text');
+  static const Key placeholderKey = ValueKey('splash-ad-placeholder');
 
   @override
   State<AppLaunchSplash> createState() => _AppLaunchSplashState();
 }
 
-class _AppLaunchSplashState extends State<AppLaunchSplash>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  static const double _startScale = 0.04;
-  static const double _restScale = 1.0;
-  /// ~экран кенглигига урилиш (лого ~0.52 * width).
-  static const double _slamScale = 2.05;
-  static const AssetImage _logoAsset =
-      AssetImage('assets/images/splash_logo.png');
-
+class _AppLaunchSplashState extends State<AppLaunchSplash> {
   bool _overlayVisible = true;
-  bool _logoPrepared = false;
-  bool _warmingLogo = false;
-  ImageProvider<Object> _logoImage = _logoAsset;
+  Timer? _timer;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: AppLaunchSplash.totalDuration,
-    )..addStatusListener((status) {
-        if (status == AnimationStatus.completed && mounted) {
-          setState(() => _overlayVisible = false);
-          widget.onFinished?.call();
-        }
-      });
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_logoPrepared) return;
-    _logoPrepared = true;
-
-    final mediaQuery = MediaQuery.of(context);
-    final logoWidth = (mediaQuery.size.width * 0.52).clamp(160.0, 280.0);
-    final cacheWidth = (logoWidth * 1.60 * mediaQuery.devicePixelRatio).ceil();
-    _logoImage = ResizeImage.resizeIfNeeded(cacheWidth, null, _logoAsset);
-    _startAfterLogoDecode();
-  }
-
-  Future<void> _startAfterLogoDecode() async {
-    try {
-      await precacheImage(_logoImage, context);
-    } catch (_) {
-      // The Image widget still reports the asset error; never freeze splash.
-    }
-    if (mounted) {
-      setState(() => _warmingLogo = true);
-      await SchedulerBinding.instance.endOfFrame;
-    }
-    if (mounted) {
-      _warmingLogo = false;
-      _controller.forward();
-    }
+    // Таймер биринчи кадр чизилгач — реклама экранда ТЎЛИҚ 2 с туради.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_overlayVisible) return;
+      _timer = Timer(AppLaunchSplash.displayDuration, _finish);
+      final ad = widget.launch?.ad;
+      if (ad != null) widget.onShown?.call(ad);
+    });
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _timer?.cancel();
     super.dispose();
   }
 
-  double _hitScale(int index, double local) {
-    final from = index == 0 ? _startScale : _restScale;
-    const slamAt = 0.58;
-    if (local < slamAt) {
-      final p = Curves.easeInCubic.transform(local / slamAt);
-      return from + (_slamScale - from) * p;
-    }
-    final p = Curves.easeOutCubic.transform((local - slamAt) / (1 - slamAt));
-    return _slamScale + (_restScale - _slamScale) * p;
+  void _finish() {
+    if (!mounted || !_overlayVisible) return;
+    _timer?.cancel();
+    setState(() => _overlayVisible = false);
+    widget.onFinished?.call();
   }
 
-  _SplashFrame _frameFor(double t) {
-    final totalMs = AppLaunchSplash.totalDuration.inMilliseconds.toDouble();
-    final ms = t * totalMs;
-    final hitMs =
-        AppLaunchSplash.hitInterval.inMilliseconds * AppLaunchSplash.hitCount;
-    final interval = AppLaunchSplash.hitInterval.inMilliseconds.toDouble();
+  void _advertise() {
+    _finish();
+    widget.onAdvertise?.call();
+  }
 
-    if (ms < hitMs) {
-      final i = (ms / interval).floor().clamp(0, AppLaunchSplash.hitCount - 1);
-      final local = ((ms - i * interval) / interval).clamp(0.0, 1.0);
-      return _SplashFrame(
-        scale: _hitScale(i, local),
-        logoOpacity: 1,
-        contentOpacity: 0,
-        backgroundOpacity: 1,
-        brandOpacity: 1,
-      );
-    }
-
-    final local = ((ms - hitMs) /
-            AppLaunchSplash.exitDuration.inMilliseconds)
-        .clamp(0.0, 1.0);
-    final logoFade = local < 0.55
-        ? 1.0 - Curves.easeIn.transform(local / 0.55)
-        : 0.0;
-    final contentOpacity = local < 0.35
-        ? 0.0
-        : Curves.easeOut.transform(((local - 0.35) / 0.65).clamp(0.0, 1.0));
-
-    return _SplashFrame(
-      scale: _restScale,
-      logoOpacity: logoFade,
-      contentOpacity: contentOpacity,
-      backgroundOpacity: 1 - contentOpacity,
-      brandOpacity: logoFade,
-    );
+  void _openAd(SplashAd ad) {
+    _finish();
+    widget.onOpenAd?.call(ad);
   }
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final padding = MediaQuery.paddingOf(context);
-    final logoWidth = size.width * 0.52;
-
     return Directionality(
       textDirection: TextDirection.ltr,
-      child: AnimatedBuilder(
-        animation: _controller,
-        child: RepaintBoundary(
-          child: Image(
-            image: _logoImage,
-            width: logoWidth.clamp(160, 280),
-            fit: BoxFit.contain,
-            filterQuality: FilterQuality.medium,
-            gaplessPlayback: true,
-          ),
-        ),
-        builder: (context, logoChild) {
-          final frame = _frameFor(_controller.value);
-          final logoOp = _warmingLogo && frame.logoOpacity < 0.01
-              ? 0.01
-              : frame.logoOpacity;
-
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              Opacity(
-                opacity: frame.contentOpacity.clamp(0, 1),
-                child: widget.child,
-              ),
-              if (_overlayVisible)
-                ColoredBox(
-                  color: AvaLight.brand.withValues(
-                    alpha: frame.backgroundOpacity.clamp(0, 1),
-                  ),
-                  child: IgnorePointer(
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        Positioned(
-                          top: padding.top + 36,
-                          left: 28,
-                          right: 28,
-                          child: Opacity(
-                            opacity: frame.brandOpacity.clamp(0, 1),
-                            child: BrandTitleColumn(
-                              listenToConfig: true,
-                              spacing: 6,
-                              brandStyle: const TextStyle(
-                                color: AvaLight.brandInk,
-                                fontSize: 34,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 2.0,
-                                height: 1.05,
-                              ),
-                              districtStyle: TextStyle(
-                                color:
-                                    AvaLight.brandInk.withValues(alpha: 0.72),
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 1.4,
-                              ),
-                            ),
-                          ),
-                        ),
-                        Center(
-                          child: Opacity(
-                            opacity: logoOp.clamp(0.0, 1.0),
-                            child: Transform.scale(
-                              scale: frame.scale,
-                              child: logoChild,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-            ],
-          );
-        },
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Opacity(opacity: _overlayVisible ? 0 : 1, child: widget.child),
+          if (_overlayVisible)
+            _SplashAdOverlay(
+              key: AppLaunchSplash.overlayKey,
+              launch: widget.launch,
+              lang: widget.lang,
+              onAdvertise: _advertise,
+              onOpenAd: _openAd,
+            ),
+        ],
       ),
     );
   }
 }
 
-class _SplashFrame {
-  const _SplashFrame({
-    required this.scale,
-    required this.logoOpacity,
-    required this.contentOpacity,
-    required this.backgroundOpacity,
-    this.brandOpacity = 0,
+class _SplashAdOverlay extends StatelessWidget {
+  const _SplashAdOverlay({
+    super.key,
+    required this.launch,
+    required this.lang,
+    required this.onAdvertise,
+    required this.onOpenAd,
   });
 
-  final double scale;
-  final double logoOpacity;
-  final double contentOpacity;
-  final double backgroundOpacity;
-  final double brandOpacity;
+  final SplashAdLaunch? launch;
+  final String lang;
+  final VoidCallback onAdvertise;
+  final ValueChanged<SplashAd> onOpenAd;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = launch;
+    final ad = l?.ad;
+    final text = ad?.textFor(lang) ?? '';
+    final bytes = l?.imageBytes;
+    final Widget content;
+    if (ad != null && bytes != null) {
+      content = ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Image.memory(
+          bytes,
+          key: AppLaunchSplash.imageKey,
+          fit: BoxFit.contain,
+          gaplessPlayback: true,
+          errorBuilder: (_, __, ___) => _Message(text: text.isNotEmpty ? text : SplashAdTexts.placeholder(lang)),
+        ),
+      );
+    } else if (ad != null && text.isNotEmpty) {
+      content = _Message(key: AppLaunchSplash.textKey, text: text, large: true);
+    } else {
+      content = _Message(key: AppLaunchSplash.placeholderKey, text: SplashAdTexts.placeholder(lang));
+    }
+    final tappable = ad != null && ad.linkUrl.startsWith('https://');
+
+    return Material(
+      color: AvaLight.brand,
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  const Text(
+                    BrandLabels.brand,
+                    style: TextStyle(
+                      color: AvaLight.brandInk,
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 2.0,
+                    ),
+                  ),
+                  const Spacer(),
+                  if (ad != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AvaLight.brandInk.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        SplashAdTexts.adLabel(lang),
+                        style: const TextStyle(color: AvaLight.brandInk, fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              // Ҳаволали креатив — бутун креатив майдони босилади (расм ҳали чизилмаган бўлса ҳам).
+              Expanded(
+                child: tappable
+                    ? GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => onOpenAd(ad),
+                        child: Center(child: content),
+                      )
+                    : Center(child: content),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: FilledButton.icon(
+                  key: AppLaunchSplash.advertiseKey,
+                  onPressed: onAdvertise,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AvaLight.brandInk,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                  icon: const Icon(Icons.campaign_rounded),
+                  label: Text(SplashAdTexts.advertise(lang)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Message extends StatelessWidget {
+  const _Message({super.key, required this.text, this.large = false});
+
+  final String text;
+  final bool large;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        maxLines: 6,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: AvaLight.brandInk,
+          fontSize: large ? 28 : 24,
+          fontWeight: FontWeight.w800,
+          height: 1.25,
+        ),
+      ),
+    );
+  }
 }

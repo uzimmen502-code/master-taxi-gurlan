@@ -50,6 +50,7 @@ import 'marshrut_dispatch_history_screen.dart';
 import 'chat_support_screen.dart';
 import 'dating_moderation_screen.dart';
 import 'tv_clips_moderation_screen.dart';
+import 'splash_ads_admin_screen.dart';
 import 'tv_ad_pricing_admin_screen.dart';
 import 'carpet_wash_admin_screen.dart';
 import 'agro_pickup_admin_screen.dart';
@@ -456,6 +457,12 @@ class _AdminShellState extends State<AdminShell> {
     ),
     _AdminSection(
       group: 'AVAGram ва танишув',
+      label: 'Splash реклама',
+      icon: Icons.campaign_outlined,
+      description: 'Илова очилишидаги 2 сониялик реклама (туман, муддат)',
+    ),
+    _AdminSection(
+      group: 'AVAGram ва танишув',
       label: '❤️ Танишув',
       icon: Icons.favorite,
       description: 'Профил модерацияси ва шикоятлар',
@@ -778,6 +785,9 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'AVAGram реклама нархи') {
       return const TvAdPricingAdminScreen();
+    }
+    if (section.label == 'Splash реклама') {
+      return const SplashAdsAdminScreen();
     }
     if (section.label == '❤️ Танишув') {
       return const DatingModerationScreen();

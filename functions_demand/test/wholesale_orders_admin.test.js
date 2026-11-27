@@ -212,10 +212,10 @@ ok('kvota darvozasi yozilgan hujjatni o\'qiydi: yopiq → internal (faqat tester
     await rejects(orders.requireOrdersGate(db, T1), 'unavailable', 'module_disabled');
     await set(db, { enabled: true, reason: 'ichki' });
     config.clearCache();
-    assert.deepStrictEqual(await orders.requireOrdersGate(db, T1), { stage: 'internal' });
+    assert.strictEqual((await orders.requireOrdersGate(db, T1)).stage, 'internal'); // S57 dan beri javobda cashDeliveryEnabled ham bor
     await rejects(orders.requireOrdersGate(db, USER), 'unavailable', 'module_internal_only');
     await set(db, { stage: 'public', reason: 'hammaga' });
-    assert.deepStrictEqual(await orders.requireOrdersGate(db, USER), { stage: 'public' });
+    assert.strictEqual((await orders.requireOrdersGate(db, USER)).stage, 'public');
     await set(db, { stage: 'off', reason: 'to\'xtat' });
     await rejects(orders.requireOrdersGate(db, T1), 'unavailable', 'module_internal_only');
     const st = await get(db);

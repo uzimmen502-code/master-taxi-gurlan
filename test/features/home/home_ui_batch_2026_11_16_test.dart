@@ -28,7 +28,8 @@ void main() {
     ServiceSpotlightItem item(String id) =>
         ServiceSpotlightItem(moduleId: id, label: id, onTap: () {}, icon: Icons.circle);
 
-    testWidgets('қалин (w800), босилса — барча хизматлар; плиткалар йўқ', (t) async {
+    // Эга 2026-11-27: ёзув «Барча хизматлар» (home_services_all_title), 16/600, тўлиқ энли қатор + стрелка.
+    testWidgets('16/600 + стрелка, босилса — барча хизматлар; плиткалар йўқ', (t) async {
       ServiceConfigHolder.setForTest(
         defaults: ServiceModuleConfig({'jobs': ModuleStatus.enabled}),
         enforce: true,
@@ -38,12 +39,20 @@ void main() {
         home: Scaffold(body: HomeAllServicesHeader(items: [item('jobs')], onTap: () => taps++)),
       ));
       expect(find.byKey(const ValueKey('home_all_services_header')), findsOneWidget);
-      expect(find.text('home_services_spotlight_title'), findsOneWidget);
-      expect(HomeAllServicesHeader.titleStyle.fontWeight, FontWeight.w800);
+      expect(find.text('home_services_all_title'), findsOneWidget);
+      expect(find.text('home_services_spotlight_title'), findsNothing);
+      expect(find.byKey(const ValueKey('home_all_services_chevron')), findsOneWidget);
+      expect(HomeAllServicesHeader.titleStyle.fontSize, 16);
+      expect(HomeAllServicesHeader.titleStyle.fontWeight, FontWeight.w600);
+      final title = t.widget<Text>(find.byKey(const ValueKey('home_all_services_title')));
+      expect(title.style?.fontSize, 16);
+      expect(title.style?.fontWeight, FontWeight.w600);
       expect(find.byType(ListView), findsNothing);
       await t.tap(find.byKey(const ValueKey('home_all_services_header')));
       expect(taps, 1);
-      expect(t.getSize(find.byKey(const ValueKey('home_all_services_header'))).height, greaterThanOrEqualTo(36));
+      expect(t.getSize(find.byKey(const ValueKey('home_all_services_header'))).height, greaterThanOrEqualTo(48));
+      // Тўлиқ энли: стрелка ўнг четда (800 px экран).
+      expect(t.getTopRight(find.byKey(const ValueKey('home_all_services_chevron'))).dx, greaterThan(760));
     });
 
     testWidgets('дарвоза: биронта кўринадиган хизмат йўқ — сарлавҳа ҳам йўқ', (t) async {
@@ -56,9 +65,9 @@ void main() {
     });
 
     test('матн 3 тилда', () {
-      expect(_lang('uz_Cyrl')['home_services_spotlight_title'], 'Барча хизматларни кўриш');
-      expect(_lang('uz_Latn')['home_services_spotlight_title'], 'Barça xizmatlarni köriş');
-      expect(_lang('ru')['home_services_spotlight_title'], 'Посмотреть все услуги');
+      expect(_lang('uz_Cyrl')['home_services_all_title'], 'Барча хизматлар');
+      expect(_lang('uz_Latn')['home_services_all_title'], 'Barça xizmatlar');
+      expect(_lang('ru')['home_services_all_title'], 'Все услуги');
     });
   });
 

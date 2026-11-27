@@ -219,7 +219,9 @@ void main() {
       final avagram = src.indexOf('HomeAvagramSection(');
       final header = src.indexOf('HomeAllServicesHeader(');
       // Эга 2026-11-20 (2-тур): Аралаш тасмаси «Бозорлар»дан кейин; EV / Бизнес / AVAGram бўлимлари аввалгидек қайтди.
-      final all = [top, confirm, order, ticker, search, block, aralash, ads, transport, adsStrip, ev, biz, avagram, header];
+      // Эга 2026-11-27: «Барча хизматлар ›» — қидирув тагида, «Бозорлар»дан олдин; пастда йўқ (битта).
+      final all = [top, confirm, order, ticker, search, header, block, aralash, ads, transport, adsStrip, ev, biz, avagram];
+      expect(RegExp(r'HomeAllServicesHeader\(').allMatches(src).length, 1);
       expect(all.every((i) => i > 0), isTrue, reason: '$all');
       for (var i = 1; i < all.length; i++) {
         expect(all[i], greaterThan(all[i - 1]), reason: 'index $i');

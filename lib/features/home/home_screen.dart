@@ -1847,6 +1847,18 @@ class _HomeViewState extends State<_HomeView> {
                                 TvMarketFeedScreen(initialClip: clip),
                               ),
                             ),
+                            // «Барча хизматлар ›» (эга 2026-11-27): қидирув тагида, «Бозорлар»дан олдин
+                            // (аввал саҳифа охирида эди — у ердан олиб ташланди, битта қолди). Босилса —
+                            // барча модуллар (Нон, Сут, Гилам, Курьер, Менинг машинам, AVA AI …) эски
+                            // расмлари билан. Дарвоза: биронта кўринадиган хизмат бўлмаса — қатор йўқ.
+                            const SizedBox(height: AvaSpace.cardGap),
+                            HomeAllServicesHeader(
+                              items: homeRowServices(buildHomeServices(
+                                context,
+                                a: _serviceActions,
+                              )),
+                              onTap: _openAllServices,
+                            ),
                             // «Бозорлар» (эга 2026-11-20): 11 карточка эга тартибида, ҳар бири ўз дарвозаси билан.
                             HomeMarketsBlock(onOpen: _openHomeMarket),
                             // Аралаш маҳсулот тасмаси — «Бозорлар»дан кейин (эга 2026-11-20 қайтарилди; аввалгидек).
@@ -1973,16 +1985,6 @@ class _HomeViewState extends State<_HomeView> {
                                 ),
                               ),
                             ],
-                            // «Барча хизматларни кўриш» (эга, 2026-11-16) — барча модуллар рўйхати
-                            // (Нон, Сут, Гилам, Курьер, Менинг машинам, AVA AI …) шу орқали.
-                            const SizedBox(height: AvaSpace.gap),
-                            HomeAllServicesHeader(
-                              items: homeRowServices(buildHomeServices(
-                                context,
-                                a: _serviceActions,
-                              )),
-                              onTap: _openAllServices,
-                            ),
                           ],
                         ),
                             ],

@@ -214,6 +214,12 @@ class _Preview extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             HomeGlobalSearchBar(onOpenEntry: (_) async {}, onOpenClip: (_) async {}),
+            // «Барча хизматлар ›» — қидирув тагида, «Бозорлар»дан олдин (эга 2026-11-27).
+            const SizedBox(height: AvaSpace.cardGap),
+            HomeAllServicesHeader(
+              items: [ServiceSpotlightItem(moduleId: 'jobs', label: 'jobs', icon: Icons.circle, onTap: () {})],
+              onTap: () {},
+            ),
             HomeMarketsBlock(
               onOpen: (_) {},
               isVisible: all,
@@ -273,11 +279,6 @@ class _Preview extends StatelessWidget {
               mapBuilder: (_, __, ___) => const _FakeMap(),
             ),
             // AVAGram бўлими Firestore ўқийди — бу ерда йўқ (ўрни: шу ердан кейин).
-            const SizedBox(height: 8),
-            HomeAllServicesHeader(
-              items: [ServiceSpotlightItem(moduleId: 'jobs', label: 'jobs', icon: Icons.circle, onTap: () {})],
-              onTap: () {},
-            ),
           ],
           ),
         ),

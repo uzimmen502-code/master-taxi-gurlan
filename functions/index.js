@@ -188,6 +188,9 @@ attachFamilyLinks(exports, { functions, db, admin, callerPhone, canonicalUid, re
 // юклайди → муддат профилга; 4/3 кун эслатма; машина рағбати (бонус ёки мой дастури, сервис маркази ҳисоботи). Фақат ЯНГИ функциялар.
 const { attachCarInsurance } = require('./car_insurance');
 attachCarInsurance(exports, { functions, db, admin, callerPhone, canonicalUid, requireCallerRoles, notifyUserInApp });
+// «Splash реклама» (эга 2026-11-28): adminUpsertSplashAd/adminDeleteSplashAd (admin_audit), recordSplashImpressions (кунлик йиғма).
+const { attachSplashAds } = require('./splash_ads');
+attachSplashAds(exports, { functions, db, admin, callerPhone, canonicalUid, requireCallerRoles });
 // Админ ўчириши (2026-10-19; торайтирилди 2026-10-20): ҳақиқий ўчириш фақат superadmin — support_chat (шахсий маълумот талаби) ва
 // 365 кундан эски resolved risk_event; admin_news — қайтариб олинади, чат — архивга олинади. Ҳаммаси callable, audit билан (§41).
 const { attachAdminDeleteRecord } = require('./admin_delete_record');

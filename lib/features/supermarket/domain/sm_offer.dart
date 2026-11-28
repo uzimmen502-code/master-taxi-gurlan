@@ -2,7 +2,7 @@
 /// (сервер шартномаси, эга 2026-11-20). Янги коллекция ЭМАС (4-банд).
 ///
 /// Ихтиёрий майдонлар: smGroupId, smCategoryId, smVariety{id,names}, smQuality{3 тил}, packLabel,
-/// unit (kg|l|piece|pack|bunch), qtyStep, weighed, stock, smStatus active|out_of_stock|hidden,
+/// unit (kSmUnits — sm_units.dart), qtyStep, weighed, stock, smStatus active|out_of_stock|hidden,
 /// priceUpdatedAt; price — бутун сўм / бирлик.
 /// Бирлик нархи учун: `packQty` (сон) + `packUnit` (kg|l|piece) — эга қарори 2026-11-20, сервер қўшмоқда.
 library;
@@ -111,7 +111,12 @@ class SmOffer {
 
   static SmOffer fromMap(String id, Map<String, dynamic> d, {SmGroup? group}) {
     final variety = d['smVariety'];
-    final unit = (d['unit'] is String && kSmUnits.contains(d['unit'])) ? d['unit'] as String : (group?.unit ?? '');
+    final sample = d['smSample'] == true;
+    // Эга 2026-11-28: намуна нархи ёнида бирлик КЕРАК ЭМАС (гуруҳдан «/кг» олинмайди; эски «AVA» ҳужжатларида unit =
+    // «дона» матни). Ҳақиқий таклиф: маълум бирлик → ўзи; майдон бор, лекин номаълум → '' (нотўғри бирликдан кўра ҳеч
+    // нарса); майдон йўқ (эски шакл) → гуруҳники.
+    final rawUnit = d['unit'];
+    final unit = sample ? '' : (rawUnit == null ? (group?.unit ?? '') : smKnownUnit(rawUnit));
     final step = d['qtyStep'] is num ? smToMilli(d['qtyStep'] as num) : (group?.stepMilli ?? 1000);
     final urls = d['imageUrls'];
     var img = '';
@@ -138,7 +143,7 @@ class SmOffer {
       priceUpdatedBy: (d['priceUpdatedBy'] as String?)?.trim() ?? '',
       packQtyMilli: d['packQty'] is num ? smToMilli(d['packQty'] as num) : null,
       packUnit: (d['packUnit'] as String?)?.trim() ?? '',
-      sample: d['smSample'] == true,
+      sample: sample,
     );
   }
 }

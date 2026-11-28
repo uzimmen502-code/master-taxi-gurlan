@@ -5,14 +5,15 @@ import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/formatters.dart';
 import '../domain/sm_cart.dart' show kSmWeighedHoldPercent;
 import '../domain/sm_qty.dart';
+import '../domain/sm_units.dart' show kSmUnits;
 import '../supermarket_controller.dart';
 
 /// Супермаркет илдиз маршрути номи — «Каталог» тугмаси шу ергача қайтаради.
 const kSmHomeRouteName = '/supermarket';
 
-/// Бирлик номи (lang калити).
+/// Бирлик номи (lang калити `sm_unit_<id>`). Номаълум/бўш бирлик → '' (нотўғри бирлик ёки хом калит кўрсатилмайди).
 String smUnitLabel(BuildContext context, String unit) =>
-    unit.isEmpty ? '' : context.tr('sm_unit_$unit');
+    kSmUnits.contains(unit) ? context.tr('sm_unit_$unit') : '';
 
 /// «12 000 сўм/кг».
 String smPricePerUnit(BuildContext context, int price, String unit) {

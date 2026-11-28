@@ -10,6 +10,8 @@
 
 import 'dart:math' as math;
 
+import '../../supermarket/domain/sm_units.dart' show kSmUnitIds, smUnitText;
+
 int _i(Object? v) => v is num ? v.toInt() : 0;
 int? _iN(Object? v) => v is num ? v.toInt() : null;
 Map<String, String> _names(Object? v) =>
@@ -140,7 +142,8 @@ class SmProcurementReport {
   }
 }
 
-const smUnitTextRu = <String, String>{'kg': 'кг', 'l': 'л', 'piece': 'дона', 'pack': 'қадоқ', 'bunch': 'боғ'};
+// Ягона манба — sm_units.dart (functions/supermarket_units.json).
+final smUnitTextRu = <String, String>{for (final id in kSmUnitIds) id: smUnitText(id)};
 
 String _num(num v) {
   if (v == v.roundToDouble()) return v.toInt().toString();

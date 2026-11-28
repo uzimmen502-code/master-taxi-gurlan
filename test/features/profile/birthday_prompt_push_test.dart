@@ -1,4 +1,4 @@
-// «Туғилган кунингизни киритинг» ҳафталик пуши (эга 2026-11-28, сервер functions/birthday_prompt.js):
+// «Туғилган кунингизни киритинг» пуши (4 кун кунига бир марта → 7 кун танаффус → ҳар якшанба) (эга 2026-11-28, сервер functions/birthday_prompt.js):
 // push/«Хабарлар» йўналиши, админ созлама модели ва текшируви, админ таби (юклаш, хато, сақлаш, версия).
 import 'package:ava_gurlan/features/admin_web/screens/holiday_admin_screen.dart';
 import 'package:ava_gurlan/features/admin_web/services/admin_birthday_prompt_service.dart';
@@ -30,7 +30,10 @@ class _FakePromptApi implements AdminBirthdayPromptApi {
     saved.add((s, expectedVersion, reason));
     state = BirthdayPromptAdminState(
       settings: BirthdayPromptSettings(
-          stage: s.stage, internalPhones: s.internalPhones, pilotDistrictIds: s.pilotDistrictIds, maxSends: s.maxSends, version: expectedVersion + 1),
+          stage: s.stage, internalPhones: s.internalPhones, pilotDistrictIds: s.pilotDistrictIds,
+          dailyCount: s.dailyCount,
+          weeklySunday: s.weeklySunday,
+          version: expectedVersion + 1),
       runs: state.runs,
     );
   }
@@ -73,31 +76,36 @@ void main() {
   });
 
   group('админ созлама модели', () {
-    test('fromMap: йўқ/бузуқ — OFF, сукут 4; toMap — фақат сервер калитлари', () {
+    test('fromMap: йўқ/бузуқ — OFF, сукут 4 кун + якшанба ёқиқ; toMap — фақат сервер калитлари', () {
       final empty = BirthdayPromptAdminState.fromMap(const {});
       expect(empty.settings.stage, 'off');
-      expect(empty.settings.maxSends, kBirthdayPromptDefaultMaxSends);
+      expect(empty.settings.dailyCount, kBirthdayPromptDefaultDailyCount);
+      expect(kBirthdayPromptDefaultDailyCount, 4);
+      expect(empty.settings.weeklySunday, isTrue);
       expect(empty.runs, isEmpty);
       final st = BirthdayPromptAdminState.fromMap({
-        'settings': {'stage': 'internal', 'internalPhones': ['998901234567'], 'pilotDistrictIds': [], 'maxSends': 6, 'version': 3},
+        'settings': {'stage': 'internal', 'internalPhones': ['998901234567'], 'pilotDistrictIds': [], 'dailyCount': 6, 'weeklySunday': false, 'maxSends': 9, 'version': 3},
         'runs': [
-          {'id': '2026-W48_internal', 'week': '2026-W48', 'stage': 'internal', 'done': true, 'stats': {'sent': 2, 'scanned': 5, 'x': 'bad'}},
+          {'id': '2026-11-30_internal', 'day': '2026-11-30', 'week': '2026-W49', 'stage': 'internal', 'done': true, 'stats': {'sent': 2, 'scanned': 5, 'x': 'bad'}},
           'junk',
         ],
       });
       expect(st.settings.version, 3);
-      expect(st.settings.toMap().keys.toSet(), {'stage', 'internalPhones', 'pilotDistrictIds', 'maxSends'});
+      expect(st.settings.dailyCount, 6);
+      expect(st.settings.weeklySunday, isFalse);
+      expect(st.settings.toMap().keys.toSet(), {'stage', 'internalPhones', 'pilotDistrictIds', 'dailyCount', 'weeklySunday'});
       expect(st.runs.single.stats, {'sent': 2, 'scanned': 5});
+      expect(st.runs.single.day, '2026-11-30');
       expect(BirthdayPromptSettings.fromMap(const {'stage': 'weird'}).stage, 'off');
     });
 
-    test('текширув: позитив, чегаралар (1/12), негатив', () {
-      const ok = BirthdayPromptSettings(stage: 'internal', internalPhones: ['998901234567'], maxSends: 4);
+    test('текширув: позитив, чегаралар (1/14), негатив', () {
+      const ok = BirthdayPromptSettings(stage: 'internal', internalPhones: ['998901234567'], dailyCount: 4);
       expect(birthdayPromptProblems(ok), isEmpty);
-      expect(birthdayPromptProblems(const BirthdayPromptSettings(stage: 'public', maxSends: 1)), isEmpty);
-      expect(birthdayPromptProblems(const BirthdayPromptSettings(stage: 'public', maxSends: 12)), isEmpty);
-      expect(birthdayPromptProblems(const BirthdayPromptSettings(stage: 'public', maxSends: 0)), isNotEmpty);
-      expect(birthdayPromptProblems(const BirthdayPromptSettings(stage: 'public', maxSends: 13)), isNotEmpty);
+      expect(birthdayPromptProblems(const BirthdayPromptSettings(stage: 'public', dailyCount: 1)), isEmpty);
+      expect(birthdayPromptProblems(const BirthdayPromptSettings(stage: 'public', dailyCount: 14, weeklySunday: false)), isEmpty);
+      expect(birthdayPromptProblems(const BirthdayPromptSettings(stage: 'public', dailyCount: 0)), isNotEmpty);
+      expect(birthdayPromptProblems(const BirthdayPromptSettings(stage: 'public', dailyCount: 15)), isNotEmpty);
       expect(birthdayPromptProblems(const BirthdayPromptSettings(stage: 'on')), isNotEmpty);
       expect(birthdayPromptProblems(const BirthdayPromptSettings(internalPhones: ['901234567'])), isNotEmpty);
       expect(birthdayPromptProblems(const BirthdayPromptSettings(internalPhones: ['998901234567', '998901234567'])), isNotEmpty);
@@ -111,15 +119,17 @@ void main() {
     testWidgets('юклайди, нотўғри рақам — сақламайди; тўғри — версия билан сақлайди ва қайта юклайди', (t) async {
       final api = _FakePromptApi(const BirthdayPromptAdminState(
         settings: BirthdayPromptSettings(version: 2),
-        runs: [BirthdayPromptRun(id: '2026-W48_internal', week: '2026-W48', stage: 'internal', done: true, stats: {'sent': 3})],
+        runs: [BirthdayPromptRun(id: '2026-11-30_internal', day: '2026-11-30', week: '2026-W49', stage: 'internal', done: true, stats: {'sent': 3})],
       ));
       await t.binding.setSurfaceSize(const Size(1000, 1400));
       addTearDown(() => t.binding.setSurfaceSize(null));
       await t.pumpWidget(MaterialApp(home: Scaffold(body: BirthdayPromptAdminPanel(api: api))));
       await t.pumpAndSettle();
       expect(find.text('Сақлаш (версия 2)'), findsOneWidget);
-      expect(_k('bp_admin_run_2026-W48_internal'), findsOneWidget);
-      expect(t.widget<TextField>(_k('bp_admin_max')).controller!.text, '4');
+      expect(_k('bp_admin_run_2026-11-30_internal'), findsOneWidget);
+      expect(find.textContaining('2026-11-30 ·'), findsOneWidget);
+      expect(t.widget<TextField>(_k('bp_admin_daily')).controller!.text, '4');
+      expect(t.widget<SwitchListTile>(_k('bp_admin_weekly')).value, isTrue);
 
       await t.tap(_k('bp_admin_stage'));
       await t.pumpAndSettle();
@@ -132,7 +142,15 @@ void main() {
       expect(find.textContaining('998XXXXXXXXX'), findsOneWidget);
 
       await t.enterText(_k('bp_admin_internal'), '998901234567, 998901234568');
-      await t.enterText(_k('bp_admin_max'), '6');
+      await t.enterText(_k('bp_admin_daily'), '15');
+      await t.tap(_k('bp_admin_save'));
+      await t.pumpAndSettle();
+      expect(api.saved, isEmpty);
+      expect(find.textContaining('Кунлик эслатмалар сони'), findsOneWidget);
+
+      await t.enterText(_k('bp_admin_daily'), '6');
+      await t.tap(_k('bp_admin_weekly'));
+      await t.pumpAndSettle();
       await t.tap(_k('bp_admin_save'));
       await t.pumpAndSettle();
       expect(api.saved, hasLength(1));
@@ -140,7 +158,8 @@ void main() {
       expect(ver, 2);
       expect(s.stage, 'internal');
       expect(s.internalPhones, ['998901234567', '998901234568']);
-      expect(s.maxSends, 6);
+      expect(s.dailyCount, 6);
+      expect(s.weeklySunday, isFalse);
       expect(find.text('Сақлаш (версия 3)'), findsOneWidget);
       expect(find.text('Сақланди.'), findsOneWidget);
     });

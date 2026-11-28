@@ -10,8 +10,9 @@ const _stageLabels = <String, String>{
   'public': 'Ҳамма учун',
 };
 
-/// Админ: «Туғилган кунингизни киритинг» ҳафталик пуши (эга 2026-11-28, сервер `functions/birthday_prompt.js`).
-/// Босқич, синов рақамлари, пилот туманлари, бир фойдаланувчига жами эслатмалар сони; охирги тарқатишлар.
+/// Админ: «Туғилган кунингизни киритинг» пуши (эга 2026-11-28, сервер `functions/birthday_prompt.js`):
+/// 4 кун кунига бир марта → 7 кун танаффус → ҳар якшанба (чегарасиз). Босқич, синов рақамлари, пилот туманлари,
+/// кунлик эслатмалар сони (1–14), якшанба эслатмаси ёқиқ/ўчиқ; охирги тарқатишлар. Ойна 08:00–19:59 (эга: «соат 8:00 - 20:00 гача»), соат созламаси йўқ.
 /// Сақлаш — `adminSetBirthdayPromptSettings` (версия + admin_audit). Кирилл (админ конвенцияси).
 class BirthdayPromptAdminPanel extends StatefulWidget {
   const BirthdayPromptAdminPanel({super.key, this.api});
@@ -28,9 +29,10 @@ class _BirthdayPromptAdminPanelState extends State<BirthdayPromptAdminPanel> {
   String? _loadError;
   final _internal = TextEditingController();
   final _pilot = TextEditingController();
-  final _maxSends = TextEditingController();
+  final _dailyCount = TextEditingController();
   final _reason = TextEditingController();
   String _stage = 'off';
+  bool _weeklySunday = true;
   List<String> _errors = const [];
   bool _saving = false;
   String? _saved;
@@ -47,7 +49,7 @@ class _BirthdayPromptAdminPanelState extends State<BirthdayPromptAdminPanel> {
   void dispose() {
     _internal.dispose();
     _pilot.dispose();
-    _maxSends.dispose();
+    _dailyCount.dispose();
     _reason.dispose();
     super.dispose();
   }
@@ -62,7 +64,8 @@ class _BirthdayPromptAdminPanelState extends State<BirthdayPromptAdminPanel> {
         _stage = st.settings.stage;
         _internal.text = st.settings.internalPhones.join(', ');
         _pilot.text = st.settings.pilotDistrictIds.join(', ');
-        _maxSends.text = '${st.settings.maxSends}';
+        _dailyCount.text = '${st.settings.dailyCount}';
+        _weeklySunday = st.settings.weeklySunday;
       });
     } catch (e) {
       if (mounted) setState(() => _loadError = 'Юклаб бўлмади: $e');
@@ -78,7 +81,8 @@ class _BirthdayPromptAdminPanelState extends State<BirthdayPromptAdminPanel> {
       stage: _stage,
       internalPhones: _list(_internal),
       pilotDistrictIds: _list(_pilot),
-      maxSends: int.tryParse(_maxSends.text.trim()) ?? -1,
+      dailyCount: int.tryParse(_dailyCount.text.trim()) ?? -1,
+      weeklySunday: _weeklySunday,
     );
     final errs = birthdayPromptProblems(s);
     setState(() {
@@ -113,9 +117,10 @@ class _BirthdayPromptAdminPanelState extends State<BirthdayPromptAdminPanel> {
     if (st == null) return const Center(child: CircularProgressIndicator());
     return ListView(padding: const EdgeInsets.all(16), children: [
       const Text(
-        'Туғилган санасини киритмаган фойдаланувчиларга ҳафтада бир марта (якшанба, 11:00 дан, Тошкент) '
-        '«Туғилган кунингизни киритинг» пуши. Босилганда — туғилган сана киритиладиган экран. Сана киритилгач '
-        'ёки белгиланган сондаги эслатмадан кейин тўхтайди. «Байрам эслатмалари»ни ўчирганларга юборилмайди.',
+        'Туғилган санасини киритмаган фойдаланувчиларга «Туғилган кунингизни киритинг» пуши: аввал кетма-кет '
+        'бир неча кун кунига бир марта, кейин 7 кун танаффус, сўнг ҳар якшанба (08:00–20:00, Тошкент вақти). '
+        'Босилганда — туғилган сана киритиладиган экран. Сана киритилгач, «Байрам эслатмалари» ўчирилгач '
+        'ёки ҳисоб ўчирилгач тўхтайди.',
         style: TextStyle(color: Colors.black54),
       ),
       const SizedBox(height: 12),
@@ -138,13 +143,21 @@ class _BirthdayPromptAdminPanelState extends State<BirthdayPromptAdminPanel> {
         decoration: const InputDecoration(labelText: 'Пилот туман ID лари (вергул билан, 30 тагача)'),
       ),
       TextField(
-        key: const ValueKey('bp_admin_max'),
-        controller: _maxSends,
+        key: const ValueKey('bp_admin_daily'),
+        controller: _dailyCount,
         keyboardType: TextInputType.number,
         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         decoration: const InputDecoration(
-          labelText: 'Бир фойдаланувчига жами эслатмалар (1–12; сукут $kBirthdayPromptDefaultMaxSends — таклиф)',
+          labelText: 'Неча кун кунига бир марта ($kBirthdayPromptDailyCountMin–$kBirthdayPromptDailyCountMax; '
+              'сукут $kBirthdayPromptDefaultDailyCount)',
         ),
+      ),
+      SwitchListTile(
+        key: const ValueKey('bp_admin_weekly'),
+        contentPadding: EdgeInsets.zero,
+        value: _weeklySunday,
+        onChanged: (v) => setState(() => _weeklySunday = v),
+        title: const Text('Кейин ҳар якшанба эслатиш (7 кун танаффусдан сўнг, чегарасиз)'),
       ),
       TextField(controller: _reason, decoration: const InputDecoration(labelText: 'Сабаб (журнал учун, ихтиёрий)')),
       for (final s in _errors) Padding(padding: const EdgeInsets.only(top: 6), child: Text(s, style: const TextStyle(color: Colors.red))),
@@ -165,10 +178,10 @@ class _BirthdayPromptAdminPanelState extends State<BirthdayPromptAdminPanel> {
         ListTile(
           key: ValueKey('bp_admin_run_${r.id}'),
           dense: true,
-          title: Text('${r.week} · ${_stageLabels[r.stage] ?? r.stage} · ${r.done ? 'тугади' : 'давом этмоқда'}'),
-          subtitle: Text('юборилди: ${r.stats['sent'] ?? 0} · кўрилди: ${r.stats['scanned'] ?? 0} · '
-              'санаси бор: ${r.stats['HAS_BIRTHDATE'] ?? 0} · чегарага етди: ${r.stats['CAP_REACHED'] ?? 0} · '
-              'хато: ${r.stats['NOTIFY_FAILED'] ?? 0}'),
+          title: Text('${r.day.isNotEmpty ? r.day : r.week} · ${_stageLabels[r.stage] ?? r.stage} · ${r.done ? 'тугади' : 'давом этмоқда'}'),
+          subtitle: Text('юборилди: ${r.stats['sent'] ?? 0} (кунлик ${r.stats['sentDaily'] ?? 0}, якшанба ${r.stats['sentWeekly'] ?? 0}) · '
+              'кўрилди: ${r.stats['scanned'] ?? 0} · санаси бор: ${r.stats['HAS_BIRTHDATE'] ?? 0} · '
+              'танаффусда: ${r.stats['PAUSE'] ?? 0} · хато: ${r.stats['NOTIFY_FAILED'] ?? 0}'),
         ),
     ]);
   }

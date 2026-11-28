@@ -1,6 +1,6 @@
 import 'package:cloud_functions/cloud_functions.dart';
 
-/// «Туғилган кунингизни киритинг» ҳафталик эслатмаси — админ манбаи (сервер `functions/birthday_prompt.js`).
+/// «Туғилган кунингизни киритинг» эслатмаси (4 кун кунига бир марта → 7 кун танаффус → ҳар якшанба) — админ манбаи (сервер `functions/birthday_prompt.js`).
 /// Ўқиш ва ёзиш ФАҚАТ callable орқали (`settings/birthday_prompt` — мижозга ёпиқ, телефонлар бор):
 /// `adminGetBirthdayPromptSettings()`, `adminSetBirthdayPromptSettings({settings, expectedVersion, reason?})` (admin_audit).
 abstract class AdminBirthdayPromptApi {
@@ -28,20 +28,26 @@ class FirebaseAdminBirthdayPromptApi implements AdminBirthdayPromptApi {
       });
 }
 
-/// Сервер `SETTINGS_KEYS` (stage, internalPhones, pilotDistrictIds, maxSends). Ҳужжат йўқ = OFF.
+/// Сервер `SETTINGS_KEYS` (stage, internalPhones, pilotDistrictIds, dailyCount, weeklySunday). Ҳужжат йўқ = OFF.
 class BirthdayPromptSettings {
   const BirthdayPromptSettings({
     this.stage = 'off',
     this.internalPhones = const [],
     this.pilotDistrictIds = const [],
-    this.maxSends = kBirthdayPromptDefaultMaxSends,
+    this.dailyCount = kBirthdayPromptDefaultDailyCount,
+    this.weeklySunday = true,
     this.version = 0,
   });
 
   final String stage;
   final List<String> internalPhones;
   final List<String> pilotDistrictIds;
-  final int maxSends;
+
+  /// 1-фаза: биринчи N кунда кунига бир марта (эга 2026-11-28: 4).
+  final int dailyCount;
+
+  /// 2-фаза: 7 кун танаффусдан кейин ҳар якшанба (эга 2026-11-28: ёқиқ), чегарасиз.
+  final bool weeklySunday;
 
   /// Фақат кўрсатиш/версия текшируви (сервер ҳисоблайди).
   final int version;
@@ -53,7 +59,8 @@ class BirthdayPromptSettings {
       stage: kBirthdayPromptStages.contains(stage) ? stage as String : 'off',
       internalPhones: l(d['internalPhones']),
       pilotDistrictIds: l(d['pilotDistrictIds']),
-      maxSends: d['maxSends'] is num ? (d['maxSends'] as num).toInt() : kBirthdayPromptDefaultMaxSends,
+      dailyCount: d['dailyCount'] is num ? (d['dailyCount'] as num).toInt() : kBirthdayPromptDefaultDailyCount,
+      weeklySunday: d['weeklySunday'] is bool ? d['weeklySunday'] as bool : true,
       version: d['version'] is num ? (d['version'] as num).toInt() : 0,
     );
   }
@@ -62,15 +69,17 @@ class BirthdayPromptSettings {
         'stage': stage,
         'internalPhones': internalPhones,
         'pilotDistrictIds': pilotDistrictIds,
-        'maxSends': maxSends,
+        'dailyCount': dailyCount,
+        'weeklySunday': weeklySunday,
       };
 }
 
-/// Охирги тарқатиш (birthday_prompt_runs): ҳафта, босқич, тугаганми, статистика (sent, scanned, …).
+/// Охирги тарқатиш (birthday_prompt_runs/{day}_{stage}): кун, ҳафта, босқич, тугаганми, статистика (sent, sentDaily, sentWeekly, scanned, …).
 class BirthdayPromptRun {
-  const BirthdayPromptRun({required this.id, required this.week, required this.stage, required this.done, required this.stats});
+  const BirthdayPromptRun({required this.id, this.day = '', required this.week, required this.stage, required this.done, required this.stats});
 
   final String id;
+  final String day;
   final String week;
   final String stage;
   final bool done;
@@ -80,6 +89,7 @@ class BirthdayPromptRun {
     final s = d['stats'] is Map ? d['stats'] as Map : const {};
     return BirthdayPromptRun(
       id: '${d['id'] ?? ''}',
+      day: '${d['day'] ?? ''}',
       week: '${d['week'] ?? ''}',
       stage: '${d['stage'] ?? ''}',
       done: d['done'] == true,
@@ -106,8 +116,10 @@ class BirthdayPromptAdminState {
 
 const kBirthdayPromptStages = <String>['off', 'internal', 'pilot', 'public'];
 
-/// Сервер сукути (PROPOSED, эга тасдиқлаши керак): 4 ҳафта — кейин тўхтайди.
-const kBirthdayPromptDefaultMaxSends = 4;
+/// Сервер сукути (эга 2026-11-28: «4 кун давомида кунига бир мартада»). Чегара 1–14.
+const kBirthdayPromptDefaultDailyCount = 4;
+const kBirthdayPromptDailyCountMin = 1;
+const kBirthdayPromptDailyCountMax = 14;
 
 /// Форма хатолари (сервер `validateSettings` нусхаси — тугма учун; ҳақиқий текширув серверда). Кирилл (админ).
 List<String> birthdayPromptProblems(BirthdayPromptSettings s) {
@@ -119,7 +131,8 @@ List<String> birthdayPromptProblems(BirthdayPromptSettings s) {
       'Ички синов рақамлари: 998XXXXXXXXX, 50 тагача, такрорсиз.',
     if (s.pilotDistrictIds.length > 30 || !s.pilotDistrictIds.every(districtRe.hasMatch) || s.pilotDistrictIds.toSet().length != s.pilotDistrictIds.length)
       'Пилот туман ID лари: 30 тагача, кичик лотин ҳарф/рақам, такрорсиз.',
-    if (s.maxSends < 1 || s.maxSends > 12) 'Эслатмалар сони 1–12 бўлсин.',
+    if (s.dailyCount < kBirthdayPromptDailyCountMin || s.dailyCount > kBirthdayPromptDailyCountMax)
+      'Кунлик эслатмалар сони $kBirthdayPromptDailyCountMin–$kBirthdayPromptDailyCountMax бўлсин.',
     if (s.stage == 'pilot' && s.pilotDistrictIds.isEmpty && s.internalPhones.isEmpty) 'Пилот учун туман ёки синов рақами киритинг.',
   ];
 }

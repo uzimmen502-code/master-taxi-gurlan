@@ -24,20 +24,20 @@ const urlsOf = (bufs) => Object.fromEntries(Object.entries(bufs).map(([l, b]) =>
 const BUFS = { uz_Cyrl: Buffer.from('cyr'), uz_Latn: Buffer.from('lat'), ru: Buffer.from('ru') };
 const NOW = Date.UTC(2026, 10, 28, 10, 0, 0); // 15:00 Тошкент
 
-check('T1 buildAd → validateAd ўтади: house, 3 тил расм, бутун республика, 365 кун, оғирлик 1', () => {
-  const v = validateAd(tool.buildAd({ imageUrls: urlsOf(BUFS), nowMs: NOW }));
+check('T1 buildAd → validateAd ўтади: house, БИТТА лотин расм, бутун республика, 365 кун, оғирлик 1', () => {
+  const v = validateAd(tool.buildAd({ imageUrl: urlsOf(BUFS).uz_Latn, nowMs: NOW }));
   assert.ok(v.ok, JSON.stringify(v.errors));
   const f = adminAdFields(v.clean, TS);
   assert.deepStrictEqual([f.house, f.source, f.weight, f.areaKeys, f.visible, f.active], [true, 'admin', 1, ['all'], true, true]);
-  assert.strictEqual(f.imageUrl, f.imageUrls.uz_Cyrl); // эски мижоз — кирилл
-  assert.deepStrictEqual(Object.keys(f.imageUrls), ['uz_Cyrl', 'uz_Latn', 'ru']);
+  assert.strictEqual(f.imageUrl, urlsOf(BUFS).uz_Latn); // эга: «фақат Лотин тили етарли»
+  assert.deepStrictEqual(f.imageUrls, {});
   assert.deepStrictEqual(f.text, tool.TEXT);
   assert.strictEqual(f.startAt.toMillis(), Date.UTC(2026, 10, 27, 19, 0, 0)); // 28-ноябрь 00:00 Тошкент
   assert.strictEqual(f.endAt.toMillis() - f.startAt.toMillis(), 365 * 86400000);
 });
 
 check('T2 --off → active/visible false (ҳужжат ўчмайди)', () => {
-  const v = validateAd(tool.buildAd({ imageUrls: urlsOf(BUFS), nowMs: NOW, active: false }));
+  const v = validateAd(tool.buildAd({ imageUrl: urlsOf(BUFS).uz_Latn, nowMs: NOW, active: false }));
   const f = adminAdFields(v.clean, TS);
   assert.deepStrictEqual([f.active, f.visible, f.house], [false, false, true]);
 });
@@ -54,7 +54,7 @@ check('T3 идемпотент: бир хил файл → бир хил йўл/
 });
 
 check('T4 comparable: вақт белгиси/версия фарқи ўзгариш эмас; матн фарқи — ўзгариш', () => {
-  const f = adminAdFields(validateAd(tool.buildAd({ imageUrls: urlsOf(BUFS), nowMs: NOW })).clean, TS);
+  const f = adminAdFields(validateAd(tool.buildAd({ imageUrl: urlsOf(BUFS).uz_Latn, nowMs: NOW })).clean, TS);
   const stored = { ...f, version: 3, updatedAt: TS.fromMillis(1), createdAt: TS.fromMillis(1) };
   assert.strictEqual(tool.comparable(stored), tool.comparable(f));
   assert.notStrictEqual(tool.comparable({ ...stored, text: { uz_Cyrl: 'x' } }), tool.comparable(f));
@@ -62,17 +62,18 @@ check('T4 comparable: вақт белгиси/версия фарқи ўзгар
 });
 
 check('T5 backup ↔ restore: Timestamp сақланади (rollback)', () => {
-  const f = adminAdFields(validateAd(tool.buildAd({ imageUrls: urlsOf(BUFS), nowMs: NOW })).clean, TS);
+  const f = adminAdFields(validateAd(tool.buildAd({ imageUrl: urlsOf(BUFS).uz_Latn, nowMs: NOW })).clean, TS);
   const back = tool.fromBackup(JSON.parse(JSON.stringify(tool.toBackup({ ...f, version: 2 }))), TS);
   assert.strictEqual(back.startAt.toMillis(), f.startAt.toMillis());
-  assert.deepStrictEqual(back.imageUrls, f.imageUrls);
+  assert.strictEqual(back.imageUrl, f.imageUrl);
   assert.strictEqual(back.version, 2);
   assert.strictEqual(tool.toBackup(null), null);
 });
 
-check('T6 тайёр креативлар: 3 тил, ≤ 1500 КБ (тавсия ≤ 500 КБ), 1080×1920 файл мавжуд', () => {
+check('T6 тайёр креатив: фақат лотин, ≤ 500 КБ, 1080×1920; бошқа тил файллари йўқ', () => {
   const dir = path.join(__dirname, '..', 'tools', 'splash_house_ad', 'out');
-  for (const l of ['uz_Cyrl', 'uz_Latn', 'ru']) {
+  for (const l of ['uz_Cyrl', 'ru']) assert.ok(!fs.existsSync(path.join(dir, `house_${l}.png`)), l);
+  for (const l of ['uz_Latn']) {
     for (const ext of ['webp', 'png']) {
       const f = path.join(dir, `house_${l}.${ext}`);
       assert.ok(fs.existsSync(f), f);

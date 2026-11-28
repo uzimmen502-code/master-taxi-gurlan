@@ -1,8 +1,8 @@
 /**
  * «Splash реклама» НАМУНА (уй) креативини расмга айлантиради (эга 2026-11-28).
  *
- * `template.html` (3 тил) → Chrome headless скриншот 1080×1920 → `sharp` (functions боғлиқлиги, янги пакет йўқ)
- * билан PNG (сиқилган) ва WebP. Натижа: `out/house_{lang}.png|webp` (+ ихтиёрий `--copy <dir>` нусха).
+ * `template.html` (фақат лотин — эга 2026-11-28 «фақат Лотин тили етарли») → Chrome headless скриншот 1080×1920 → `sharp` (functions боғлиқлиги, янги пакет йўқ)
+ * билан PNG (сиқилган) ва WebP. Натижа: `out/house_uz_Latn.png|webp` (+ `--copy <dir>` нусха `house_v2_uz_Latn.*`).
  * Production'га ҲЕЧ НАРСА ёзмайди.
  *
  *   node functions/tools/splash_house_ad/render.js [--chrome <path>] [--copy <dir>]
@@ -16,7 +16,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const LANGS = ['uz_Cyrl', 'uz_Latn', 'ru'];
+const LANGS = ['uz_Latn'];
 const W = 1080;
 const H = 1920;
 const HARD_MAX = 1500 * 1024;
@@ -46,7 +46,7 @@ async function main() {
   fs.mkdirSync(outDir, { recursive: true });
   if (copyDir) fs.mkdirSync(copyDir, { recursive: true });
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'splash-house-'));
-  const url = (lang) => `file:///${tpl.replace(/\\/g, '/')}?lang=${lang}`;
+  const url = () => `file:///${tpl.replace(/\\/g, '/')}`;
   const report = [];
   try {
     for (const lang of LANGS) {
@@ -64,7 +64,7 @@ async function main() {
         if (buf.length > HARD_MAX) throw new Error(`${lang}.${ext}: ${buf.length} B > 1500 КБ`);
         const name = `house_${lang}.${ext}`;
         fs.writeFileSync(path.join(outDir, name), buf);
-        if (copyDir) fs.writeFileSync(path.join(copyDir, name), buf);
+        if (copyDir) fs.writeFileSync(path.join(copyDir, name.replace('house_', 'house_v2_')), buf);
         report.push({ name, bytes: buf.length, kb: Math.round(buf.length / 1024), underSoft: buf.length <= SOFT_MAX });
       }
     }

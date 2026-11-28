@@ -3,11 +3,11 @@
  * «экранда намуна учун чорловчи Реклама банери ярат»).
  *
  * Нима қилади (`--apply` билан):
- *   1. `splash_house_ad/out/house_{uz_Cyrl,uz_Latn,ru}.{webp|png}` ни Storage'га юклайди:
+ *   1. `splash_house_ad/out/house_uz_Latn.{webp|png}` (эга 2026-11-28: «фақат Лотин тили етарли» — БИТТА креатив)ни Storage'га юклайди:
  *      `platform_images/splash_ads/house_{lang}_{sha8}.{ext}` (мазмун хеши йўлда — креатив ўзгарса янги ҳавола,
  *      мижоз кеши янгиланади; бир хил файл қайта юкланмайди; токен детерминистик — қайта ишга тушириш бир хил ҳавола).
  *   2. `splash_ads/ava_house_republic` (ДОИМИЙ ID — идемпотент) ҳужжатини `adminUpsertSplashAd` билан БИР ХИЛ шаклда
- *      ёзади (`validateAd` + `adminAdFields`): house:true, imageUrls (3 тил), imageUrl = кирилл (эски мижоз), матн 3 тил,
+ *      ёзади (`validateAd` + `adminAdFields`): house:true, imageUrl = лотин креатив (ҳамма тилда), матн 3 тил (расм юкланмаса),
  *      areaKeys ['all'], weight 1, муддат 365 кун. Ҳужжат + `admin_audit` бир транзакцияда; ўзгармаган бўлса — ёзмайди.
  *   3. Ёзишдан олдин мавжуд ҳужжат нусхаси: `functions/tools/backup/splash_house_ad_<вақт>.json`.
  *
@@ -31,7 +31,8 @@ const path = require('path');
 const { validateAd, adminAdFields, ADS } = require('../splash_ads');
 
 const DOC_ID = 'ava_house_republic';
-const LANGS = ['uz_Cyrl', 'uz_Latn', 'ru'];
+/** Эга 2026-11-28: битта креатив — лотин. (imageUrls — сервер қўллайди, лекин бу ерда керак эмас.) */
+const LANGS = ['uz_Latn'];
 const DAY_MS = 86400000;
 const TZ_OFFSET_MS = 5 * 3600000;
 const DURATION_DAYS = 365; // validateAd: ≤ 366 кун
@@ -61,13 +62,12 @@ const downloadUrlOf = (bucket, objectPath, token) =>
 const tashkentDayStart = (ms) => Math.floor((ms + TZ_OFFSET_MS) / DAY_MS) * DAY_MS - TZ_OFFSET_MS;
 
 /** Соф: ҳужжат учун `validateAd` кириши. */
-function buildAd({ imageUrls, nowMs, active = true }) {
+function buildAd({ imageUrl, nowMs, active = true }) {
   const startAtMs = tashkentDayStart(nowMs);
   return {
     title: 'AVA · намуна реклама (Реклама бериш)',
     text: { ...TEXT },
-    imageUrl: imageUrls.uz_Cyrl,
-    imageUrls,
+    imageUrl,
     linkUrl: '',
     startAtMs,
     endAtMs: startAtMs + DURATION_DAYS * DAY_MS,
@@ -173,7 +173,7 @@ async function main() {
   }
 
   // ── Ҳужжат ──
-  const v = validateAd(buildAd({ imageUrls, nowMs: Date.now(), active: !off }));
+  const v = validateAd(buildAd({ imageUrl: imageUrls.uz_Latn, nowMs: Date.now(), active: !off }));
   if (!v.ok) throw new Error(`validateAd: ${v.errors.join(', ')}`);
   const fields = adminAdFields(v.clean, TS);
   const snap = await ref.get();

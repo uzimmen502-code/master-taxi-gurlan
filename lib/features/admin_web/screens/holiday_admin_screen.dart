@@ -5,7 +5,9 @@ import '../../supermarket/domain/sm_holiday.dart';
 import '../../supermarket/domain/sm_offer.dart';
 import '../../supermarket/domain/sm_qty.dart';
 import '../../supermarket/domain/sm_taxonomy.dart';
+import '../services/admin_birthday_prompt_service.dart' show AdminBirthdayPromptApi;
 import '../services/admin_holiday_service.dart';
+import '../widgets/birthday_prompt_admin_panel.dart';
 import '../services/admin_incentives_service.dart' show kFamilyBonusProgramIds;
 import '../services/admin_supermarket_service.dart';
 
@@ -13,9 +15,12 @@ import '../services/admin_supermarket_service.dart';
 /// саватчалар (гуруҳ/таклиф, миқдор, устуворлик, даража) ва «Яқинлар туғилган куни» бонус дастури. Кирилл
 /// (админ конвенцияси). Ҳар сақлаш — сервер callable (admin_audit).
 class HolidayAdminScreen extends StatefulWidget {
-  const HolidayAdminScreen({super.key, this.api, this.loadTaxonomy, this.loadOffers});
+  const HolidayAdminScreen({super.key, this.api, this.loadTaxonomy, this.loadOffers, this.birthdayPromptApi});
 
   final AdminHolidayApi? api;
+
+  /// «Туғилган кунни киритинг» ҳафталик пуши (эга 2026-11-28) — алоҳида таб, ўз callable'лари.
+  final AdminBirthdayPromptApi? birthdayPromptApi;
   final Future<SmTaxonomy> Function()? loadTaxonomy;
   final Future<List<SmOffer>> Function(SmTaxonomy tx)? loadOffers;
 
@@ -83,10 +88,12 @@ class _HolidayAdminScreenState extends State<HolidayAdminScreen> {
   Widget build(BuildContext context) {
     final occ = _occasions;
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Column(
         children: [
-          const TabBar(tabs: [Tab(text: 'Байрамлар'), Tab(text: 'Саватчалар'), Tab(text: 'Оила бонуслари')]),
+          const TabBar(
+            tabs: [Tab(text: 'Байрамлар'), Tab(text: 'Саватчалар'), Tab(text: 'Оила бонуслари'), Tab(text: 'Туғилган кун эслатмаси')],
+          ),
           Expanded(
             child: _error != null
                 ? Center(
@@ -183,6 +190,7 @@ class _HolidayAdminScreenState extends State<HolidayAdminScreen> {
                               ),
                             ),
                         ]),
+                        BirthdayPromptAdminPanel(api: widget.birthdayPromptApi),
                       ]),
           ),
         ],

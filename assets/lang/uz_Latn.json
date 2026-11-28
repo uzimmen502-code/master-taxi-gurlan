@@ -6717,7 +6717,7 @@
   "qrl_web_expired": "QR kod eskirdi",
   "qrl_web_refresh": "Yangi QR kod",
   "qrl_web_rejected": "Telefonda bekor qilindi",
-  "qrl_web_note": "Hisob telefoningizga boğliqligiça qoladi. Bitta raqamda faqat 1 ta kompyuter: bu yerda kirsangiz, oldingi kompyuter çiqariladi. Kompyuterdan çiqiş — telefonda «Kompyuterda kiriş» bölimida.",
+  "qrl_web_note": "Har safar kirganda QR skanerlanadi; brauzer yopilsa yoki kompyuter öçib-yonsa çiqasiz. Bitta raqamda faqat 1 ta kompyuter: bu yerda kirsangiz, oldingi kompyuter çiqariladi. Telefonda istalgan paytda «Kompyuterni tizimdan çiqariş» mumkin.",
   "qrl_sessions_title": "Kompyuterda kiriş",
   "qrl_sessions_sub": "QR kod orqali kompyuterda kiriş va çiqiş",
   "qrl_sessions_intro": "Kompyuter brauzerida AVA saytini oçing va undagi QR kodni şu telefon bilan skanerlang.",
@@ -6725,10 +6725,9 @@
   "qrl_sessions_active": "Ulangan kompyuter",
   "qrl_sessions_empty": "Kompyuterlarda faol kiriş yöq",
   "qrl_session_last_active": "oxirgi faollik: {time}",
-  "qrl_logout": "Çiqiş",
   "qrl_logout_all": "Barça kompyuterlardan çiqiş",
-  "qrl_logout_confirm": "Bu kompyuterdan çiqilsinmi?",
-  "qrl_logout_done": "Kompyuterdan çiqildi",
+  "qrl_logout_confirm": "Kompyuter tizimdan çiqarilsinmi?",
+  "qrl_logout_done": "Kompyuter tizimdan çiqarildi",
   "qrl_disabled": "Kompyuterda QR orqali kiriş hozirça yopiq.",
   "qrl_not_main_phone": "Faqat raqam boğlangan (asosiy) telefondan boşqariş mumkin.",
   "qrl_scan_title": "QR kodni skanerlang",
@@ -6749,7 +6748,8 @@
   "qrl_err_used": "Bu QR kod allaqaçon işlatilgan yoki muddati tugagan.",
   "qrl_err_limit": "Kompyuterlardagi faol kirişlar soni çegaraga yetdi. Avval bittasidan çiqing.",
   "qrl_err_rate": "Juda köp uriniş böldi. Birozdan keyin qayta urinib köring.",
-  "qrl_err_session_ended": "Kompyuterdagi kiriş tugagan. QR kod orqali qayta kiring.",
+  "qrl_err_session_ended": "Kompyuterdagi kiriş tugadi. Qayta kiriş uçun QR kodni skanerlang.",
   "qrl_err_generic": "Amalni bajarib bölmadi. Qayta urinib köring.",
-  "qrl_confirm_one_computer": "Bitta raqamda faqat 1 ta kompyuter: tasdiqlasangiz, oldin ulangan kompyuter (bölsa) çiqariladi."
+  "qrl_confirm_one_computer": "Bitta raqamda faqat 1 ta kompyuter: tasdiqlasangiz, oldin ulangan kompyuter (bölsa) çiqariladi.",
+  "qrl_disconnect": "Kompyuterni tizimdan çiqariş"
 }

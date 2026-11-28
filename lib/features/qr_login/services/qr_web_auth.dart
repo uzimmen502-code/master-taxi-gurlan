@@ -8,16 +8,26 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/firebase_functions_client.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../utils/locale_utils.dart';
 import '../data/qr_login_api.dart';
 import '../data/qr_web_session_store.dart';
 
-/// Web: QR орқали кириш сессиясини якунлаш, жим янгилаш ва чиқиш (эга 2026-11-28).
+/// Web: QR орқали кириш (эга 2026-11-28).
+///
+/// «Ҳар сафар кирганда янгидан сканерлаш»: Firebase Auth SESSION persistence (sessionStorage) —
+/// вкладка/браузер ёпилса ёки компьютер ўчиб-ёнса кириш йўқолади; жим қайта кириш ЙЎҚ.
+/// Очиқ вкладкада token'ни Firebase SDK ўзи янгилайди (refresh token шу вкладкада), сервер
+/// сессияси heartbeat билан яшайди ([QrWebSessionGuard]).
 class QrWebAuth {
   QrWebAuth._();
 
-  /// `qrLoginConsume` натижаси → Firebase sign-in + prefs (AuthRestore/ZoneGate шу калитларни ўқийди).
+  /// `qrLoginConsume` натижаси → Firebase sign-in (SESSION) + prefs (AuthRestore/ZoneGate шу калитларни ўқийди).
   static Future<void> completeSignIn(QrConsumeResult r) async {
     final phone = canonicalPhoneId(r.phone);
+    if (kIsWeb) {
+      // Браузер ёпилса чиқсин (LOCAL эмас). Аввалги (масалан анонм) сессия ҳам шу сақлашга ўтади.
+      await FirebaseAuth.instance.setPersistence(Persistence.SESSION);
+    }
     await FirebaseAuth.instance.signInWithCustomToken(r.customToken);
     await FirebaseAuth.instance.currentUser?.getIdToken(true);
     final prefs = await SharedPreferences.getInstance();
@@ -35,47 +45,24 @@ class QrWebAuth {
     } catch (_) {}
     await QrWebSessionStore.save(QrWebSession(
       webSessionId: r.webSessionId,
-      renewSecret: r.renewSecret,
       phone: phone,
-      expiresAtMs: r.sessionExpiresAtMs,
+      heartbeatIntervalMs: r.heartbeatIntervalMs,
     ));
     unawaited(QrWebSessionGuard.instance.start());
   }
 
-  /// Сақланган web сессия билан янги token (refresh token бекор қилинганда).
-  /// `true` — кирилди; сессия тугаган бўлса — store тозаланади, `false`.
-  static Future<bool> tryRenew({FirebaseFunctions? functions}) async {
-    final s = await QrWebSessionStore.load();
-    if (s == null) return false;
-    if (s.expiredAt(DateTime.now().millisecondsSinceEpoch)) {
-      await QrWebSessionStore.clear();
-      return false;
-    }
-    try {
-      final r = await (functions ?? AvaFunctions.auth)
-          .httpsCallable('qrWebSessionRenew', options: HttpsCallableOptions(timeout: const Duration(seconds: 30)))
-          .call<Object?>({'webSessionId': s.webSessionId, 'renewSecret': s.renewSecret});
-      final d = r.data is Map ? Map<String, dynamic>.from(r.data as Map) : <String, dynamic>{};
-      final token = (d['customToken'] ?? '').toString();
-      if (token.isEmpty) return false;
-      await FirebaseAuth.instance.signInWithCustomToken(token);
-      await FirebaseAuth.instance.currentUser?.getIdToken(true);
-      return FirebaseAuth.instance.currentUser != null;
-    } on FirebaseFunctionsException catch (e) {
-      final d = e.details;
-      final code = d is Map ? (d['code'] ?? '').toString() : '';
-      if (code == 'QR_WEB_SESSION_INVALID' || code == 'QR_LOGIN_DISABLED') {
-        await QrWebSessionStore.clear();
-      }
-      return false;
-    } catch (e) {
-      debugPrint('[qr_web] renew: $e');
-      return false;
-    }
+  /// Браузер қайта очилди, Firebase сессия йўқ, лекин prefs'да QR кириш излари бор → тозалаш
+  /// (тил сақланади). `true` — тозаланди (чақирувчи кириш экранига ўтади: янги QR скан).
+  static Future<bool> clearAfterBrowserRestart() async {
+    if (!kIsWeb || !await QrWebSessionStore.wasQrLogin()) return false;
+    final prefs = await SharedPreferences.getInstance();
+    await LocaleUtils.clearPrefsKeepingLanguage(prefs);
+    await QrWebSessionStore.clear();
+    return true;
   }
 
-  /// Web'даги «Чиқиш»: шу сессия серверда бекор (renewSecret билан), кейин маҳаллий тозалаш.
-  /// Телефон ва бошқа сессияларга тегмайди. Хатода ҳам маҳаллий чиқиш давом этади.
+  /// Web'даги «Чиқиш»: шу сессия серверда бекор (auth + сессия ID), кейин маҳаллий тозалаш.
+  /// Телефонга тегмайди. Хатода ҳам маҳаллий чиқиш давом этади.
   static Future<void> selfLogout({FirebaseFunctions? functions}) async {
     QrWebSessionGuard.instance.stop();
     final s = await QrWebSessionStore.load();
@@ -83,7 +70,7 @@ class QrWebAuth {
     try {
       await (functions ?? AvaFunctions.auth)
           .httpsCallable('qrWebSessionRevoke', options: HttpsCallableOptions(timeout: const Duration(seconds: 15)))
-          .call<Object?>({'webSessionId': s.webSessionId, 'renewSecret': s.renewSecret});
+          .call<Object?>({'self': true, 'webSessionId': s.webSessionId});
     } catch (e) {
       debugPrint('[qr_web] self revoke: $e');
     }
@@ -91,8 +78,11 @@ class QrWebAuth {
   }
 }
 
-/// Web: сессия ҳолатини тинглайди. Телефондан «Чиқиш» → `qr_web_sessions/{id}.status` ≠ active
-/// → дарҳол signOut. Firebase сессия узилса (refresh token бекор) → renewSecret билан жим тиклаш.
+/// Web: сессия ҳолатини тинглайди ва heartbeat юборади.
+/// - Телефондан «Компьютерни тизимдан чиқариш» / бошқа компьютерда кириш → `qr_web_sessions/{id}`
+///   ≠ active → дарҳол signOut.
+/// - Heartbeat рад этилса (жим қолган, бекор, босқич OFF) → signOut.
+/// - Firebase сессия узилса (refresh token бекор) → signOut (жим тиклаш ЙЎҚ).
 class QrWebSessionGuard {
   QrWebSessionGuard._();
   static final QrWebSessionGuard instance = QrWebSessionGuard._();
@@ -102,9 +92,9 @@ class QrWebSessionGuard {
 
   StreamSubscription<User?>? _authSub;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _docSub;
+  Timer? _heartbeat;
   String _watching = '';
-  bool _renewing = false;
-  DateTime _lastRenewAt = DateTime.fromMillisecondsSinceEpoch(0);
+  bool _ending = false;
 
   bool get isRunning => _authSub != null;
 
@@ -113,16 +103,19 @@ class QrWebSessionGuard {
     final s = await QrWebSessionStore.load();
     if (s == null) return;
     stop();
+    _ending = false;
     _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
       if (user == null) {
-        _docSub?.cancel();
-        _docSub = null;
-        _watching = '';
-        unawaited(_renew());
+        unawaited(_end());
       } else {
         _watchDoc(s.webSessionId);
       }
     });
+    // Дарҳол бир марта: браузер «вкладкаларни тиклаш» билан sessionStorage'ни қайтарган бўлса ҳам,
+    // сервер сессияси жимликдан тугаган бўлса — шу заҳоти чиқилади.
+    unawaited(_beat(s.webSessionId));
+    final ms = s.heartbeatIntervalMs.clamp(60 * 1000, 30 * 60 * 1000);
+    _heartbeat = Timer.periodic(Duration(milliseconds: ms), (_) => unawaited(_beat(s.webSessionId)));
   }
 
   void stop() {
@@ -130,7 +123,25 @@ class QrWebSessionGuard {
     _authSub = null;
     _docSub?.cancel();
     _docSub = null;
+    _heartbeat?.cancel();
+    _heartbeat = null;
     _watching = '';
+  }
+
+  Future<void> _beat(String id) async {
+    if (FirebaseAuth.instance.currentUser == null) return;
+    try {
+      await AvaFunctions.auth
+          .httpsCallable('qrWebSessionHeartbeat', options: HttpsCallableOptions(timeout: const Duration(seconds: 20)))
+          .call<Object?>({'webSessionId': id});
+    } on FirebaseFunctionsException catch (e) {
+      final d = e.details;
+      final code = d is Map ? (d['code'] ?? '').toString() : '';
+      if (code == 'QR_WEB_SESSION_INVALID' || code == 'QR_LOGIN_DISABLED') unawaited(_end());
+      // Тармоқ хатоси — кейинги уриниш; сервер 15 дақ. жимликдан кейин ўзи тугатади.
+    } catch (e) {
+      debugPrint('[qr_web] heartbeat: $e');
+    }
   }
 
   void _watchDoc(String id) {
@@ -143,33 +154,21 @@ class QrWebSessionGuard {
         if (!snap.exists || status != 'active') unawaited(_end());
       },
       onError: (_) {
-        // Рухсат йўқ (масалан бошқа рақам билан кирилган) — тинглаш тўхтайди, сессияга тегилмайди.
+        // Рухсат йўқ (масалан бошқа рақам билан кирилган) — тинглаш тўхтайди.
         _docSub = null;
         _watching = '';
       },
     );
   }
 
-  Future<void> _renew() async {
-    if (_renewing) return;
-    final now = DateTime.now();
-    if (now.difference(_lastRenewAt) < const Duration(seconds: 20)) return;
-    _renewing = true;
-    _lastRenewAt = now;
-    try {
-      final ok = await QrWebAuth.tryRenew();
-      if (!ok && await QrWebSessionStore.load() == null) await _end();
-    } finally {
-      _renewing = false;
-    }
-  }
-
   Future<void> _end() async {
+    if (_ending) return;
+    _ending = true;
     stop();
     await QrWebSessionStore.clear();
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('phone_reverified', false);
+      await LocaleUtils.clearPrefsKeepingLanguage(prefs);
     } catch (_) {}
     try {
       await FirebaseAuth.instance.signOut();

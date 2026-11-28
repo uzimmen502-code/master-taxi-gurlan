@@ -53,14 +53,16 @@ class QrConsumeResult {
     required this.customToken,
     required this.phone,
     required this.webSessionId,
-    required this.renewSecret,
     this.sessionExpiresAtMs = 0,
+    this.heartbeatIntervalMs = 5 * 60 * 1000,
   });
   final String customToken;
   final String phone;
   final String webSessionId;
-  final String renewSecret;
   final int sessionExpiresAtMs;
+
+  /// Сервер берган heartbeat оралиғи (PROPOSED 5 дақ.); жим қолса сессия тугайди.
+  final int heartbeatIntervalMs;
 }
 
 class QrWebSessionItem {
@@ -191,8 +193,8 @@ class FirebaseQrLoginApi implements QrLoginApi {
       customToken: _str(d['customToken']),
       phone: _str(d['phone']),
       webSessionId: _str(d['webSessionId']),
-      renewSecret: _str(d['renewSecret']),
       sessionExpiresAtMs: _int(d['sessionExpiresAtMs']),
+      heartbeatIntervalMs: _int(d['heartbeatIntervalMs']) > 0 ? _int(d['heartbeatIntervalMs']) : 5 * 60 * 1000,
     );
   }
 

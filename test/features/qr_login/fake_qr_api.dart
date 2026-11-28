@@ -55,7 +55,7 @@ class FakeQrApi implements QrLoginApi {
   Future<QrConsumeResult> consume({required String sid, required String secret}) async {
     consumed.add('$sid|$secret');
     if (consumeError != null) throw consumeError!;
-    return QrConsumeResult(customToken: 't', phone: '998901234567', webSessionId: 'ws', renewSecret: 'rs');
+    return QrConsumeResult(customToken: 't', phone: '998901234567', webSessionId: 'ws');
   }
 
   @override

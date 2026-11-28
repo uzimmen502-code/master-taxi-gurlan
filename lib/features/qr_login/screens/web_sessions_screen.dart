@@ -84,7 +84,7 @@ class _WebSessionsScreenState extends State<WebSessionsScreen> {
           TextButton(
             key: const ValueKey('qrl_logout_yes'),
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(ctx.tr('qrl_logout')),
+            child: Text(ctx.tr('qrl_disconnect')),
           ),
         ],
       ),
@@ -157,20 +157,38 @@ class _WebSessionsScreenState extends State<WebSessionsScreen> {
               for (final s in l.items)
                 Card(
                   key: ValueKey('qrl_session_${s.webSessionId}'),
-                  child: ListTile(
-                    leading: const Icon(Icons.computer_rounded),
-                    title: Text(s.browserLabel.isEmpty ? context.tr('qrl_unknown_device') : s.browserLabel),
-                    subtitle: Text([
-                      if (s.approxCity.isNotEmpty) s.approxCity,
-                      context.tr('qrl_session_last_active').replaceAll('{time}', _when(s.lastActiveAtMs)),
-                    ].join(' · ')),
-                    trailing: l.canManage
-                        ? TextButton(
-                            key: ValueKey('qrl_logout_${s.webSessionId}'),
-                            onPressed: _busy ? null : () => _revoke(id: s.webSessionId),
-                            child: Text(context.tr('qrl_logout')),
-                          )
-                        : null,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        ListTile(
+                          leading: const Icon(Icons.computer_rounded),
+                          title: Text(s.browserLabel.isEmpty ? context.tr('qrl_unknown_device') : s.browserLabel),
+                          subtitle: Text([
+                            if (s.approxCity.isNotEmpty) s.approxCity,
+                            context.tr('qrl_session_last_active').replaceAll('{time}', _when(s.lastActiveAtMs)),
+                          ].join(' · ')),
+                        ),
+                        // Эга 2026-11-28: «телефонда исталган пайтда Компьютерни тизимдан чиқариш».
+                        if (l.canManage)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: ElevatedButton.icon(
+                              key: ValueKey('qrl_logout_${s.webSessionId}'),
+                              onPressed: _busy ? null : () => _revoke(id: s.webSessionId),
+                              icon: const Icon(Icons.logout_rounded),
+                              label: Text(context.tr('qrl_disconnect'), style: const TextStyle(fontWeight: FontWeight.w800)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red.shade700,
+                                foregroundColor: Colors.white,
+                                minimumSize: const Size.fromHeight(46),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               if (l.canManage && l.items.length > 1) ...[

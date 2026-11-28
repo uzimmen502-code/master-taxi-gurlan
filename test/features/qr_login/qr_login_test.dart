@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:ava_gurlan/features/qr_login/data/qr_login_api.dart';
+import 'package:ava_gurlan/features/qr_login/data/qr_web_session_store.dart';
+import 'package:ava_gurlan/features/qr_login/services/qr_web_auth.dart';
 import 'package:ava_gurlan/features/qr_login/qr_login_codes.dart';
 import 'package:ava_gurlan/features/qr_login/screens/qr_login_confirm_screen.dart';
 import 'package:ava_gurlan/features/qr_login/screens/qr_web_login_screen.dart';
@@ -11,6 +13,7 @@ import 'package:ava_gurlan/features/qr_login/widgets/qr_web_login_entry.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../restaurants/restaurants_l10n_harness.dart';
 import 'fake_qr_api.dart';
@@ -65,6 +68,28 @@ void main() {
           expect((langs[l]![k] ?? '').toString(), isNotEmpty, reason: '$l.$k');
         }
       }
+    });
+  });
+
+  group('web сессия излари (доимий кириш йўқ)', () {
+    test('save → load → wasQrLogin; clear → ҳаммаси йўқ (жим қайта кириш сири сақланмайди)', () async {
+      SharedPreferences.setMockInitialValues({});
+      await QrWebSessionStore.save(const QrWebSession(webSessionId: 'w1', phone: '998901234567', heartbeatIntervalMs: 300000));
+      final s = await QrWebSessionStore.load();
+      expect(s?.webSessionId, 'w1');
+      expect(s?.heartbeatIntervalMs, 300000);
+      expect(await QrWebSessionStore.wasQrLogin(), isTrue);
+      final p = await SharedPreferences.getInstance();
+      expect(p.getKeys().where((k) => k.contains('secret')), isEmpty);
+      await QrWebSessionStore.clear();
+      expect(await QrWebSessionStore.load(), isNull);
+      expect(await QrWebSessionStore.wasQrLogin(), isFalse);
+    });
+
+    test('телефонда (веб эмас) clearAfterBrowserRestart ҳеч нарса қилмайди', () async {
+      SharedPreferences.setMockInitialValues({'user_phone': '998901234567', QrWebSessionStore.kFlag: true});
+      expect(await QrWebAuth.clearAfterBrowserRestart(), isFalse);
+      expect((await SharedPreferences.getInstance()).getString('user_phone'), '998901234567');
     });
   });
 
@@ -147,6 +172,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('qrl_scan_btn')), findsOneWidget);
       expect(find.byKey(const ValueKey('qrl_session_w1')), findsOneWidget);
+      // Эга 2026-11-28: аниқ «Компьютерни тизимдан чиқариш» тугмаси.
+      expect(find.descendant(of: find.byKey(const ValueKey('qrl_logout_w1')), matching: find.text(t('qrl_disconnect'))), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('qrl_logout_w1')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('qrl_logout_yes')));
@@ -210,6 +237,8 @@ void main() {
       await tester.pump();
       expect(find.byType(QrImageView), findsOneWidget);
       expect(find.text(t('qrl_web_step2')), findsOneWidget);
+      expect(find.text(t('qrl_web_note')), findsOneWidget);
+      expect(t('qrl_web_note'), contains('QR'));
       api.watchCtrl.add('scanned');
       await tester.pump();
       expect(find.text(t('qrl_web_scanned')), findsOneWidget);

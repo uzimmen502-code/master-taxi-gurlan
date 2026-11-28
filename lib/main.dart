@@ -208,10 +208,11 @@ Future<void> _deferredMobileBootstrap({
   }
 
   if (kIsWeb) {
-    // QR орқали кирилган компьютер: телефондан «Чиқиш» → дарҳол чиқиш; сессия узилса жим тиклаш.
+    // QR орқали кирилган компьютер: телефондан «Компьютерни тизимдан чиқариш» / жимлик → дарҳол
+    // чиқиш, кейинги кириш — янги QR скан (эга 2026-11-28; жим тиклаш йўқ).
     QrWebSessionGuard.instance.onEnded = () {
       MyApp.navigatorKey.currentState?.pushAndRemoveUntil(
-        MaterialPageRoute<void>(builder: (_) => const AuthRestoreScreen()),
+        MaterialPageRoute<void>(builder: (_) => const GuestIntroScreen()),
         (_) => false,
       );
     };

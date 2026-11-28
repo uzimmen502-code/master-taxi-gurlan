@@ -5,7 +5,7 @@
 //                                  очиқ аномалиялар (фақат ўқиш);
 //   `adminSetCourierServiceFee`  — {feeBps 0..5000, autoPayoutEnabled?, reason}.
 // Курьер LEG ҳақи (EARNED) АВТОМАТИК ҳамёнга тушади; тўлов пайтида шу фоиз
-// ушланади: fee = ceil(gross × bps / 10000). Ҳисоб СЕРВЕРДА (44-банд); экран
+// ушланади: fee = half_up(gross × bps / 10000) (эга 2026-11-28). Ҳисоб СЕРВЕРДА (44-банд); экран
 // фақат намуна учун АЙНИ формулани кўрсатади.
 
 import '../../logistics/domain/tariff_adjust.dart' show bpsToPercentText, percentTextToBps;
@@ -149,11 +149,11 @@ class CourierServiceFeeState {
   }
 }
 
-/// Сервер формуласи билан бир хил: ceil(gross × bps / 10000), бутун сўм.
+/// Сервер формуласи билан бир хил (courier_payout_calc.serviceFee): ярмидан юқорига (эга 2026-11-28; аввал ceil),
+/// бутун сўм. Фақат админ «мисол» кўриниши учун — ҳақиқий ҳисоб серверда.
 int courierServiceFee(int gross, int bps) {
   if (gross <= 0 || bps <= 0) return 0;
-  final p = gross * bps;
-  return p ~/ 10000 + (p % 10000 > 0 ? 1 : 0);
+  return (gross * bps + 5000) ~/ 10000;
 }
 
 class CourierFeeExample {

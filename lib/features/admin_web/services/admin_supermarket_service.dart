@@ -39,7 +39,12 @@ const _langs = ['uz_Cyrl', 'uz_Latn', 'ru'];
 bool _allLangs(Map<String, String> m) => _langs.every((l) => (m[l] ?? '').trim().isNotEmpty);
 
 /// `settings/supermarket`: `{stage, testerIds[], districtIds[], slots[{id, names, startMin, endMin}],
-/// cutoffMin (0..720 — бугунги слот бошланишидан неча дақиқа олдин қабул тўхтайди), weighHoldPercent (0..50)}`.
+/// cutoffMin (0..720 — бугунги слот бошланишидан неча дақиқа олдин қабул тўхтайди), weighHoldBps (0..5000 = 0..50 %,
+/// 0.01 % аниқлик — эга 2026-11-28; эски weighHoldPercent ўқилади = ×100)}`.
+/// Сервер чегаралари (supermarket.js HOLD_MAX_BPS / COURIER_PAYOUT_BPS_MAX) ва сукут (10 %).
+const int kSmWeighHoldBpsDefault = 1000;
+const int kSmWeighHoldBpsMax = 5000;
+
 class SmSettings {
   const SmSettings({
     this.stage = 'off',
@@ -47,7 +52,7 @@ class SmSettings {
     this.districtIds = const [],
     this.slots = const [],
     this.cutoffMin = 0,
-    this.weighHoldPercent = 10,
+    this.weighHoldBps = kSmWeighHoldBpsDefault,
     this.courierPayout,
     this.version = 0,
   });
@@ -57,7 +62,7 @@ class SmSettings {
   final List<String> districtIds;
   final List<SmSlotDraft> slots;
   final int cutoffMin;
-  final int weighHoldPercent;
+  final int weighHoldBps;
 
   /// Курьер тўлови (эга 2026-11-26); null — созланмаган. Карта маълумоти ЙЎҚ.
   final SmCourierPayout? courierPayout;
@@ -77,7 +82,11 @@ class SmSettings {
         if (m['slots'] is List) ...(m['slots'] as List).map(SmSlotDraft.fromMap).whereType<SmSlotDraft>(),
       ],
       cutoffMin: (m['cutoffMin'] as num?)?.toInt() ?? 0,
-      weighHoldPercent: (m['weighHoldPercent'] as num?)?.toInt() ?? 10,
+      weighHoldBps: m['weighHoldBps'] is num
+          ? (m['weighHoldBps'] as num).toInt()
+          : m['weighHoldPercent'] is num
+              ? ((m['weighHoldPercent'] as num) * 100).round()
+              : kSmWeighHoldBpsDefault,
       courierPayout: SmCourierPayout.fromMap(m['courierPayout']),
       version: (m['version'] as num?)?.toInt() ?? 0,
     );
@@ -87,14 +96,14 @@ class SmSettings {
   /// имкон қадар тез (slots/cutoffMin ЙЎҚ). Эски ҳужжатдаги бу майдонлар ўқилади, лекин сақланмайди (сервер ҳужжатни
   /// тўлиқ алмаштиради — эски майдонлар тозаланади).
   Map<String, dynamic> toMap() => {
-        'weighHoldPercent': weighHoldPercent,
+        'weighHoldBps': weighHoldBps,
         // Доим юборилади: сервер ҳужжатни тўлиқ алмаштиради — тушириб қолдирилса созлама ўчиб кетарди.
         'courierPayout': courierPayout?.toMap(),
       };
 
   /// Сервер валидатори кўзгуси (Кирилл матн).
   List<String> problems() => [
-        if (weighHoldPercent < 0 || weighHoldPercent > 50) 'Тортиш ушлаши 0..50%',
+        if (weighHoldBps < 0 || weighHoldBps > kSmWeighHoldBpsMax) 'Тортиш ушлаши 0..50% (кўпи билан 2 хона каср)',
         ...?courierPayout?.problems(),
       ];
 }

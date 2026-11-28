@@ -280,19 +280,21 @@ void main() {
 
   group('курьер тўлови', () {
     test('SmCourierPayout: fromMap/toMap, текширув; SmSettings доим courierPayout юборади (null — созланмаган)', () {
-      expect(SmCourierPayout.fromMap({'mode': 'percent', 'percent': 13})!.toMap(), {'mode': 'percent', 'percent': 13});
+      expect(SmCourierPayout.fromMap({'mode': 'percent', 'percent': 13})!.toMap(), {'mode': 'percent', 'percentBps': 1300}, reason: 'эски бутун % ×100');
+      expect(SmCourierPayout.fromMap({'mode': 'percent', 'percentBps': 1250})!.toMap(), {'mode': 'percent', 'percentBps': 1250});
       expect(SmCourierPayout.fromMap({'mode': 'fixed', 'fixedAmount': 6000})!.toMap(), {'mode': 'fixed', 'fixedAmount': 6000});
       expect(SmCourierPayout.fromMap({'mode': 'x'}), isNull);
       expect(SmCourierPayout.fromMap(null), isNull);
-      expect(const SmCourierPayout.percent(101).problems(), isNotEmpty);
-      expect(const SmCourierPayout.percent(100).problems(), isEmpty);
+      expect(const SmCourierPayout.percent(10001).problems(), isNotEmpty);
+      expect(const SmCourierPayout.percent(10000).problems(), isEmpty);
+      expect(const SmCourierPayout.percent(1250).problems(), isEmpty);
       expect(const SmCourierPayout.fixed(-1).problems(), isNotEmpty);
       expect(const SmCourierPayout.fixed(0).problems(), isEmpty);
       final s = SmSettings.fromMap({'stage': 'internal', 'courierPayout': {'mode': 'fixed', 'fixedAmount': 5000}});
       expect(s.toMap()['courierPayout'], {'mode': 'fixed', 'fixedAmount': 5000});
       expect(const SmSettings().toMap().containsKey('courierPayout'), isTrue);
       expect(const SmSettings().toMap()['courierPayout'], isNull);
-      expect(const SmSettings(courierPayout: SmCourierPayout.percent(-5)).problems(), contains('Курьер улуши 0..100%'));
+      expect(const SmSettings(courierPayout: SmCourierPayout.percent(-5)).problems(), contains('Курьер улуши 0..100% (кўпи билан 2 хона каср)'));
     });
 
     test('CSV: курьер, буюртма, ҳолат; карта/мижоз маълумоти йўқ', () {

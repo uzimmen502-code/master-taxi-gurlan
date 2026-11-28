@@ -32,7 +32,7 @@ String _tr(String key, [Map<String, String>? params]) =>
     params == null ? '<$key>' : '<$key:${params.entries.map((e) => '${e.key}=${e.value}').join(',')}>';
 
 void main() {
-  group('courierServiceFee (server formulasi bilan bir xil: ceil)', () {
+  group('courierServiceFee (server formulasi bilan bir xil: half_up, ega 2026-11-28)', () {
     test('chegaralar', () {
       expect(courierServiceFee(96000, 0), 0);
       expect(courierServiceFee(96000, 1), 10);
@@ -41,13 +41,16 @@ void main() {
       expect(courierServiceFee(96001, 5000), 48001);
       expect(courierServiceFee(1, 5000), 1);
       expect(courierServiceFee(40000, 1250), 5000);
+      expect(courierServiceFee(10001, 1), 1, reason: '1.0001 → 1 (avval ceil → 2)');
+      expect(courierServiceFee(14999, 1), 1, reason: '1.4999');
+      expect(courierServiceFee(15000, 1), 2, reason: '1.5');
     });
     test('namuna: 40 000 so\'m', () {
       final e = courierFeeExample(1000);
       expect([e.gross, e.fee, e.net], [40000, 4000, 36000]);
       final z = courierFeeExample(0);
       expect([z.fee, z.net], [0, 40000]);
-      final c = courierFeeExample(333); // 1332 → ceil
+      final c = courierFeeExample(333); // 1332 (aniq)
       expect([c.fee, c.net], [1332, 38668]);
     });
   });

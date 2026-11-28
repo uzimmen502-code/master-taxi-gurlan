@@ -80,7 +80,8 @@ class SmAccess {
   final String districtId;
   final List<SmSlot> slots;
   final num feePercent;
-  final int weighHoldPercent;
+  /// Тортиш ушлаши, % (0.01 % аниқлик — сервер weighHoldBps / 100; эски сервер — weighHoldPercent).
+  final num weighHoldPercent;
   final String tariffVersion;
 
   /// Бўш вақти бор кунлар (тартиб: today, tomorrow).
@@ -127,7 +128,11 @@ class SmAccess {
       districtId: raw['districtId']?.toString() ?? '',
       slots: slots,
       feePercent: raw['feePercent'] is num ? raw['feePercent'] as num : 0,
-      weighHoldPercent: raw['weighHoldPercent'] is num ? (raw['weighHoldPercent'] as num).toInt() : kSmWeighedHoldPercent,
+      weighHoldPercent: raw['weighHoldBps'] is num
+          ? (raw['weighHoldBps'] as num).toInt() / 100
+          : raw['weighHoldPercent'] is num
+              ? raw['weighHoldPercent'] as num
+              : kSmWeighedHoldPercent,
       tariffVersion: raw['tariffVersion']?.toString() ?? '',
     );
   }

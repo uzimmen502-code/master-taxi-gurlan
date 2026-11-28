@@ -117,13 +117,14 @@ class SmCartTotals {
 /// Сукут (сервер settings/supermarket.weighHoldPercent йўқ бўлса — 10, эга 2026-11-20).
 const int kSmWeighedHoldPercent = 10;
 
-/// Сервер computeCharge кўзгуси (supermarket.js): ушлаш ҲАР тортиладиган қаторда алоҳида юқорига
-/// яхлитланади; ҳақ = floor((goods × bps + 5000) / 10000). Якуний рақам — сервер жавоби.
+/// Сервер computeCharge кўзгуси (supermarket.js): ушлаш ҲАР тортиладиган қаторда алоҳида ярмидан юқорига
+/// яхлитланади (эга 2026-11-28; фоиз 0.01 % аниқликда бўлиши мумкин); ҳақ = floor((goods × bps + 5000) / 10000).
+/// Якуний рақам — сервер жавоби (бу фақат кўрсатиш учун тахмин).
 SmCartTotals smCartTotals(
   SmCart cart,
   Map<String, SmOffer> offers, {
   num feePercent = 0,
-  int weighHoldPercent = kSmWeighedHoldPercent,
+  num weighHoldPercent = kSmWeighedHoldPercent,
 }) {
   var goods = 0;
   var weighed = 0;
@@ -139,7 +140,7 @@ SmCartTotals smCartTotals(
     goods += t;
     if (o.weighed) {
       weighed += t;
-      hold += smPercentCeil(t, weighHoldPercent);
+      hold += smPercentOf(t, weighHoldPercent);
     }
   }
   return SmCartTotals(

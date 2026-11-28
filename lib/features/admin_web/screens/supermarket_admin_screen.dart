@@ -1256,10 +1256,10 @@ class _SmSettingsAdminTabState extends State<SmSettingsAdminTab> {
       if (!mounted) return;
       setState(() {
         _version = s.version;
-        _holdPct.text = '${s.weighHoldPercent}';
+        _holdPct.text = smPercentText(s.weighHoldBps / 100);
         final cp = s.courierPayout;
         _cpMode = cp?.mode ?? '';
-        _cpValue.text = cp == null ? '' : '${cp.mode == 'percent' ? cp.percent : cp.fixedAmount}';
+        _cpValue.text = cp == null ? '' : (cp.mode == 'percent' ? smPercentText(cp.percentBps! / 100) : '${cp.fixedAmount}');
         _loaded = true;
       });
     } catch (e) {
@@ -1285,14 +1285,14 @@ class _SmSettingsAdminTabState extends State<SmSettingsAdminTab> {
   }
 
   Future<void> _save() async {
-    final hold = int.tryParse(_holdPct.text.trim()) ?? -1;
-    final cpVal = int.tryParse(_cpValue.text.trim()) ?? -1;
+    // 0.01 % аниқлик (эга 2026-11-28): фоиз кўпи билан 2 хона каср билан киритилади, серверга bps юборилади.
+    final hold = smPercentTextToBps(_holdPct.text, maxBps: kSmWeighHoldBpsMax) ?? -1;
     final cp = _cpMode == 'percent'
-        ? SmCourierPayout.percent(cpVal)
+        ? SmCourierPayout.percent(smPercentTextToBps(_cpValue.text, maxBps: kSmCourierPayoutBpsMax) ?? -1)
         : _cpMode == 'fixed'
-            ? SmCourierPayout.fixed(cpVal)
+            ? SmCourierPayout.fixed(int.tryParse(_cpValue.text.trim()) ?? -1)
             : null;
-    final settings = SmSettings(weighHoldPercent: hold, courierPayout: cp);
+    final settings = SmSettings(weighHoldBps: hold, courierPayout: cp);
     final errs = [
       ...settings.problems(),
       if (_reason.text.trim().length < 3) 'Сабаб ёзинг (audit)',
@@ -1366,7 +1366,7 @@ class _SmSettingsAdminTabState extends State<SmSettingsAdminTab> {
           },
         ),
         const Divider(height: 28),
-        _field('hold_pct', 'Тортиладиган маҳсулот учун вақтинча ушлаш, % (0..50; эга қарори — 10)', _holdPct),
+        _field('hold_pct', 'Тортиладиган маҳсулот учун вақтинча ушлаш, % (0..50, масалан 12.5; эга қарори — 10)', _holdPct, decimal: true),
         Padding(
           padding: const EdgeInsets.only(top: 8),
           child: Row(children: [
@@ -1389,9 +1389,9 @@ class _SmSettingsAdminTabState extends State<SmSettingsAdminTab> {
                 child: TextField(
                   key: const ValueKey('sm_admin_cp_value'),
                   controller: _cpValue,
-                  keyboardType: TextInputType.number,
+                  keyboardType: _cpMode == 'percent' ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.number,
                   decoration: InputDecoration(
-                    labelText: _cpMode == 'percent' ? 'Фоиз (0..100)' : 'Сумма, сўм',
+                    labelText: _cpMode == 'percent' ? 'Фоиз (0..100, масалан 12.5)' : 'Сумма, сўм',
                     border: const OutlineInputBorder(),
                   ),
                 ),
@@ -1419,12 +1419,12 @@ class _SmSettingsAdminTabState extends State<SmSettingsAdminTab> {
     );
   }
 
-  Widget _field(String key, String label, TextEditingController c) => Padding(
+  Widget _field(String key, String label, TextEditingController c, {bool decimal = false}) => Padding(
         padding: const EdgeInsets.only(top: 8),
         child: TextField(
           key: ValueKey('sm_admin_$key'),
           controller: c,
-          keyboardType: TextInputType.number,
+          keyboardType: decimal ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.number,
           decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
         ),
       );

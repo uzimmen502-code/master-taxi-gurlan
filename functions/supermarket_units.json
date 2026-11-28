@@ -1,0 +1,14 @@
+{
+  "_comment": "AVA Supermarket o'lchov birliklari - YAGONA MANBA (CLAUDE.md 7-band). Server: functions/supermarket.js (UNITS, UNIT_LABELS, unitFromInput). Mijoz: lib/features/supermarket/domain/sm_units.dart + assets/lang sm_unit_<id> - paritet testlari bu faylni o'qiydi. Ro'yxat (g, ml, box, m qo'shildi) PROPOSED, ega 2026-11-28 tasdig'ini kutadi. id o'zgarmaydi (hujjatlarda saqlanadi); faqat qo'shiladi.",
+  "units": [
+    { "id": "kg", "labels": { "uz_Cyrl": "кг", "uz_Latn": "kg", "ru": "кг" }, "aliases": ["кг", "килограмм", "kilogramm", "kilogram", "килограм"] },
+    { "id": "l", "labels": { "uz_Cyrl": "л", "uz_Latn": "l", "ru": "л" }, "aliases": ["л", "литр", "litr", "liter", "litre"] },
+    { "id": "piece", "labels": { "uz_Cyrl": "дона", "uz_Latn": "dona", "ru": "шт" }, "aliases": ["дона", "dona", "шт", "штук", "штука", "pcs", "pc"] },
+    { "id": "pack", "labels": { "uz_Cyrl": "қадоқ", "uz_Latn": "qadoq", "ru": "уп." }, "aliases": ["қадоқ", "qadoq", "пачка", "pachka", "paçka", "упаковка", "уп", "уп."] },
+    { "id": "bunch", "labels": { "uz_Cyrl": "боғ", "uz_Latn": "boğ", "ru": "пучок" }, "aliases": ["боғ", "bog", "boğ", "пучок"] },
+    { "id": "g", "labels": { "uz_Cyrl": "г", "uz_Latn": "g", "ru": "г" }, "aliases": ["г", "гр", "грамм", "грам", "gr", "gramm", "gram"] },
+    { "id": "ml", "labels": { "uz_Cyrl": "мл", "uz_Latn": "ml", "ru": "мл" }, "aliases": ["мл", "миллилитр", "millilitr"] },
+    { "id": "box", "labels": { "uz_Cyrl": "қути", "uz_Latn": "quti", "ru": "кор." }, "aliases": ["қути", "quti", "коробка", "korobka", "кор", "кор."] },
+    { "id": "m", "labels": { "uz_Cyrl": "м", "uz_Latn": "m", "ru": "м" }, "aliases": ["м", "метр", "metr", "meter"] }
+  ]
+}

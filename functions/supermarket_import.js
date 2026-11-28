@@ -43,6 +43,7 @@ const IMAGE_PREFIX = 'platform_products/sm/';
 const MAX_ROWS = R.LIMITS.maxRows; // 500 — Улгуржи импорти билан бир хил
 
 const L3 = (c, l, r) => [c, l, r];
+const UNIT_HELP = Object.freeze(Object.fromEntries(sm.LANGS.map((l) => [l, sm.UNIT_DEFS.map((u) => `${u.id} (${u.labels[l]})`).join(', ')])));
 const COLUMNS = Object.freeze([
   { key: 'sku', required: true, h: L3('Артикул (productId)', 'Artikul (productId)', 'Артикул (productId)'), help: L3('6–64 белги: лотин ҳарф, рақам, _ -. Қайта юкласангиз шу артикул янгиланади.', '6–64 belgi: lotin harf, raqam, _ -. Qayta yuklasangiz şu artikul yangilanadi.', '6–64 символа: латиница, цифры, _ -. Повторная загрузка обновит этот артикул.') },
   { key: 'categoryId', h: L3('Бўлим ID', 'Bölim ID', 'ID раздела'), help: L3('Ихтиёрий; берилса гуруҳ бўлимига мос бўлиши шарт', 'Ixtiyoriy; berilsa guruh bölimiga mos bölişi şart', 'Необязательно; если указан — должен совпадать с разделом группы') },
@@ -55,7 +56,8 @@ const COLUMNS = Object.freeze([
   { key: 'quality_uz_Latn', h: L3('Сифат (лотин)', 'Sifat (lotin)', 'Качество (узб. латиница)'), help: L3('Ихтиёрий, ≤30', 'Ixtiyoriy, ≤30', 'Необязательно, ≤30') },
   { key: 'quality_ru', h: L3('Сифат (рус)', 'Sifat (rus)', 'Качество (рус.)'), help: L3('Ихтиёрий, ≤30', 'Ixtiyoriy, ≤30', 'Необязательно, ≤30') },
   { key: 'packLabel', h: L3('Қадоқ', 'Qadoq', 'Упаковка'), help: L3('Масалан «1 л», ≤40', 'Masalan «1 l», ≤40', 'Например «1 л», ≤40') },
-  { key: 'unit', h: L3('Бирлик', 'Birlik', 'Единица'), help: L3('kg, l, piece, pack, bunch. Бўш — гуруҳники', 'kg, l, piece, pack, bunch. Böş — guruhniki', 'kg, l, piece, pack, bunch. Пусто — из группы') },
+  // Бирликлар рўйхати — supermarket_units.json (ягона манба): «kg (кг)» ёки «кг», «литр», «шт» ҳам қабул қилинади.
+  { key: 'unit', h: L3('Бирлик', 'Birlik', 'Единица'), help: L3(`Бўш — гуруҳники. ${UNIT_HELP.uz_Cyrl}`, `Böş — guruhniki. ${UNIT_HELP.uz_Latn}`, `Пусто — из группы. ${UNIT_HELP.ru}`) },
   { key: 'qtyStep', h: L3('Миқдор қадами', 'Miqdor qadami', 'Шаг количества'), help: L3('0,001–1000. Бўш — гуруҳники', '0,001–1000. Böş — guruhniki', '0,001–1000. Пусто — из группы') },
   { key: 'weighed', h: L3('Тортиладими', 'Tortiladimi', 'Весовой'), help: L3('ҳа/йўқ (TRUE/FALSE, 1/0). Бўш — гуруҳники', 'ha/yöq (TRUE/FALSE, 1/0). Böş — guruhniki', 'да/нет (TRUE/FALSE, 1/0). Пусто — из группы') },
   { key: 'packQty', h: L3('Қадоқ миқдори', 'Qadoq miqdori', 'Объём упаковки'), help: L3('Масалан 1,5 (packUnit билан бирга)', 'Masalan 1,5 (packUnit bilan birga)', 'Например 1,5 (вместе с packUnit)') },
@@ -141,11 +143,9 @@ function validateRow(cells) {
   if (quality.value) offer.smQuality = quality.value;
   const packLabel = R.cellStr(cells.packLabel).replace(/\s+/g, ' ');
   if (packLabel) offer.packLabel = packLabel;
-  const unit = R.cellStr(cells.unit).toLowerCase();
-  if (unit) {
-    if (!sm.UNITS.includes(unit)) add('UNIT_INVALID');
-    else offer.unit = unit;
-  }
+  const unit = sm.unitFromInput(R.cellStr(cells.unit));
+  if (unit === null) add('UNIT_INVALID');
+  else if (unit) offer.unit = unit;
   const step = parseDecimalCell(cells.qtyStep);
   if (step.error || (!step.empty && !sm.stepOk(step.value))) add('STEP_INVALID');
   else if (!step.empty) offer.qtyStep = step.value;
@@ -153,7 +153,8 @@ function validateRow(cells) {
   if (w.error) add('WEIGHED_INVALID');
   else if (!w.empty) offer.weighed = w.value;
   const pq = parseDecimalCell(cells.packQty);
-  const pu = R.cellStr(cells.packUnit).toLowerCase();
+  const puRaw = R.cellStr(cells.packUnit);
+  const pu = sm.unitFromInput(puRaw) || puRaw.toLowerCase(); // номаълум — validateOffer PACK_UNIT_INVALID
   if (pq.error) add('PACK_QTY_INVALID');
   else if (!pq.empty || pu) {
     offer.packQty = pq.empty ? null : pq.value;

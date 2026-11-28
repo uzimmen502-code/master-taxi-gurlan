@@ -14,6 +14,11 @@
  *   node functions/tools/seed_supermarket.js --project <id>                    # DRY RUN (бор/йўқ ўқийди)
  *   node functions/tools/seed_supermarket.js --project <id> --apply [--only taxonomy]
  *   Prod ADC йўқ бўлса: $env:GCLOUD_ACCESS_TOKEN = (gcloud auth print-access-token)  → REST commit.
+ *
+ * Файл номи ≠ ҳужжат версияси: prod taxonomy/supermarket v1 = supermarket_taxonomy_v3.json мазмуни (2026-11-28 текширилди);
+ * supermarket_taxonomy_v4.json (+5 гуруҳ, эга 2026-11-28 «қўш» / «ҳа») → ҳужжат v2:
+ *   node functions/tools/seed_supermarket.js --upgrade --taxonomy-file functions/tools/data/supermarket_taxonomy_v4.json \
+ *     --expected-version 1 --project <id> [--apply]
  */
 'use strict';
 
@@ -26,7 +31,7 @@ const SET_FILE = path.join(__dirname, 'data', 'supermarket_settings_v1.json');
 const ACTOR = 'seed';
 
 function parseArgs(argv) {
-  const out = { apply: argv.includes('--apply'), upgrade: argv.includes('--upgrade'), project: null, only: null, taxFile: TAX_FILE, setFile: SET_FILE };
+  const out = { apply: argv.includes('--apply'), upgrade: argv.includes('--upgrade'), allowRemove: argv.includes('--allow-remove'), project: null, only: null, taxFile: TAX_FILE, setFile: SET_FILE };
   const val = (flag) => { const i = argv.indexOf(flag); return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[i + 1] : (i >= 0 ? '' : null); };
   out.project = val('--project');
   out.expectedVersion = val('--expected-version');
@@ -75,6 +80,11 @@ function toValue(v) {
  *   node functions/tools/seed_supermarket.js --upgrade --taxonomy-file functions/tools/data/supermarket_taxonomy_v2.json \
  *     --expected-version 1 --project <id> [--apply]
  * Версия қулфи: ҳужжатдаги version == --expected-version бўлмаса — тўхтайди. Бир хил мазмун — ёзилмайди.
+ * Фарқ (бўлим/гуруҳ: added/removed/changed) DRY RUN'да чиқади. Гуруҳ/бўлимни ЎЧИРИШ сукут бўйича рад (REMOVE_REFUSED —
+ * таклифлар smGroupId етим қолмасин); фақат --allow-remove билан (rollback: олдинги файл, янги --expected-version).
+ * Rollback (эга 2026-11-28): аввал гуруҳга бириктирилган таклифларни қайтариш, кейин
+ *   --upgrade --taxonomy-file <олдинги>.json --expected-version <N+1> --allow-remove --project <id> [--apply]
+ * (taxonomy_history/supermarket_v{N} — олдинги версиянинг тўлиқ нусхаси).
  * Ёзилади (adminSetSupermarketTaxonomy билан бир хил шакл): taxonomy/supermarket, taxonomy_history/supermarket_v{N+1},
  * admin_audit/supermarket_taxonomy_upgrade_v{N+1}. DRY RUN — сукут.
  */
@@ -86,6 +96,11 @@ async function upgrade(args, taxonomy) {
     const version = Number.isInteger(cur.version) ? cur.version : 0;
     if (version !== expected) throw new Error(`Versiya mos emas: hujjatda v${version}, kutilgan v${expected}`);
     if (sm.stableStringify(cur.categories) === sm.stableStringify(taxonomy.categories)) return null;
+    const diff = diffTaxonomy(cur.categories, taxonomy.categories);
+    printDiff(diff);
+    if ((diff.removedGroups.length || diff.removedCategories.length) && !args.allowRemove) {
+      throw new Error(`REMOVE_REFUSED: o'chiriladi [${[...diff.removedCategories, ...diff.removedGroups].join(', ')}] — faqat --allow-remove bilan (rollback)`);
+    }
     const v = version + 1;
     const docs = sm.buildTaxonomyVersionDocs({ categories: taxonomy.categories, version: v, previousVersion: version, actor: ACTOR, ts: null });
     return { v, docs, auditPath: `admin_audit/supermarket_taxonomy_upgrade_v${v}`, historyPath: `${sm.HISTORY_COLLECTION}/${sm.HISTORY_PREFIX}${v}` };
@@ -139,6 +154,38 @@ async function upgrade(args, taxonomy) {
   });
   if (!out) console.log("O'zgarish yo'q — yozilmaydi.");
   else console.log(`${args.apply ? 'YANGILANDI' : 'DRY RUN (yoziladi)'}: v${expected} → v${out.v} (${process.env.FIRESTORE_EMULATOR_HOST ? 'emulator' : 'PRODUCTION API'})`);
+}
+
+/**
+ * Тоза: икки таксономия орасидаги фарқ (бўлим ва гуруҳ даражасида; гуруҳ — `categoryId/groupId`, бўлимлар аро
+ * кўчган гуруҳ — removed + added). → {addedCategories, removedCategories, changedCategories, addedGroups, removedGroups, changedGroups}
+ */
+function diffTaxonomy(oldCats, newCats) {
+  const out = { addedCategories: [], removedCategories: [], changedCategories: [], addedGroups: [], removedGroups: [], changedGroups: [] };
+  const catMap = (cats) => new Map((Array.isArray(cats) ? cats : []).map((c) => [c.id, c]));
+  const grpMap = (cats) => {
+    const m = new Map();
+    for (const c of Array.isArray(cats) ? cats : []) for (const g of c.groups || []) m.set(`${c.id}/${g.id}`, g);
+    return m;
+  };
+  const oc = catMap(oldCats); const nc = catMap(newCats);
+  const head = (c) => sm.stableStringify(Object.fromEntries(Object.entries(c).filter(([k]) => k !== 'groups')));
+  for (const [id, c] of nc) {
+    if (!oc.has(id)) out.addedCategories.push(id);
+    else if (head(oc.get(id)) !== head(c)) out.changedCategories.push(id);
+  }
+  for (const id of oc.keys()) if (!nc.has(id)) out.removedCategories.push(id);
+  const og = grpMap(oldCats); const ng = grpMap(newCats);
+  for (const [k, g] of ng) {
+    if (!og.has(k)) out.addedGroups.push(k);
+    else if (sm.stableStringify(og.get(k)) !== sm.stableStringify(g)) out.changedGroups.push(k);
+  }
+  for (const k of og.keys()) if (!ng.has(k)) out.removedGroups.push(k);
+  return out;
+}
+
+function printDiff(d) {
+  for (const [k, v] of Object.entries(d)) console.log(`  ${k}: ${v.length ? v.join(', ') : '-'}`);
 }
 
 function fromValue(v) {
@@ -223,4 +270,4 @@ async function restSeed(args, docs, token) {
 
 if (require.main === module) main().catch((e) => { console.error(e.message || e); process.exit(1); });
 
-module.exports = { parseArgs, load, plan, toValue, fromValue, upgrade };
+module.exports = { parseArgs, load, plan, toValue, fromValue, upgrade, diffTaxonomy };

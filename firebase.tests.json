@@ -1,0 +1,14 @@
+{
+  "_comment": "run_all_suites.js uchun alohida emulator config (2026-11-28). Portlar > 15000 (Windows dinamik diapazondan tashqari); boshqa sessiyalarning 18080/18180/19199 portlari bilan to'qnashmasligi uchun boshqa raqamlar. Kerak bo'lsa nusxa olib portni o'zgartiring.",
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "emulators": {
+    "firestore": { "port": 18311, "websocketPort": 18314 },
+    "storage": { "port": 19311 },
+    "auth": { "port": 19312 },
+    "ui": { "enabled": false },
+    "hub": { "port": 18312 },
+    "logging": { "port": 18313 }
+  }
+}

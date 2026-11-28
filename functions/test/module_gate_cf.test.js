@@ -307,7 +307,10 @@ async function main() {
     const id = rid();
     const r1 = await call('restaurantRegister', { ...REST, requestId: id }, U_GURLAN);
     const r2 = await call('restaurantRegister', { ...REST, requestId: id }, U_GURLAN);
-    assert.strictEqual(r1.status, 'applied');
+    // Ega qarori 2026-10-31 (ac7f663e, restaurant_orders.js restaurantRegister): yangi kafe DOIM
+    // darhol 'approved' (avval 'applied' kutilardi — test eskirgan edi).
+    assert.strictEqual(r1.status, 'approved');
+    assert.strictEqual(r2.status, 'approved');
     assert.strictEqual(r2.restaurantId, r1.restaurantId);
     assert.strictEqual(r2.duplicate, true);
     assert.strictEqual(await count('restaurants', 'ownerUid', U_GURLAN), 1);

@@ -32,6 +32,7 @@ const W = require('../wholesale_orders');
 const relay = require('../relay_escrow');
 const WO = require('../../functions_demand/core/wholesale_orders');
 const DC = require('../../functions_demand/api/wholesale_card');
+const DF = require('../../functions_demand/api/wholesale_failed');
 const DW = require('../../functions_demand/api/wholesale_orders');
 const CC = require('../../functions_demand/core/card_crypto');
 const { makeFakeKms } = require('../../functions_demand/test/helpers/fake_kms');
@@ -190,7 +191,12 @@ async function refuse(orderId) {
   const ref = db.collection('wholesale_orders').doc(orderId);
   const before = (await ref.get()).data();
   const r = await quiet(() => DC.makeMarkWholesaleBuyerRefused(dDeps)({ orderId, reason: 'to\'lamadi' }, ctx(K1)));
-  assert.strictEqual(r.status, 'refused');
+  // Ega qarori 2026-11-01 (functions_demand/api/wholesale_failed.js, 8e131584): kuryer xabari
+  // holatni O'ZGARTIRMAYDI — faqat so'rov; rad = xaridor tasdig'i. Test avval to'g'ridan-to'g'ri
+  // 'refused' kutardi (eskirgan) — endi haqiqiy ikki qadamli oqim.
+  assert.deepStrictEqual([r.status, r.awaitingBuyer], ['in_delivery', true]);
+  const c = await quiet(() => DF.makeRespondWholesaleDeliveryFailed(dDeps)({ orderId, decision: 'confirm' }, ctx(before.buyerId)));
+  assert.strictEqual(c.status, 'refused');
   const after = (await ref.get()).data();
   const refund = await quiet(() => api.onStatusChange(before, after, orderId));
   // Qaytarish yozuvi triggerni yana chaqiradi → chiqish jo'natmasi relay kalitlari bilan yopiladi.

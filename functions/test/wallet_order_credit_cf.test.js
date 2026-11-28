@@ -18,6 +18,9 @@
 const assert = require('assert');
 
 process.env.FIRESTORE_EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080';
+// Emulator deadlock artefakti («Transaction is invalid or closed») — ishlab chiqarish SDK kabi qayta
+// uriladi (helpers/emulator_hooks.js installEmulatorClosedTxRetry; tahlil 2026-11-28).
+require('../../functions_demand/test/helpers/emulator_hooks').installEmulatorClosedTxRetry();
 process.env.GCLOUD_PROJECT = process.env.GCLOUD_PROJECT || 'demo-wallet-audit';
 process.env.FUNCTIONS_EMULATOR = 'true';
 

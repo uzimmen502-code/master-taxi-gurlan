@@ -11,6 +11,8 @@
     "test:tv-views-rules": "node test/tv_clip_views_rules.test.js",
     "test:build-rules": "node test/build_firestore_rules.test.js",
     "build:rules": "node tools/build_firestore_rules.js",
+    "test:all": "firebase emulators:exec --only firestore,storage,auth --project demo-testall --config ../firebase.tests.json \"node test/run_all_suites.js test\"",
+    "test:all-demand": "firebase emulators:exec --only firestore,storage,auth --project demo-testall --config ../firebase.tests.json \"node test/run_all_suites.js ../functions_demand/test\"",
     "test:tv-clip-runs": "node test/tv_clip_runs.test.js",
     "test:tv-clip-output": "node test/tv_clip_output.test.js",
     "test:tv-clip-moderation": "node test/tv_clip_moderation.test.js",

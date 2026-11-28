@@ -73,7 +73,10 @@ async function seedListing(id, over = {}, point = P) {
     areaLat: Number((point.lat + 0.004).toFixed(3)), areaLng: point.lng,
     geohash4: require('../geo_hash').encode(point.lat, point.lng, 4),
     createdAt: admin.firestore.Timestamp.fromMillis(DAY_NOON),
-    expiresAt: admin.firestore.Timestamp.fromMillis(DAY_NOON + 20 * 86400000),
+    // Muddat HAQIQIY vaqtga nisbatan ham kelajakda bo'lsin: createRealtyAlert (index callable)
+    // Date.now() bilan solishtiradi. Avval DAY_NOON+20 kun (2026-10-28) edi — shu sanadan keyin
+    // e'lon «muddati o'tgan» bo'lib, test o'zi yiqila boshladi (vaqt bombasi, 2026-11-28).
+    expiresAt: admin.firestore.Timestamp.fromMillis(Math.max(DAY_NOON, Date.now()) + 20 * 86400000),
     ...over,
   };
   await db.doc(`realty_listings/${id}`).set(pub);

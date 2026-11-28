@@ -100,6 +100,10 @@ const relayLeg = (idx, dependsOnLegId, nextLegId) => ({
   mode: 'dispatch',
   status: sm.STATUS.ACTIVE,
   location: { lat: 41.55, lng: 60.63, regionId: 'xorazm', districtId: 'gurlan', addressText: 'Gurlan' },
+  // Kuryer toifasi (ega qarori 2026-10-31, adapters/logistics.js courier_scope): manzili
+  // yo'q LEG «republic» hisoblanadi va oddiy (district) kuryerga berilmaydi. Bu test
+  // bekor qilish/kontakt mantig'ini tekshiradi — LEG tuman ichida (district).
+  destination: { regionId: 'xorazm', districtId: 'gurlan' },
   timeWindow: { expiresAt: new Date(NOW.getTime() + 3600 * 1000) },
   assignment: { providerId: null, offerId: null, acceptedAt: null },
   attributes: { shipmentId: SHIP, orderId: 'ordRelay001', legIndex: idx, legCount: 2, dependsOnLegId, nextLegId, payout: 10000 },

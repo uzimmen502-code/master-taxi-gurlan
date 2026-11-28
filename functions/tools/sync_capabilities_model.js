@@ -21,8 +21,13 @@ const HEADER = [
   '',
 ].join('\n');
 
+// Qator oxiri (CRLF/LF) git core.autocrlf'ga bog'liq: Windows checkout'da
+// manba CRLF, HEADER esa LF bo'lib, mazmun bir xil bo'lsa ham bayt farq
+// qilardi (2026-11-28). Taqqoslash va yozish LF'ga keltirilgan matnda.
+const toLf = (s) => s.replace(/\r\n/g, '\n');
+
 function expected() {
-  return HEADER + fs.readFileSync(SRC, 'utf8');
+  return toLf(HEADER + fs.readFileSync(SRC, 'utf8'));
 }
 
 if (require.main === module) {
@@ -30,4 +35,4 @@ if (require.main === module) {
   console.log(`yangilandi: ${DST}`);
 }
 
-module.exports = { SRC, DST, HEADER, expected };
+module.exports = { SRC, DST, HEADER, expected, toLf };

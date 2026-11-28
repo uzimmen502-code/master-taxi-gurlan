@@ -17,6 +17,9 @@ const assert = require('assert');
 const admin = require('firebase-admin');
 
 process.env.FIRESTORE_EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:18282';
+// Emulator deadlock artefakti («Transaction is invalid or closed») — ishlab chiqarish SDK kabi qayta
+// uriladi (helpers/emulator_hooks.js installEmulatorClosedTxRetry; tahlil 2026-11-28).
+require('./helpers/emulator_hooks').installEmulatorClosedTxRetry();
 process.env.GCLOUD_PROJECT = process.env.GCLOUD_PROJECT || 'demo-wfailed-tx';
 admin.initializeApp({ projectId: process.env.GCLOUD_PROJECT });
 const db = admin.firestore();

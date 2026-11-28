@@ -61,9 +61,14 @@ function ranked(over = {}) {
   ];
 }
 
-function run({ db, messaging, demand, list, flags, config }) {
+// Soat qat'iy: bugun 12:00 Toshkent (07:00 UTC) — tinch soatlar (23:00–07:00,
+// UTC+5) tashqarisida. Avval haqiqiy vaqt ishlatilardi va test 18:00–02:00 UTC
+// oralig'ida (Toshkent kechasi) quiet_hours sababli yiqilardi (2026-11-28).
+function noonTashkent() { const d = new Date(); d.setUTCHours(7, 0, 0, 0); return d; }
+
+function run({ db, messaging, demand, list, flags, config, nowFn = noonTashkent }) {
   const dispatch = makeDispatchNotifications({
-    db, messaging, keywordIndex: { categoryById: new Map() },
+    db, messaging, keywordIndex: { categoryById: new Map() }, nowFn,
   });
   return dispatch(db, demand, { ranked: list }, { flags, config });
 }
@@ -78,6 +83,23 @@ ok('чегарадан юқори мослик push олади, паст — о�
   assert.deepStrictEqual(messaging.calls, [['tokH']]);
   assert.strictEqual(s.reasons.below_min_score, 1);
   assert.strictEqual(s.reasons.send, 1);
+});
+
+ok('тинч соатда (23:30 Тошкент) push юборилмайди; 22:59 да юборилади', async () => {
+  const at = (h, m) => () => { const d = new Date(); d.setUTCHours(h - 5, m, 0, 0); return d; };
+  const quietMsg = mkMessaging();
+  const q = await run({
+    db: mkDb(), messaging: quietMsg, demand: mkDemand(), list: ranked(),
+    flags: { pushEnabled: true }, config: calibrated, nowFn: at(23, 30),
+  });
+  assert.strictEqual(q.sent, 0);
+  assert.strictEqual(quietMsg.calls.length, 0);
+  const dayMsg = mkMessaging();
+  const d = await run({
+    db: mkDb(), messaging: dayMsg, demand: mkDemand(), list: ranked(),
+    flags: { pushEnabled: true }, config: calibrated, nowFn: at(22, 59),
+  });
+  assert.strictEqual(d.sent, 1);
 });
 
 ok('паст мослик дайжестга ҳам тушмайди (рўйхатда кўринади, push йўқ)', async () => {

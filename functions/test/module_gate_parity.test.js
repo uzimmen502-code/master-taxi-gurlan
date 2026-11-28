@@ -8,11 +8,11 @@
  */
 const assert = require('assert');
 const fs = require('fs');
-const { DST, expected } = require('../tools/sync_module_gate');
+const { DST, expected, toLf } = require('../tools/sync_module_gate');
 
 let passed = 0;
 try {
-  assert.strictEqual(fs.readFileSync(DST, 'utf8'), expected(),
+  assert.strictEqual(toLf(fs.readFileSync(DST, 'utf8')), expected(),
     'nusxa manbadan farq qiladi — sync_module_gate.js ni ishga tushiring');
   passed += 1;
   console.log('  OK  module_gate.js nusxasi manba bilan bir xil');

@@ -51,13 +51,16 @@ async function pushCounters(db, providerId, now) {
  * @param {object} deps.db
  * @param {object} deps.messaging admin.messaging()
  * @param {object} deps.keywordIndex
+ * @param {Function} [deps.nowFn] soat manbai (test uchun; standart: haqiqiy vaqt).
+ *   Tinch soatlar (push.quietHours) shu vaqtga qarab hisoblanadi.
  */
 function makeDispatchNotifications(deps) {
   const { db, messaging, keywordIndex } = deps;
+  const nowFn = typeof deps.nowFn === 'function' ? deps.nowFn : () => new Date();
 
   return async function dispatchNotifications(_db, demand, matchResult, extra = {}) {
     const { flags, config } = extra;
-    const now = new Date();
+    const now = nowFn();
     const pushEnabled = Boolean(flags && flags.pushEnabled);
 
     const districtName = (demand.location || {}).districtId || '';

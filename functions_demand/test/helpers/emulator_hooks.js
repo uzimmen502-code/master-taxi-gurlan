@@ -148,6 +148,47 @@ async function retryOnEmulatorClosedTx(fn, attempts = 3) {
   }
 }
 
+/**
+ * Xuddi shu artefakt — lekin xato callable ichida ushlanib `internal`ga aylantiriladigan joylar uchun
+ * (masalan `placeSupermarketOrder` -> «Амални бажариб бўлмади», 2026-11-28 tahlili): chaqiruv
+ * darajasida xatoni tanib bo'lmaydi. Shuning uchun `Firestore.prototype.runTransaction` o'raladi:
+ * FAQAT emulator matnidagi `3 INVALID_ARGUMENT: Transaction is invalid or closed.` kelsa butun
+ * tranzaksiya qayta ishga tushiriladi (ko'pi bilan 3 urinish). Bu ishlab chiqarish SDK xatti-harakatini
+ * takrorlaydi: @google-cloud/firestore `isRetryableTransactionError` backend'ning muddati o'tgan
+ * tranzaksiya xatosini (/transaction has expired/) va ABORTED'ni o'zi qayta uradi; emulatorning matni
+ * esa boshqa bo'lgani uchun qayta urilmaydi. Biznes xatolar (HttpsError) va boshqa har qanday xato —
+ * o'zgarishsiz chiqadi; invariantlar (bitta g'olib, bitta yozuv) testlarda baribir tekshiriladi.
+ * Faqat FIRESTORE_EMULATOR_HOST o'rnatilganda ishlaydi. Har bir `@google-cloud/firestore` nusxasiga
+ * (functions/ va functions_demand/ node_modules alohida) bir marta o'rnatiladi.
+ */
+function installEmulatorClosedTxRetry(attempts = 3) {
+  if (!process.env.FIRESTORE_EMULATOR_HOST) return 0;
+  const path = require('path');
+  const roots = [path.join(__dirname, '..', '..'), path.join(__dirname, '..', '..', '..', 'functions')];
+  const seen = new Set();
+  let patched = 0;
+  for (const root of roots) {
+    let file;
+    try { file = require.resolve('@google-cloud/firestore', { paths: [root] }); } catch (_) { continue; }
+    if (seen.has(file)) continue;
+    seen.add(file);
+    const proto = require(file).Firestore.prototype;
+    if (proto.__avaClosedTxRetry) continue;
+    const orig = proto.runTransaction;
+    proto.runTransaction = async function runTransactionEmulatorSafe(fn, opts) {
+      for (let i = 1; ; i += 1) {
+        try { return await orig.call(this, fn, opts); } catch (e) {
+          if (i >= attempts || !isEmulatorClosedTx(e)) throw e;
+        }
+      }
+    };
+    proto.__avaClosedTxRetry = true;
+    patched += 1;
+  }
+  return patched;
+}
+
 module.exports = {
   resetEmulator, dbWithHook, dbWithQueryHook, dbWithHooks, isEmulatorClosedTx, retryOnEmulatorClosedTx,
+  installEmulatorClosedTxRetry,
 };

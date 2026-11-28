@@ -7678,6 +7678,23 @@ deviceSecurity.attachDeviceSecurity(exports, {
   sec: deviceSec,
 });
 
+// Kompyuterda QR orqali kirish (WhatsApp Web uslubi; ega 2026-11-28, 10-band). Bosqich
+// `server_config/qr_web_login` — hujjat yo'q = OFF. Telefon bog'lanishiga tegmaydi.
+require('./qr_web_login').attachQrWebLogin(exports, {
+  functions,
+  authFunctions,
+  db,
+  admin,
+  canonicalUid,
+  callerPhone,
+  isValidFingerprintHash,
+  boundDeviceMatch,
+  createPhoneCustomToken,
+  notifyUserInApp,
+  deviceSecurity,
+  sec: deviceSec,
+});
+
 // Kirish xatolari — bitta umumiy xabar: qaysi raqam admin ekanini, PIN
 // berilganmi yoki yo'qmi — tashqaridan ajratib bo'lmasin.
 const ADMIN_SIGNIN_DENIED =

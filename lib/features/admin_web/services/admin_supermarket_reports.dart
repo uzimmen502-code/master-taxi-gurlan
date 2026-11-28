@@ -356,32 +356,37 @@ DateTime smTashkentToday([DateTime? nowUtc]) {
 // Сақланиши (сервер): нусха ва «тўланди» белгиси — orders/{id}/private/courier_payout (фақат админ ўқийди, мижоз
 // ўқийдиган буюртма ҳужжатида ЙЎҚ, 14-банд). Бу экран фақат callable'лар орқали ишлайди — шакл ўзгармади.
 
-/// `settings/supermarket.courierPayout`: percent (0..100, буюртма етказиш ҳақидан) ёки fixed (сўм).
+/// `settings/supermarket.courierPayout`: percent — `percentBps` (0..10000, 0.01 % аниқлик, эга 2026-11-28; эски
+/// `percent` бутун фоиз ўқилади = ×100), буюртма етказиш ҳақидан; ёки fixed (сўм).
+/// Сервер `COURIER_PAYOUT_BPS_MAX` (100 %).
+const int kSmCourierPayoutBpsMax = 10000;
+
 class SmCourierPayout {
-  const SmCourierPayout.percent(int this.percent)
+  const SmCourierPayout.percent(int this.percentBps)
       : mode = 'percent',
         fixedAmount = null;
   const SmCourierPayout.fixed(int this.fixedAmount)
       : mode = 'fixed',
-        percent = null;
+        percentBps = null;
 
   final String mode;
-  final int? percent;
+  final int? percentBps;
   final int? fixedAmount;
 
   static SmCourierPayout? fromMap(Object? v) {
     if (v is! Map) return null;
-    if (v['mode'] == 'percent' && v['percent'] is num) return SmCourierPayout.percent((v['percent'] as num).toInt());
+    if (v['mode'] == 'percent' && v['percentBps'] is num) return SmCourierPayout.percent((v['percentBps'] as num).toInt());
+    if (v['mode'] == 'percent' && v['percent'] is num) return SmCourierPayout.percent(((v['percent'] as num) * 100).round());
     if (v['mode'] == 'fixed' && v['fixedAmount'] is num) return SmCourierPayout.fixed((v['fixedAmount'] as num).toInt());
     return null;
   }
 
   Map<String, dynamic> toMap() =>
-      mode == 'percent' ? {'mode': 'percent', 'percent': percent} : {'mode': 'fixed', 'fixedAmount': fixedAmount};
+      mode == 'percent' ? {'mode': 'percent', 'percentBps': percentBps} : {'mode': 'fixed', 'fixedAmount': fixedAmount};
 
   /// Сервер `courierPayoutProblems` кўзгуси.
   List<String> problems() => [
-        if (mode == 'percent' && (percent == null || percent! < 0 || percent! > 100)) 'Курьер улуши 0..100%',
+        if (mode == 'percent' && (percentBps == null || percentBps! < 0 || percentBps! > kSmCourierPayoutBpsMax)) 'Курьер улуши 0..100% (кўпи билан 2 хона каср)',
         if (mode == 'fixed' && (fixedAmount == null || fixedAmount! < 0)) 'Курьер суммаси 0 ёки ундан катта',
       ];
 }

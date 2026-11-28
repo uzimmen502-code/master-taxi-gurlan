@@ -81,7 +81,7 @@ class _FakeAdmin extends AdminSupermarketService {
         districtIds: ['gurlan'],
         slots: [SmSlotDraft(id: 's1000_1200', startMin: 600, endMin: 720)],
         cutoffMin: 60,
-        weighHoldPercent: 10,
+        weighHoldBps: 1000,
         version: 4,
       );
   @override
@@ -164,12 +164,15 @@ void main() {
       });
       expect(s.version, 7);
       // Эга 2026-11-28: кўриниш — модул созламаси, етказиш — имкон қадар тез: сақланадиган майдонлар фақат шулар.
-      expect(s.toMap().keys.toSet(), {'weighHoldPercent', 'courierPayout'});
+      expect(s.toMap().keys.toSet(), {'weighHoldBps', 'courierPayout'});
+      expect(s.weighHoldBps, 1000, reason: 'эски weighHoldPercent ×100');
+      expect(SmSettings.fromMap({'weighHoldBps': 1250, 'weighHoldPercent': 10}).weighHoldBps, 1250, reason: 'янги майдон устун');
       expect(s.slots.single.names, _n3('Эрталаб'), reason: 'эски ҳужжат ўқилади');
       expect(s.problems(), isEmpty);
       expect(const SmSettings(cutoffMin: 721).problems(), isEmpty, reason: 'cutoff энди сақланмайди');
-      expect(const SmSettings(weighHoldPercent: 51).problems(), isNotEmpty);
-      expect(const SmSettings(weighHoldPercent: 50).problems(), isEmpty, reason: 'чегара');
+      expect(const SmSettings(weighHoldBps: 5001).problems(), isNotEmpty);
+      expect(const SmSettings(weighHoldBps: 5000).problems(), isEmpty, reason: 'чегара');
+      expect(const SmSettings(weighHoldBps: -1).problems(), isNotEmpty);
       expect(SmSettings.fromMap({'stage': 'x'}).stage, 'off');
       expect(SmSettings.fromMap(null).version, 0);
     });
@@ -338,13 +341,17 @@ void main() {
       await t.pumpAndSettle();
       expect(s.savedSettings, isNull);
       expect(find.textContaining('Сабаб ёзинг'), findsOneWidget);
-      await t.enterText(_k('sm_admin_hold_pct'), '12');
+      await t.enterText(_k('sm_admin_hold_pct'), '12.345');
       await t.enterText(_k('sm_admin_reason'), 'ушлаш');
       await t.tap(_k('sm_admin_settings_save'));
       await t.pumpAndSettle();
+      expect(s.savedSettings, isNull, reason: '3 хона каср — рад');
+      await t.enterText(_k('sm_admin_hold_pct'), '12,5');
+      await t.tap(_k('sm_admin_settings_save'));
+      await t.pumpAndSettle();
       final saved = s.savedSettings!;
-      expect([saved.v, saved.reason, saved.s.weighHoldPercent], [4, 'ушлаш', 12]);
-      expect(saved.s.toMap().keys.toSet(), {'weighHoldPercent', 'courierPayout'});
+      expect([saved.v, saved.reason, saved.s.weighHoldBps], [4, 'ушлаш', 1250]);
+      expect(saved.s.toMap().keys.toSet(), {'weighHoldBps', 'courierPayout'});
     });
 
     testWidgets('етказиш ҳақи % (эга 2026-11-28): жонли қиймат (ягона манба settings/app), таҳрир → мавжуд сервис; нотўғри — рад', (t) async {

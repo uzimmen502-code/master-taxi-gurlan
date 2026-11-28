@@ -14,6 +14,7 @@ import '../../../shared/widgets/wallet_topup_ui.dart';
 import '../data/supermarket_repository.dart';
 import '../domain/sm_access.dart';
 import '../domain/sm_holiday.dart';
+import '../domain/sm_qty.dart' show smPercentText;
 import '../supermarket_controller.dart';
 import '../widgets/sm_gift_form.dart';
 import '../widgets/sm_widgets.dart';
@@ -380,7 +381,7 @@ class _SmCheckoutScreenState extends State<SmCheckoutScreen> {
                 SmSumRow(label: context.tr('sm_goods_total'), amount: t.goodsTotal),
                 if (hasWeighed)
                   SmSumRow(
-                      label: context.tr('sm_weighed_hold').replaceAll('{p}', '${access.weighHoldPercent}'),
+                      label: context.tr('sm_weighed_hold').replaceAll('{p}', smPercentText(access.weighHoldPercent)),
                       amount: t.weighedHold,
                       valueKey: const ValueKey('sm_weighed_hold')),
                 SmSumRow(

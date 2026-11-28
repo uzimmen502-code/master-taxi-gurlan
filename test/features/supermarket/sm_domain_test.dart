@@ -59,10 +59,17 @@ void main() {
       expect(smFromMilli(2000), isA<int>());
       expect(smFromMilli(1500), 1.5);
     });
-    test('фоиз: 11% ярми юқорига; ушлаш — юқорига', () {
+    test('фоиз: 11% ярми юқорига; ушлаш ҳам ярми юқорига (эга 2026-11-28); 0.01 % матн ва киритиш', () {
       expect(smPercentOf(100000, 11), 11000);
       expect(smPercentOf(1005, 11), 111);
-      expect(smPercentCeil(1001, 10), 101);
+      expect(smPercentOf(1001, 10), 100, reason: '100.1 (аввал ceil → 101)');
+      expect(smPercentOf(1005, 10), 101, reason: '100.5');
+      expect(smPercentOf(10001, 12.5), 1250);
+      expect([smPercentText(10), smPercentText(10.0), smPercentText(12.5), smPercentText(12.25)], ['10', '10', '12.5', '12.25']);
+      expect([smPercentTextToBps('12.5', maxBps: 5000), smPercentTextToBps('12,25', maxBps: 5000), smPercentTextToBps('50', maxBps: 5000), smPercentTextToBps('0', maxBps: 5000)], [1250, 1225, 5000, 0]);
+      for (final bad in ['50.01', '12.345', '-1', 'abc', '', '1e2']) {
+        expect(smPercentTextToBps(bad, maxBps: 5000), isNull, reason: bad);
+      }
       expect(smPercentOf(0, 11), 0);
     });
   });
@@ -139,7 +146,7 @@ void main() {
         'b': offer('b', price: 1001, step: 1),
       };
       final t = smCartTotals(SmCart.empty.add('a', 1000).add('b', 1000), offers, feePercent: 11, weighHoldPercent: 10);
-      expect(t.weighedHold, 202, reason: 'жамидан ceil(2002×10%)=201 эмас');
+      expect(t.weighedHold, 200, reason: 'ҳар қатор алоҳида half_up(1001×10%)=100 (эга 2026-11-28; аввал ceil 202)');
       expect(t.feeEstimate, 220, reason: 'floor((2002×1100+5000)/10000)');
       expect(smCartTotals(SmCart.empty.add('a', 1000), offers, weighHoldPercent: 0).weighedHold, 0);
     });
@@ -187,6 +194,8 @@ void main() {
       expect(a.allowed, isTrue);
       expect(a.feePercent, 11);
       expect(a.weighHoldPercent, 12);
+      // 0.01 % аниқлик (эга 2026-11-28): сервер weighHoldBps берса — у устун.
+      expect(SmAccess.fromMap({'allowed': true, 'weighHoldPercent': 12.5, 'weighHoldBps': 1250}).weighHoldPercent, 12.5);
       expect(a.districtId, 'gurlan');
       expect(a.slots.map((s) => '${s.id}:${s.day}'), ['s1:today', 's2:tomorrow']);
       expect(a.days, ['today', 'tomorrow']);

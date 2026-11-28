@@ -5,7 +5,7 @@
  *
  * Tekshiradi: bosqich (OFF/internal/public), faqat bog'langan telefon tasdiqlaydi, begona telefon,
  * replay, muddat, bir vaqtda ikki tasdiq / ikki consume (bitta g'olib), noto'g'ri sir, telefon
- * bog'lanishi o'zgarmaydi, pul chiqimi bloki YO'Q, «1 raqam = 1 kompyuter» (almashtirish), renew, «Чиқиш» (telefon / web o'zi), limitlar, audit.
+ * bog'lanishi o'zgarmaydi, pul chiqimi bloki YO'Q, «1 raqam = 1 kompyuter» (almashtirish), heartbeat/jimlik (renew yo'q), «Чиқиш» (telefon / web o'zi), limitlar, audit.
  */
 'use strict';
 const assert = require('assert');
@@ -88,6 +88,7 @@ const fpFor = (phone, hash) => (hash === BOUND[phone] ? FP() : WEB_FP);
 const BOUND = {};
 const peek = (sid, phone, hash) => fns.qrLoginPeek.run({ sid, deviceFingerprintHash: hash, fingerprint: fpFor(phone, hash) }, ctxOf(phone));
 const approve = (sid, phone, hash, yes = true) => fns.qrLoginApprove.run({ sid, approve: yes, deviceFingerprintHash: hash, fingerprint: fpFor(phone, hash) }, ctxOf(phone));
+const hb = (wsid, phone) => fns.qrWebSessionHeartbeat.run({ webSessionId: wsid }, ctxOf(phone));
 const consume = (s, ip) => fns.qrLoginConsume.run({ sid: s.sid, secret: s.secret }, web(ip));
 async function approvedSession(phone, hash) {
   const s = await start();
@@ -203,11 +204,15 @@ async function main() {
     WS1 = await consume(S1);
     assert.strictEqual(WS1.customToken, `token_for_uid_${A}`);
     assert.strictEqual(WS1.phone, A);
-    assert.ok(/^[a-f0-9]{32}$/.test(WS1.webSessionId) && /^[a-f0-9]{64}$/.test(WS1.renewSecret));
+    assert.ok(/^[a-f0-9]{32}$/.test(WS1.webSessionId));
+    assert.strictEqual(WS1.renewSecret, undefined, 'jim qayta kirish siri YO\'Q (ega: har safar skaner)');
+    assert.strictEqual(WS1.heartbeatIntervalMs, QR_WEB.HEARTBEAT_INTERVAL_MS);
+    assert.strictEqual(WS1.idleTimeoutMs, QR_WEB.IDLE_TIMEOUT_MS);
+    assert.ok(WS1.sessionExpiresAtMs <= Date.now() + QR_WEB.IDLE_TIMEOUT_MS + 1000, '30 kunlik umr yo\'q');
     const ws = await get(`qr_web_sessions/${WS1.webSessionId}`);
     assert.strictEqual(ws.status, 'active');
     assert.strictEqual(ws.phone, A);
-    assert.ok(!JSON.stringify(ws).includes(WS1.renewSecret));
+    assert.strictEqual(ws.renewSecretHash, undefined);
     assert.strictEqual((await get(`qr_login_sessions/${S1.sid}`)).status, 'consumed');
     assert.strictEqual((await get(`qr_login_watch/${S1.watchId}`)).status, 'consumed');
     assert.strictEqual((await get(`device_aliases/${A}`)).deviceFingerprintHash, HA, 'telefon bog\'lanishi joyida');
@@ -249,8 +254,7 @@ async function main() {
     assert.strictEqual(old.status, 'revoked');
     assert.strictEqual(old.revokedBy, 'replaced');
     assert.strictEqual(old.replacedBy, winner.webSessionId);
-    await assert.rejects(fns.qrWebSessionRenew.run({ webSessionId: WS1.webSessionId, renewSecret: WS1.renewSecret }, web()),
-      expectCode('permission-denied', 'QR_WEB_SESSION_INVALID'));
+    await assert.rejects(hb(WS1.webSessionId, A), expectCode('permission-denied', 'QR_WEB_SESSION_INVALID'));
     assert.ok((await events(A)).some((e) => e.action === 'qr_web_replaced' && e.requestId === WS1.webSessionId));
     const l = await fns.qrWebSessionsList.run({ deviceFingerprintHash: HA }, ctxOf(A));
     assert.deepStrictEqual(l.items.map((i) => i.webSessionId), [winner.webSessionId]);
@@ -283,17 +287,23 @@ async function main() {
     assert.ok((await events(A)).some((e) => e.action === 'qr_rejected' && e.requestId === s.sid));
   });
 
-  await check('Q14 renew: to\'g\'ri sir → token; noto\'g\'ri → rad; ro\'yxatda ko\'rinadi (telefon/sir chiqmaydi)', async () => {
-    const r = await fns.qrWebSessionRenew.run({ webSessionId: WS1.webSessionId, renewSecret: WS1.renewSecret }, web());
-    assert.strictEqual(r.customToken, `token_for_uid_${A}`);
-    await assert.rejects(fns.qrWebSessionRenew.run({ webSessionId: WS1.webSessionId, renewSecret: 'e'.repeat(64) }, web()),
-      expectCode('permission-denied', 'QR_WEB_SESSION_INVALID'));
+  await check('Q14 heartbeat: muddat suriladi, token BERILMAYDI; begona/auth\'siz rad; renew callable yo\'q; ro\'yxat', async () => {
+    assert.strictEqual(fns.qrWebSessionRenew, undefined, 'jim qayta kirish olib tashlangan');
+    await db.doc(`qr_web_sessions/${WS1.webSessionId}`).set({ expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + 60000) }, { merge: true });
+    const r = await hb(WS1.webSessionId, A);
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.customToken, undefined);
+    assert.ok(r.expiresAtMs >= Date.now() + QR_WEB.IDLE_TIMEOUT_MS - 5000);
+    assert.ok((await get(`qr_web_sessions/${WS1.webSessionId}`)).expiresAt.toMillis() >= Date.now() + QR_WEB.IDLE_TIMEOUT_MS - 5000);
+    await assert.rejects(hb(WS1.webSessionId, B), expectCode('permission-denied', 'QR_WEB_SESSION_INVALID'));
+    await assert.rejects(fns.qrWebSessionHeartbeat.run({ webSessionId: WS1.webSessionId }, web()), expectCode('unauthenticated'));
+    await assert.rejects(hb('zz', A), expectCode('permission-denied', 'QR_WEB_SESSION_INVALID'));
     const l = await fns.qrWebSessionsList.run({ deviceFingerprintHash: HA, fingerprint: FP() }, ctxOf(A));
     assert.strictEqual(l.enabled, true);
     assert.strictEqual(l.canManage, true);
     const it = l.items.find((i) => i.webSessionId === WS1.webSessionId);
     assert.ok(it && it.browserLabel === 'Chrome · Windows');
-    assert.ok(!JSON.stringify(l).includes(A) && !JSON.stringify(l).includes('renewSecretHash'));
+    assert.ok(!JSON.stringify(l).includes(A) && !JSON.stringify(l).includes('ipKey'));
     const lw = await fns.qrWebSessionsList.run({}, ctxOf(A));
     assert.strictEqual(lw.canManage, false, 'web sessiya (bog\'lanmagan) boshqara olmaydi');
     const lb = await fns.qrWebSessionsList.run({ deviceFingerprintHash: HB }, ctxOf(B));
@@ -308,7 +318,21 @@ async function main() {
     assert.strictEqual((await get(`qr_web_sessions/${WS1.webSessionId}`)).status, 'active');
   });
 
-  await check('Q16 telefondan «Чиқиш»: revoked, refresh token\'lar bekor, renew rad, takror — revoked 0', async () => {
+  await check('Q15b jimlik: heartbeat kelmasa (muddat o\'tgan) — expired, audit, ro\'yxatda yo\'q', async () => {
+    const s = await approvedSession(B, HB);
+    const w = await consume(s);
+    await db.doc(`qr_web_sessions/${w.webSessionId}`).set({ expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() - 1) }, { merge: true });
+    const l0 = await fns.qrWebSessionsList.run({ deviceFingerprintHash: HB }, ctxOf(B));
+    assert.ok(!l0.items.some((i) => i.webSessionId === w.webSessionId), 'jim sessiya ro\'yxatda ko\'rinmaydi');
+    await assert.rejects(hb(w.webSessionId, B), expectCode('permission-denied', 'QR_WEB_SESSION_INVALID'));
+    const x = await get(`qr_web_sessions/${w.webSessionId}`);
+    assert.strictEqual(x.status, 'expired');
+    assert.strictEqual(x.expiredBy, 'idle');
+    assert.ok((await events(B)).some((e) => e.action === 'qr_web_expired' && e.requestId === w.webSessionId));
+    await assert.rejects(hb(w.webSessionId, B), expectCode('permission-denied', 'QR_WEB_SESSION_INVALID'));
+  });
+
+  await check('Q16 telefondan «Компьютерни чиқариш»: revoked, refresh token\'lar bekor, heartbeat rad, takror — revoked 0', async () => {
     const before = revoked.length;
     const r = await fns.qrWebSessionRevoke.run({ webSessionId: WS1.webSessionId, deviceFingerprintHash: HA, fingerprint: FP() }, ctxOf(A));
     assert.strictEqual(r.revoked, 1);
@@ -316,21 +340,22 @@ async function main() {
     assert.strictEqual(revoked.length, before + 1);
     assert.strictEqual(revoked[revoked.length - 1], `uid_${A}`);
     assert.strictEqual((await get(`qr_web_sessions/${WS1.webSessionId}`)).status, 'revoked');
-    await assert.rejects(fns.qrWebSessionRenew.run({ webSessionId: WS1.webSessionId, renewSecret: WS1.renewSecret }, web()),
-      expectCode('permission-denied', 'QR_WEB_SESSION_INVALID'));
+    await assert.rejects(hb(WS1.webSessionId, A), expectCode('permission-denied', 'QR_WEB_SESSION_INVALID'));
     const again = await fns.qrWebSessionRevoke.run({ webSessionId: WS1.webSessionId, deviceFingerprintHash: HA }, ctxOf(A));
     assert.strictEqual(again.revoked, 0);
     assert.strictEqual(revoked.length, before + 1, 'takror — token qayta bekor qilinmaydi');
     assert.ok((await events(A)).some((e) => e.action === 'qr_web_revoked' && e.requestId === WS1.webSessionId));
   });
 
-  await check('Q17 web o\'zi chiqadi (renewSecret): faqat shu sessiya, token bekor qilinmaydi', async () => {
+  await check('Q17 web o\'zi chiqadi (self): faqat shu sessiya, token bekor qilinmaydi; begona/auth\'siz rad', async () => {
     const s = await approvedSession(A, HA);
     const w = await consume(s);
     const before = revoked.length;
-    await assert.rejects(fns.qrWebSessionRevoke.run({ webSessionId: w.webSessionId, renewSecret: 'd'.repeat(64) }, web()),
+    await assert.rejects(fns.qrWebSessionRevoke.run({ self: true, webSessionId: w.webSessionId }, ctxOf(B)),
       expectCode('permission-denied', 'QR_WEB_SESSION_INVALID'));
-    const r = await fns.qrWebSessionRevoke.run({ webSessionId: w.webSessionId, renewSecret: w.renewSecret }, web());
+    await assert.rejects(fns.qrWebSessionRevoke.run({ self: true, webSessionId: w.webSessionId }, web()),
+      expectCode('unauthenticated'));
+    const r = await fns.qrWebSessionRevoke.run({ self: true, webSessionId: w.webSessionId }, ctxOf(A));
     assert.deepStrictEqual(r, { revoked: 1, reauthRequired: false });
     assert.strictEqual(revoked.length, before);
     assert.strictEqual((await get(`qr_web_sessions/${w.webSessionId}`)).status, 'revoked');
@@ -391,12 +416,11 @@ async function main() {
     });
   });
 
-  await check('Q22 OFF ga qaytarilsa: renew/start/consume yopiq, ro\'yxat va «Чиқиш» ishlaydi (kill switch)', async () => {
+  await check('Q22 OFF ga qaytarilsa: heartbeat/start/consume yopiq (web chiqadi), ro\'yxat va «Чиқиш» ishlaydi (kill switch)', async () => {
     const s = await approvedSession(B, HB);
     const w = await consume(s);
     await setStage('off');
-    await assert.rejects(fns.qrWebSessionRenew.run({ webSessionId: w.webSessionId, renewSecret: w.renewSecret }, web()),
-      expectCode('failed-precondition', 'QR_LOGIN_DISABLED'));
+    await assert.rejects(hb(w.webSessionId, B), expectCode('failed-precondition', 'QR_LOGIN_DISABLED'));
     await assert.rejects(start(), expectCode('failed-precondition', 'QR_LOGIN_DISABLED'));
     const l = await fns.qrWebSessionsList.run({ deviceFingerprintHash: HB }, ctxOf(B));
     assert.strictEqual(l.enabled, false);

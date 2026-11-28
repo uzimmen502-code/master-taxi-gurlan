@@ -14,10 +14,13 @@
  *     scanned, egasi = shu telefon) → «Компьютерда киришни тасдиқлайсизми?» → `qrLoginApprove`.
  *  4. Web status `approved` ni ko'radi → `qrLoginConsume({sid, secret})` — bir martalik, tranzaksiyada
  *     approved → consumed + `qr_web_sessions/{wsid}` (active) + custom token (faqat javobda).
- *  5. Web sessiya `renewSecret` bilan jim yangilanadi (`qrWebSessionRenew`) — refresh token'lar bekor
- *     qilinganda (telefondan «Чиқиш»). Telefondan «Чиқиш» → sessiya revoked + hisob refresh token'lari
- *     bekor (telefon o'zi darhol qayta kiradi; boshqa faol web sessiyalar renewSecret bilan tiklanadi,
- *     revoked sessiya tiklana olmaydi).
+ *  5. Ega 2026-11-28: doimiy web kirish YO'Q — «ҳар сафар кирганда янгидан сканерлаш», brauzer yopilsa
+ *     yoki kompyuter o'chib-yonsa — tizimdan ajraladi. Klient Firebase Auth'ni SESSION persistence bilan
+ *     ochadi (vkladka yopilsa token yo'qoladi); jim qayta kirish (renew) YO'Q. Server sessiyasi
+ *     heartbeat bilan yashaydi (`qrWebSessionHeartbeat`, PROPOSED: har 5 daq., 15 daq. jim qolsa —
+ *     expired). Telefondan «Компьютерни тизимдан чиқариш» → revoked + hisob refresh token'lari bekor
+ *     (telefon o'zi darhol qayta kiradi); web sessiya hujjatini tinglab darhol chiqadi.
+ *  6. «Битта рақам 1 та компьютер»: yangi consume oldingisini shu tranzaksiyada almashtiradi.
  *
  * Holatlar (yagona manba — QR_STATES / canTransitionQr): pending → scanned → approved → consumed;
  * istalgan faol holat → expired; scanned → rejected; pending/scanned → cancelled.
@@ -36,8 +39,12 @@ const QR_WEB = Object.freeze({
   QR_TTL_MS: 2 * 60 * 1000,
   /** Telefon tasdiqlagach web shu vaqt ichida token olishi kerak. */
   CONSUME_WINDOW_MS: 60 * 1000,
-  /** PROPOSED: web sessiyaning eng uzoq umri (keyin qayta QR). */
-  SESSION_TTL_MS: 30 * 24 * 60 * 60 * 1000,
+  /**
+   * PROPOSED (arzon): web har 5 daqiqada heartbeat yuboradi; 15 daqiqa jim qolsa (vkladka yopildi,
+   * kompyuter o'chdi/uxladi) sessiya expired. 30 kunlik umr olib tashlandi (ega 2026-11-28).
+   */
+  HEARTBEAT_INTERVAL_MS: 5 * 60 * 1000,
+  IDLE_TIMEOUT_MS: 15 * 60 * 1000,
   /**
    * Ega 2026-11-28: «битта рақам 1 та компьютер». Yangi consume — oldingi faol web sessiya(lar)
    * shu tranzaksiyada `revoked` (revokedBy `replaced`). Almashtirish (rad etish emas) — PROPOSED.
@@ -50,8 +57,7 @@ const QR_WEB = Object.freeze({
   TTL_GRACE_MS: 24 * 60 * 60 * 1000,
   RATE_CONSUME_PER_IP: 60,
   RATE_APPROVER_PER_PHONE: 20,
-  RATE_RENEW_PER_SESSION: 30,
-  RATE_RENEW_PER_IP: 120,
+  RATE_HEARTBEAT_PER_SESSION: 40,
   // Ega 2026-11-28: QR tasdig'idan keyin pul chiqimi bloki YO'Q («тасдиқлаяптику ўзи эканлигини»).
   // Telefon bog'lanishidagi yangi qurilma 24 soat qoidasi o'zgarmagan (device_security.js).
   LIST_LIMIT: 20,
@@ -525,8 +531,8 @@ function attachQrWebLogin(exports, deps) {
 
       const ref = db.collection(QR_COL.SESSIONS).doc(sid);
       const wsid = randomHex(16);
-      const renewSecret = randomHex(32);
-      const sessionExpiresAtMs = now() + QR_WEB.SESSION_TTL_MS;
+      // Sessiya muddati — heartbeat bilan suriladigan «jimlik» chegarasi (doimiy umr yo'q).
+      const sessionExpiresAtMs = now() + QR_WEB.IDLE_TIMEOUT_MS;
       const out = await db.runTransaction(async (tx) => {
         const s = await tx.get(ref);
         if (!s.exists) return { ok: false, code: 'QR_SESSION_INVALID' };
@@ -561,7 +567,6 @@ function attachQrWebLogin(exports, deps) {
           ipKey: clip(ipKey, 24),
           qrSessionId: sid,
           approverHashPrefix: clip(x.approverHashPrefix, 12),
-          renewSecretHash: sha256Hex(renewSecret),
           createdAt: ts(),
           lastActiveAt: ts(),
           updatedAt: ts(),
@@ -604,53 +609,50 @@ function attachQrWebLogin(exports, deps) {
         log({ action: 'qr_notify', result: 'error', err: String(e && e.message).slice(0, 120) });
       }
       log({ action: 'qr_consume', result: 'ok', sid: sid.slice(0, 8), phoneTail: phone.slice(-4), replaced: out.replaced });
-      return { customToken, phone, webSessionId: wsid, renewSecret, sessionExpiresAtMs, replacedSessions: out.replaced };
+      return {
+        customToken, phone, webSessionId: wsid, sessionExpiresAtMs, replacedSessions: out.replaced,
+        heartbeatIntervalMs: QR_WEB.HEARTBEAT_INTERVAL_MS, idleTimeoutMs: QR_WEB.IDLE_TIMEOUT_MS,
+      };
     });
 
-  /** Web: sessiyani jim yangilash (refresh token'lar bekor qilinganda). */
-  exports.qrWebSessionRenew = authFunctions
+  /**
+   * Web (ochiq vkladka): «tirikman». Auth (QR orqali olingan token) + o'z sessiya ID'si; sessiya
+   * egasi = token telefoni. Faol va muddati o'tmagan bo'lsa — muddat suriladi; aks holda
+   * QR_WEB_SESSION_INVALID (web darhol chiqadi). Jim qayta kirish (yangi token) BERILMAYDI.
+   * Bosqich OFF — kill switch (web chiqadi).
+   */
+  exports.qrWebSessionHeartbeat = authFunctions
     .runWith({ timeoutSeconds: 30, memory: '256MB' })
     .https.onCall(async (data, context) => {
+      const phone = requirePhone(context);
       const wsid = String((data && data.webSessionId) || '').trim().toLowerCase();
-      const renewSecret = String((data && data.renewSecret) || '').trim().toLowerCase();
-      if (!WSID_RE.test(wsid) || !SECRET_RE.test(renewSecret)) {
-        throw qrError(functions, 'permission-denied', 'QR_WEB_SESSION_INVALID');
-      }
+      if (!WSID_RE.test(wsid)) throw qrError(functions, 'permission-denied', 'QR_WEB_SESSION_INVALID');
       if (normalizeStage(await loadConfig()) === 'off') {
         throw qrError(functions, 'failed-precondition', 'QR_LOGIN_DISABLED');
       }
-      const ipKey = deviceSecurity.ipKeyOf(context);
-      await rateLimit([
-        { id: `qr_s_${wsid}`, limit: QR_WEB.RATE_RENEW_PER_SESSION },
-        { id: `qr_i_${ipKey || 'noip'}`, limit: QR_WEB.RATE_RENEW_PER_IP },
-      ]);
+      await rateLimit([{ id: `qh_s_${wsid}`, limit: QR_WEB.RATE_HEARTBEAT_PER_SESSION }]);
       const ref = db.collection(QR_COL.WEB_SESSIONS).doc(wsid);
-      const snap = await ref.get();
-      const x = snap.exists ? (snap.data() || {}) : null;
-      const ok = !!x && secretMatches(renewSecret, x.renewSecretHash);
-      const expired = ok && toMs(x.expiresAt) <= now();
-      if (!ok || x.status !== 'active' || expired) {
-        if (expired && x.status === 'active') {
-          await ref.set({ status: 'expired', updatedAt: ts() }, { merge: true });
-        }
-        if (x) {
-          await sec.logEvent({
-            phone: String(x.phone || ''), action: 'qr_renew_refused', result: !ok ? 'bad_secret' : (expired ? 'expired' : String(x.status || '')),
-            requestId: wsid, channel: 'qr_web', actor: 'web', ipKey,
+      const res = await db.runTransaction(async (tx) => {
+        const s = await tx.get(ref);
+        const x = s.exists ? (s.data() || {}) : null;
+        if (!x || canonicalUid(x.phone || '') !== phone) return { ok: false, reason: 'not_found' };
+        if (x.status !== 'active') return { ok: false, reason: String(x.status || '') };
+        if (toMs(x.expiresAt) <= now()) {
+          tx.set(ref, { status: 'expired', expiredBy: 'idle', updatedAt: ts() }, { merge: true });
+          sec.logEventInTx(tx, {
+            phone, action: 'qr_web_expired', result: 'idle', requestId: wsid, channel: 'qr_web', actor: 'web',
           });
+          return { ok: false, reason: 'idle' };
         }
-        throw qrError(functions, 'permission-denied', 'QR_WEB_SESSION_INVALID');
+        const exp = now() + QR_WEB.IDLE_TIMEOUT_MS;
+        tx.set(ref, { lastActiveAt: ts(), updatedAt: ts(), expiresAt: tsAt(exp) }, { merge: true });
+        return { ok: true, exp };
+      });
+      if (!res.ok) {
+        log({ action: 'qr_heartbeat', result: res.reason, phoneTail: phone.slice(-4) });
+        throw qrError(functions, 'permission-denied', 'QR_WEB_SESSION_INVALID', { reason: res.reason });
       }
-      const phone = canonicalUid(x.phone || '');
-      let customToken;
-      try {
-        customToken = await createPhoneCustomToken(phone);
-      } catch (e) {
-        throw qrError(functions, 'internal', 'QR_TOKEN_FAILED');
-      }
-      await ref.set({ lastActiveAt: ts(), updatedAt: ts() }, { merge: true });
-      await sec.logEvent({ phone, action: 'qr_renewed', result: 'ok', requestId: wsid, channel: 'qr_web', actor: 'web', ipKey });
-      return { customToken, phone, webSessionId: wsid, sessionExpiresAtMs: toMs(x.expiresAt) };
+      return { ok: true, expiresAtMs: res.exp, heartbeatIntervalMs: QR_WEB.HEARTBEAT_INTERVAL_MS };
     });
 
   /** Telefon (yoki web o'zi): faol web sessiyalar ro'yxati. OFF bosqichda ham (chiqish uchun). */
@@ -678,26 +680,26 @@ function attachQrWebLogin(exports, deps) {
    * «Чиқиш». Ikki rejim:
    *  - telefon (auth + bog'langan qurilma): `webSessionId` yoki `all: true` → revoked + hisob refresh
    *    token'lari bekor (`reauthRequired` — telefon darhol o'z bog'lanishi bilan qayta kiradi);
-   *  - web o'zi (`webSessionId` + `renewSecret`): faqat shu sessiya revoked (token bekor qilinmaydi,
-   *    web o'zi signOut qiladi).
+   *  - web o'zi (`self: true` + `webSessionId`, auth — sessiya egasi telefoni): faqat shu sessiya
+   *    revoked (token bekor qilinmaydi, web o'zi signOut qiladi).
    * Takroriy chaqiruv xavfsiz (revoked: 0).
    */
   exports.qrWebSessionRevoke = authFunctions
     .runWith({ timeoutSeconds: 30, memory: '256MB' })
     .https.onCall(async (data, context) => {
       const wsidRaw = String((data && data.webSessionId) || '').trim().toLowerCase();
-      const renewSecret = String((data && data.renewSecret) || '').trim().toLowerCase();
       const all = data && data.all === true;
 
-      if (renewSecret) {
-        if (!WSID_RE.test(wsidRaw) || !SECRET_RE.test(renewSecret)) {
+      if (data && data.self === true) {
+        const selfPhone = requirePhone(context);
+        if (!WSID_RE.test(wsidRaw)) {
           throw qrError(functions, 'permission-denied', 'QR_WEB_SESSION_INVALID');
         }
         const ref = db.collection(QR_COL.WEB_SESSIONS).doc(wsidRaw);
         const res = await db.runTransaction(async (tx) => {
           const s = await tx.get(ref);
           const x = s.exists ? (s.data() || {}) : null;
-          if (!x || !secretMatches(renewSecret, x.renewSecretHash)) return { ok: false };
+          if (!x || canonicalUid(x.phone || '') !== selfPhone) return { ok: false };
           if (x.status !== 'active') return { ok: true, revoked: 0, phone: String(x.phone || '') };
           tx.set(ref, { status: 'revoked', revokedBy: 'web_self', revokedAt: ts(), updatedAt: ts() }, { merge: true });
           sec.logEventInTx(tx, {

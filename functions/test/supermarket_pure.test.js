@@ -36,9 +36,11 @@ check('P2 қатор суммаси бутун, round half up', () => {
   assert.ok(Number.isInteger(sm.lineTotalOf(12345, 1333)));
 });
 
-check('P3 тортиш ушлаб туриши = ceil(10%), бутун; 0% → 0', () => {
+check('P3 тортиш ушлаб туриши = half_up(10%) (эга 2026-11-28; аввал ceil), бутун; 0% → 0', () => {
   assert.strictEqual(sm.holdExtraOf(52500, 10), 5250);
-  assert.strictEqual(sm.holdExtraOf(52501, 10), 5251); // 5250.1 → 5251
+  assert.strictEqual(sm.holdExtraOf(52501, 10), 5250); // 5250.1 → 5250 (аввал ceil 5251)
+  assert.strictEqual(sm.holdExtraOf(52505, 10), 5251); // 5250.5 → 5251
+  assert.strictEqual(sm.holdExtraOf(52501, { bps: 1000, rounding: 'ceil' }), 5251, 'эски буюртма — ceil');
   assert.strictEqual(sm.holdExtraOf(9, 10), 1);
   assert.strictEqual(sm.holdExtraOf(52500, 0), 0);
 });
@@ -263,6 +265,27 @@ check('P11b ҳамкор модели (эга 2026-11-28): калит шаффо
   assert.strictEqual(JSON.stringify(ok.lines).includes(k), false, 'мижоз қаторида ҳамкор калити йўқ');
   const { isSampleTarget } = require('../tools/mark_supermarket_samples');
   assert.deepStrictEqual([isSampleTarget({ smGroupId: 'g' }), isSampleTarget({ smGroupId: 'g', smPartnerKey: k }), isSampleTarget({}), isSampleTarget({ smGroupId: 'g', smSample: true }), isSampleTarget({ smGroupId: 'g', smSample: true }, true)], [true, false, false, false, true]);
+});
+
+check('P14 0.01 % аниқлик (эга 2026-11-28): weighHoldBps / courierPayout.percentBps — янги ва эски майдонлар, чегаралар', () => {
+  const ok = (o) => sm.validateSupermarketSettings(o);
+  assert.ok(ok({ weighHoldBps: 1250 }).ok, 'янги bps');
+  assert.ok(ok({ weighHoldBps: 0 }).ok && ok({ weighHoldBps: 5000 }).ok, 'чегара 0 / 5000');
+  assert.ok(ok({ weighHoldPercent: 10 }).ok, 'эски % ҳали ўқилади');
+  assert.ok(ok({ weighHoldPercent: 12, weighHoldBps: 1200 }).ok, 'иккаласи мос');
+  assert.ok(ok({ weighHoldPercent: 12, weighHoldBps: 1250 }).errors.includes('WEIGH_HOLD_MISMATCH weighHoldBps'));
+  assert.ok(ok({ weighHoldBps: 5001 }).errors.includes('WEIGH_HOLD_BPS_INVALID weighHoldBps'));
+  assert.ok(ok({ weighHoldBps: 12.5 }).errors.includes('WEIGH_HOLD_BPS_INVALID weighHoldBps'));
+  assert.ok(ok({ weighHoldBps: 1000, courierPayout: { mode: 'percent', percentBps: 1250 } }).ok);
+  assert.ok(ok({ weighHoldBps: 1000, courierPayout: { mode: 'percent', percentBps: 10000 } }).ok);
+  assert.ok(ok({ weighHoldBps: 1000, courierPayout: { mode: 'percent', percentBps: 10001 } }).errors.includes('COURIER_PAYOUT_PERCENT_BPS_INVALID courierPayout.percentBps'));
+  assert.ok(ok({ weighHoldBps: 1000, courierPayout: { mode: 'percent', percent: 12, percentBps: 1200 } }).errors.includes('COURIER_PAYOUT_PERCENT_AMBIGUOUS courierPayout.percentBps'));
+  assert.ok(ok({ weighHoldBps: 1000, courierPayout: { mode: 'fixed', fixedAmount: 1, percentBps: 5 } }).errors.includes('UNKNOWN_KEY courierPayout.percentBps'));
+  // Нарх: 12.5 % ушлаш, ярмидан юқорига; чегара (миқдор) — floor(q × 1.125).
+  const r = sm.priceSupermarketOrder({ items: [{ productId: 'beef', qMilli: 1500 }], products: { beef: BEEF }, feeBp: 1100, hold: { bps: 1250, rounding: 'half_up' } });
+  assert.strictEqual(r.lines[0].holdExtra, 15000); // 120000 × 12.5 %
+  assert.strictEqual(sm.applyWeights(r.lines, [{ productId: 'beef', actualQty: 1.688 }], { bps: 1250, rounding: 'half_up' }).code, 'ACTUAL_QTY_OVER_LIMIT');
+  assert.strictEqual(sm.applyWeights(r.lines, [{ productId: 'beef', actualQty: 1.687 }], { bps: 1250, rounding: 'half_up' }).ok, true);
 });
 
 const passed = results.filter(Boolean).length;

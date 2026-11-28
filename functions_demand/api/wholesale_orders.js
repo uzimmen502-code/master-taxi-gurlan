@@ -165,16 +165,17 @@ function resolvePack(product, packId) {
   };
 }
 
-/** AVA ulushi — ceil(goods × bps / 10000), butun so'm (relay `splitInternal` yaxlitlashi; PROPOSED). */
+/** AVA ulushi — half_up(goods × bps / 10000), butun so'm (ega 2026-11-28: barcha platforma foizlari bir xil). */
 function avaFeeOf(goodsTotal, bps) {
   if (!bps) return 0;
   const x = goodsTotal * bps;
   if (!Number.isSafeInteger(x)) throw fail('failed-precondition', 'Summa juda katta', 'amount_too_large');
-  // Yagona yaxlitlash manbai money_math (T-4, ega 2026-11-28; nusxa core/money_math.js), natija aynan.
+  // Yagona yaxlitlash manbai money_math (T-4; nusxa core/money_math.js). Ega 2026-11-28
+  // «ҳа бир хил бўлсин»: half_up (avval ceil). Ulush kvotaga muhrlanadi — eski kvota/buyurtma o'zgarmaydi.
   if (Number.isInteger(goodsTotal) && goodsTotal >= 0 && Number.isInteger(bps) && bps > 0) {
-    return moneyMath.bpsOf(goodsTotal, bps, 'ceil');
+    return moneyMath.bpsOf(goodsTotal, bps, 'half_up');
   }
-  return Math.floor(x / BPS_DENOM) + (x % BPS_DENOM === 0 ? 0 : 1); // eski yo'l (amalda yo'q: bps tekshirilgan butun)
+  return Math.floor((x + BPS_DENOM / 2) / BPS_DENOM); // kasr kirish (amalda yo'q: bps tekshirilgan butun)
 }
 
 function parseQuoteRequest(data) {

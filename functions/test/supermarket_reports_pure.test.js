@@ -118,12 +118,13 @@ check('P9 shortfall = max(0, талаб − (stock + reserved)) — чегара
 const SM = require('../supermarket');
 
 check('P10 курьер тўлови нусхаси: percent floor, fixed, созланмаган/бузуқ → amount null; валидатор', () => {
-  assert.deepStrictEqual(SM.courierPayoutSnapshot({ mode: 'percent', percent: 15 }, 1234, 3), { mode: 'percent', percent: 15, amount: 185, settingsVersion: 3 }); // 185.1 → 185
+  assert.deepStrictEqual(SM.courierPayoutSnapshot({ mode: 'percent', percent: 15 }, 1234, 3), { mode: 'percent', percentBps: 1500, percent: 15, rounding: 'half_up', amount: 185, settingsVersion: 3 }); // 185.1 → 185
+  assert.strictEqual(SM.courierPayoutSnapshot({ mode: 'percent', percentBps: 1550 }, 1234, 3).amount, 191); // 15.5 % → 191.27
   assert.strictEqual(SM.courierPayoutSnapshot({ mode: 'percent', percent: 100 }, 9999, 1).amount, 9999);
   assert.strictEqual(SM.courierPayoutSnapshot({ mode: 'percent', percent: 0 }, 9999, 1).amount, 0);
-  assert.strictEqual(SM.courierPayoutSnapshot({ mode: 'percent', percent: 33 }, 0, 1).amount, 0);
+  assert.deepStrictEqual([SM.courierPayoutSnapshot({ mode: 'percent', percent: 33 }, 0, 1).amount, SM.courierPayoutSnapshot({ mode: 'percent', percent: 33 }, 0, 1).reason], [null, 'fee_unknown']); // эга 2026-11-28 (аввал 0)
   assert.deepStrictEqual(SM.courierPayoutSnapshot({ mode: 'fixed', fixedAmount: 7000 }, 1234, 4), { mode: 'fixed', fixedAmount: 7000, amount: 7000, settingsVersion: 4 });
-  assert.deepStrictEqual(SM.courierPayoutSnapshot(undefined, 1234, 2), { mode: null, amount: null, settingsVersion: 2 });
+  assert.deepStrictEqual(SM.courierPayoutSnapshot(undefined, 1234, 2), { mode: null, amount: null, reason: 'not_configured', settingsVersion: 2 });
   assert.strictEqual(SM.courierPayoutSnapshot({ mode: 'percent', percent: 101 }, 1000, 2).amount, null);
   assert.deepStrictEqual(SM.courierPayoutProblems(null), []);
   for (const bad of [{ mode: 'x' }, { mode: 'percent', percent: 1.5 }, { mode: 'percent', percent: -1 }, { mode: 'percent', percent: 10, fixedAmount: 1 },

@@ -13,9 +13,9 @@
  * (`courier_task_payout_pct`) - bitta tranzaksiyada (9, 16, 41-qoida).
  * Haq hujjatidagi `version` = hisoblash paytidagi sozlama hujjati versiyasi.
  *
- * Hisob: `courierPayout = floor(base * bps / 10000)`, butun so'm (8-qoida).
- * floor: ijrochi haqi platformaga zarar qilmaydi (`tariff.splitInternal` bilan bir xil:
- * platforma ulushi ceil, ijrochi haqi floor).
+ * Hisob: `courierPayout = half_up(base * bps / 10000)`, butun so'm (8-qoida).
+ * Ega 2026-11-28 «ҳа бир хил бўлсин»: barcha foiz hisoblari yarmidan yuqoriga (avval floor edi);
+ * haq hujjatiga `rounding` muhrlanadi (audit).
  * Baza (mijoz haqiqatda to'laydigan narx, CLAUDE.md 14 - alohida maydon):
  *   carpet     -> carpet_wash_orders.finalPrice (admin qo'yadi)
  *   agro       -> agro_pickup_orders.finalPrice (admin qo'yadi)
@@ -57,7 +57,7 @@ function codeError(code, status, details) {
 }
 
 /**
- * floor(base * bps / 10000); noto'g'ri kirish -> null. Faqat HAQIQIY butun sonlar.
+ * half_up(base * bps / 10000); noto'g'ri kirish -> null. Faqat HAQIQIY butun sonlar.
  * Yagona manba: courier_payout_calc.taskPayout (T-2, ega 2026-11-28).
  */
 function computePayout(base, bps) {
@@ -103,6 +103,7 @@ function buildPayout(moduleKey, taskId, base, settingsDoc, courierId) {
     version: rate ? rate.version : docVersion,
     base: baseOk ? base : null,
     reason,
+    rounding: courierPayoutCalc.ROUNDING,
   };
 }
 

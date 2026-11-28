@@ -47,27 +47,31 @@ check('money_math: xavfsiz chegara — throw (standart) / unchecked', () => {
   assert.strictEqual(typeof mm.bpsOf(Number.MAX_SAFE_INTEGER, 2, 'ceil', { unsafe: 'unchecked' }), 'number');
 });
 
-check('calc.taskPayout: floor, noto\'g\'ri → null; chegara 0/10000', () => {
+check('calc.taskPayout: half_up, noto\'g\'ri → null; chegara 0/10000', () => {
+  assert.strictEqual(calc.ROUNDING, 'half_up');
   assert.strictEqual(calc.taskPayout(123457, 1250), 15432);
   assert.strictEqual(calc.taskPayout(1, 10000), 1);
-  assert.strictEqual(calc.taskPayout(1, 9999), 0);
+  assert.strictEqual(calc.taskPayout(1, 5000), 1); // 0.5 → 1
+  assert.strictEqual(calc.taskPayout(1, 4999), 0);
   assert.strictEqual(calc.taskPayout(100, 0), 0);
   for (const [b, r] of [[0, 100], [-1, 100], [1.5, 100], [100, 10001], [100, -1], [100, 1.5]]) assert.strictEqual(calc.taskPayout(b, r), null);
 });
-check('calc.supermarketPayoutAmount: percent floor / fixed; fee yaroqsiz → 0', () => {
-  assert.strictEqual(calc.supermarketPayoutAmount({ mode: 'percent', percent: 13 }, 15000), 1950);
-  assert.strictEqual(calc.supermarketPayoutAmount({ mode: 'percent', percent: 33 }, 15001), 4950);
-  assert.strictEqual(calc.supermarketPayoutAmount({ mode: 'percent', percent: 100 }, 15001), 15001);
-  assert.strictEqual(calc.supermarketPayoutAmount({ mode: 'percent', percent: 13 }, 0), 0);
-  assert.strictEqual(calc.supermarketPayoutAmount({ mode: 'percent', percent: 13 }, 100.5), 0);
-  assert.strictEqual(calc.supermarketPayoutAmount({ mode: 'fixed', fixedAmount: 7000 }, 0), 7000);
+check('calc.supermarketPayout: percentBps half_up / fixed; fee yaroqsiz → null + fee_unknown', () => {
+  assert.deepStrictEqual(calc.supermarketPayout({ mode: 'percent', percentBps: 1300 }, 15000), { amount: 1950, reason: null });
+  assert.deepStrictEqual(calc.supermarketPayout({ mode: 'percent', percentBps: 3300 }, 15001), { amount: 4950, reason: null }); // 4950.33
+  assert.deepStrictEqual(calc.supermarketPayout({ mode: 'percent', percentBps: 3333 }, 15000), { amount: 5000, reason: null }); // 4999.5
+  assert.deepStrictEqual(calc.supermarketPayout({ mode: 'percent', percentBps: 10000 }, 15001), { amount: 15001, reason: null });
+  for (const fee of [0, -1, 100.5, '15000', null]) {
+    assert.deepStrictEqual(calc.supermarketPayout({ mode: 'percent', percentBps: 1300 }, fee), { amount: null, reason: 'fee_unknown' });
+  }
+  assert.deepStrictEqual(calc.supermarketPayout({ mode: 'fixed', fixedAmount: 7000 }, 0), { amount: 7000, reason: null });
 });
-check('calc.serviceFee / net: ceil + net = floor(gross × (10000 − bps))', () => {
+check('calc.serviceFee / net: half_up, net = gross − fee', () => {
   const o = { feeBpsMax: 5000 };
-  assert.strictEqual(calc.serviceFee(10001, 1, o), 2);
-  assert.strictEqual(calc.netAfterServiceFee(10001, 1, o), 9999);
+  assert.strictEqual(calc.serviceFee(10001, 1, o), 1);
+  assert.strictEqual(calc.netAfterServiceFee(10001, 1, o), 10000);
   assert.strictEqual(calc.serviceFee(100000, 0, o), 0);
-  assert.strictEqual(calc.serviceFee(3, 5000, o), 2);
+  assert.strictEqual(calc.serviceFee(3, 5000, o), 2); // 1.5 → 2
   assert.throws(() => calc.serviceFee(100, 5001, o), /feeBps out of range/);
   assert.throws(() => calc.serviceFee(0, 100, o), /amount must be a positive integer/);
   assert.throws(() => calc.serviceFee(Number.MAX_SAFE_INTEGER, 2, o), /amount too large/);

@@ -207,10 +207,12 @@ ok('validDims: 1..1000 butun; aks holda null', () => {
   assert.strictEqual(api.validDims(null), null);
 });
 
-ok('avaFeeOf: 0 bps → 0; yuqoriga yaxlitlash; butun', () => {
+ok('avaFeeOf: 0 bps → 0; yarmidan yuqoriga (ega 2026-11-28; avval ceil); butun', () => {
   assert.strictEqual(api.avaFeeOf(140000, 0), 0);
   assert.strictEqual(api.avaFeeOf(140000, 250), 3500);
-  assert.strictEqual(api.avaFeeOf(1, 250), 1);
+  assert.strictEqual(api.avaFeeOf(1, 250), 0); // 0.025 (avval ceil → 1)
+  assert.strictEqual(api.avaFeeOf(20, 250), 1); // 0.5
+  assert.strictEqual(api.avaFeeOf(19, 250), 0); // 0.475
   assert.strictEqual(api.avaFeeOf(100000000000, 3000), 30000000000);
 });
 

@@ -26,10 +26,12 @@ check('computePayout: 40 000 × 1 500 bps = 6 000; 0 bps = 0; 10 000 bps = to\'l
   assert.strictEqual(p.computePayout(40000, 0), 0);
   assert.strictEqual(p.computePayout(40000, 10000), 40000);
 });
-check('computePayout: floor — 33 333 × 15 % = 4 999 (4 999.95 emas 5 000)', () => {
-  assert.strictEqual(p.computePayout(33333, 1500), 4999);
+check('computePayout: half_up (ega 2026-11-28; avval floor) — 33 333 × 15 % = 5 000 (4 999.95)', () => {
+  assert.strictEqual(p.computePayout(33333, 1500), 5000);
   assert.strictEqual(p.computePayout(1, 1), 0);
-  assert.strictEqual(p.computePayout(9999, 1), 0);
+  assert.strictEqual(p.computePayout(9999, 1), 1); // 0.9999 → 1 (avval floor 0)
+  assert.strictEqual(p.computePayout(4999, 1), 0); // 0.4999
+  assert.strictEqual(p.computePayout(5000, 1), 1); // 0.5
   assert.strictEqual(p.computePayout(10000, 1), 1);
 });
 check('computePayout: noto\'g\'ri kirish → null (float/satr/0/manfiy/NaN/chegaradan tashqari)', () => {
@@ -52,7 +54,7 @@ check('buildPayout: sozlangan -> payout + bps + version + base + kuryer + modul/
   const f = p.buildPayout('carpet', 't1', 40000, doc, '998901110001');
   assert.deepStrictEqual(f, {
     module: 'carpet', taskId: 't1', courierId: '998901110001',
-    payout: 6000, bps: 1500, version: 7, base: 40000, reason: null,
+    payout: 6000, bps: 1500, version: 7, base: 40000, reason: null, rounding: 'half_up',
   });
 });
 check('buildPayout: natijada courierPayout* nomli maydon YO\'Q (vazifa hujjatiga oqib ketmasin)', () => {
@@ -64,7 +66,7 @@ check('buildPayout: foiz sozlanmagan -> payout null, sabab not_configured (versi
   const f = p.buildPayout('carpet', 't1', 40000, null, 'c1');
   assert.deepStrictEqual(f, {
     module: 'carpet', taskId: 't1', courierId: 'c1',
-    payout: null, bps: null, version: 0, base: 40000, reason: 'not_configured',
+    payout: null, bps: null, version: 0, base: 40000, reason: 'not_configured', rounding: 'half_up',
   });
   assert.strictEqual(p.buildPayout('carpet', 't1', 40000, { version: 4, modules: {} }, 'c1').version, 4);
 });

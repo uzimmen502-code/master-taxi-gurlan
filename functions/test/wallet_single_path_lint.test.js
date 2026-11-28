@@ -141,6 +141,12 @@ check('L4 ro\'yxat yig\'indisi bazadan oshmaydi (faqat qisqaradi)', () => {
   assert.ok(total <= BASELINE_TOTAL, `Σ ALLOW ${total} > ${BASELINE_TOTAL}`);
 });
 
+check('L5 settlement_ledger.js yagona yo\'lni eksport qiladi (prepareWalletPost / walletPost)', () => {
+  const sl = require('../settlement_ledger');
+  assert.strictEqual(typeof sl.walletPost, 'function');
+  assert.strictEqual(typeof sl.prepareWalletPost, 'function');
+});
+
 const passed = results.filter(Boolean).length;
 console.log(`\n${passed} passed, ${results.length - passed} failed`);
 if (process.env.LINT_PRINT) console.log(JSON.stringify(actual, null, 1));

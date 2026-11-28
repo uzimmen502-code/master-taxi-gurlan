@@ -29,7 +29,8 @@ const _statusText = <String, String>{
   'hidden': 'Яширин',
 };
 
-const _unitText = <String, String>{'kg': 'кг', 'l': 'л', 'piece': 'дона', 'pack': 'қадоқ', 'bunch': 'боғ'};
+// Ягона манба — sm_units.dart (functions/supermarket_units.json); янги бирликлар (г, мл, қути, м) рўйхатга ўзи қўшилади.
+final _unitText = <String, String>{for (final id in kSmUnitIds) id: smUnitText(id)};
 
 class SupermarketAdminScreen extends StatelessWidget {
   const SupermarketAdminScreen({super.key, this.service});

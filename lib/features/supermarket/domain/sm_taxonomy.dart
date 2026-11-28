@@ -8,11 +8,11 @@ library;
 
 import '../../markets/domain/market_taxonomy.dart' show localizedName;
 import 'sm_qty.dart';
+import 'sm_units.dart';
 
 export '../../markets/domain/market_taxonomy.dart' show localizedName;
-
-/// Шартномадаги бирликлар. Номаълум бирлик — гуруҳ ташланади.
-const kSmUnits = <String>{'kg', 'l', 'piece', 'pack', 'bunch'};
+// Шартномадаги бирликлар — sm_units.dart (ягона манба: functions/supermarket_units.json). Номаълум бирлик — гуруҳ ташланади.
+export 'sm_units.dart' show kSmUnits, kSmUnitIds, kSmUnitLabels, smKnownUnit, smUnitText;
 
 Map<String, String> smNames(Object? raw) {
   if (raw is! Map) return const {};

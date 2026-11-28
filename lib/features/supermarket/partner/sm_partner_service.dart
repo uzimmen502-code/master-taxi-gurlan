@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:cloud_functions/cloud_functions.dart';
 
 import '../../admin_web/services/admin_supermarket_service.dart' show SmImportPreview, SmImportResult;
+import '../domain/sm_units.dart' show kSmUnits;
 
 /// «AVA Супермаркет» ҳамкори (эга 2026-11-28, а-вариант): тасдиқланган Улгуржи сотувчиси ўз таклифларини супермаркетга
 /// чиқаради. Ҳаммаси серверда (`supermarket.js` partner* callable'лари): эгалик, модерация, нарх бутун сўм.
@@ -93,6 +94,7 @@ class SmPartnerOffer {
   required String price,
   required String stock,
   required String status,
+  String unit = '',
 }) {
   final p = int.tryParse(price.replaceAll(RegExp(r'[\s ]'), ''));
   final st = num.tryParse(stock.trim().replaceAll(',', '.'));
@@ -106,6 +108,8 @@ class SmPartnerOffer {
     if (quality.isNotEmpty && quality.length != 3) 'smp_err_quality',
     if (p == null || p <= 0) 'smp_err_price',
     if (st == null || st < 0) 'smp_err_stock',
+    // Бирлик ихтиёрий: бўш — гуруҳники (сервер offer.unit || group.unit); фақат kSmUnits (сервер ҳам текширади).
+    if (unit.trim().isNotEmpty && !kSmUnits.contains(unit.trim())) 'smp_err_unit',
   ];
   return (
     offer: {
@@ -116,6 +120,7 @@ class SmPartnerOffer {
       },
       if (quality.length == 3) 'smQuality': quality,
       if (packLabel.trim().isNotEmpty) 'packLabel': packLabel.trim(),
+      if (kSmUnits.contains(unit.trim())) 'unit': unit.trim(),
       'price': p ?? 0,
       'stock': st ?? 0,
       'smStatus': const ['active', 'out_of_stock', 'hidden'].contains(status) ? status : 'active',

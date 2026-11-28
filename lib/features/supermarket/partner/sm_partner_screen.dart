@@ -274,6 +274,8 @@ class _SmPartnerOfferDialogState extends State<SmPartnerOfferDialog> {
   late final _price = TextEditingController(text: _o == null ? '' : '${_o.price}');
   late final _stock = TextEditingController(text: _o?.stock == null ? '' : '${_o!.stock}');
   late String _status = _o?.partnerStatus ?? 'active';
+  // '' — гуруҳники (сервер). Номаълум сақланган қиймат ҳам '' кўринади.
+  late String _unit = smKnownUnit(_o?.unit);
   List<String> _problems = const [];
   String? _error;
   bool _busy = false;
@@ -297,6 +299,7 @@ class _SmPartnerOfferDialogState extends State<SmPartnerOfferDialog> {
       price: _price.text,
       stock: _stock.text,
       status: _status,
+      unit: _unit,
     );
     if (r.problems.isNotEmpty) return setState(() => _problems = r.problems);
     setState(() {
@@ -361,6 +364,19 @@ class _SmPartnerOfferDialogState extends State<SmPartnerOfferDialog> {
             _tf('quality_uz_Latn', '${context.tr('smp_f_quality')} (lotin)', _q['uz_Latn']!),
             _tf('quality_ru', '${context.tr('smp_f_quality')} (рус)', _q['ru']!),
             _tf('pack', context.tr('smp_f_pack'), _pack),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: DropdownButtonFormField<String>(
+                key: const ValueKey('smp_f_unit'),
+                initialValue: _unit,
+                decoration: InputDecoration(labelText: context.tr('smp_f_unit'), border: const OutlineInputBorder(), isDense: true),
+                items: [
+                  DropdownMenuItem(value: '', child: Text(context.tr('smp_unit_group_default'))),
+                  for (final u in kSmUnitIds) DropdownMenuItem(value: u, child: Text(context.tr('sm_unit_$u'))),
+                ],
+                onChanged: (v) => setState(() => _unit = v ?? ''),
+              ),
+            ),
             _tf('price', context.tr('smp_f_price'), _price, kb: TextInputType.number),
             _tf('stock', context.tr('smp_f_stock'), _stock, kb: const TextInputType.numberWithOptions(decimal: true)),
             DropdownButtonFormField<String>(

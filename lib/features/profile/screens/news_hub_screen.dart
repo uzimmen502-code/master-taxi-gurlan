@@ -30,8 +30,10 @@ import '../inbox/news_detail_screen.dart';
 import '../inbox_hide_keys.dart';
 import '../../relatives/screens/family_links_screen.dart';
 import '../../relatives/widgets/family_prompt.dart' show familyRouteOf;
+import '../domain/birthday_prompt_push.dart';
 import 'dialog_news_detail_screen.dart';
 import 'order_news_detail_screen.dart';
+import 'user_info_screen.dart' show openUserInfoScreen;
 
 /// «Хабарлар» — битта рўйхат ва тепада филтрлар (эга, 2026-11-02: бошқа
 /// иловалар билан солиштириб такомиллаштириш, таклиф қабул қилинди).
@@ -254,6 +256,11 @@ class _NewsHubScreenState extends State<NewsHubScreen> {
       } else {
         await openSupermarketWith(Navigator.of(context));
       }
+      return;
+    }
+    // «Туғилган кунингизни киритинг» (эга 2026-11-28) — push билан бир хил: туғилган сана экрани.
+    if (fp is NewsItem && opensBirthDateEntry(type: fp.source)) {
+      await openUserInfoScreen(context);
       return;
     }
     final holiday = holidayInboxTarget(e.payload);

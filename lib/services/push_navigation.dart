@@ -37,7 +37,9 @@ import '../features/marshrut/passenger/screens/marshrut_taxi_screen.dart';
 import '../models/active_trip.dart';
 import '../repositories/marshrut_driver_repository.dart';
 import '../repositories/rides_repository.dart';
+import '../features/profile/domain/birthday_prompt_push.dart';
 import '../features/profile/screens/news_hub_screen.dart';
+import '../features/profile/screens/user_info_screen.dart' show openUserInfoScreen;
 import '../features/profile/screens/order_news_detail_screen.dart';
 import '../features/supermarket/screens/supermarket_home_screen.dart' show openSupermarketWith;
 import '../features/supermarket/screens/sm_holiday_screen.dart' show openHolidayBasket, openHolidayMarketTarget;
@@ -254,6 +256,12 @@ class PushNavigation {
     }
     if (family == 'supermarket') {
       if (_moduleOpen(nav, 'supermarket')) await openSupermarketWith(nav);
+      return;
+    }
+
+    // «Туғилган кунингизни киритинг» (эга 2026-11-28, сервер birthday_prompt.js): туғилган сана киритиладиган экран.
+    if (opensBirthDateEntry(type: type, screen: screen)) {
+      if (nav.context.mounted) await openUserInfoScreen(nav.context);
       return;
     }
 

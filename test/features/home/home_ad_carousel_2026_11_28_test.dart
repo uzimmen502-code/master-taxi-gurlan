@@ -78,21 +78,28 @@ void main() {
     await unmount(t);
   });
 
-  testWidgets('«Реклама бериш» ўрни (эга 2026-11-28): юқори баннер мегафони чапда, кўзгули, ~25% эн; матн ва тугма ўнгда; 320 px × 1.5 — тошиш йўқ', (t) async {
+  testWidgets('«Реклама бериш» ўрни (эга 2026-11-28): мегафон чап четга ёпишган, тўла баландлик, кўзгули; матн ва тугма ўнгда; 320 px × 1.5 — тошиш йўқ', (t) async {
     await pump(t, const []);
     final art = find.byKey(const ValueKey('home_ad_placeholder_art'));
     expect(art, findsOneWidget);
-    expect(t.widget<Transform>(art).transform.storage[0], -1.0, reason: 'горизонтал кўзгу (flipX)');
+    expect(t.widget<Transform>(art).transform.storage[0], -1.0, reason: 'горизонтал кўзгу (flipX) — ўнгга қараган');
     final img = t.widget<Image>(find.descendant(of: art, matching: find.byType(Image)));
     expect((img.image as AssetImage).assetName, kHomeBannerArtAsset);
+    expect(img.fit, BoxFit.cover, reason: 'баландликни тўлдиради');
     final card = t.getRect(find.byKey(const ValueKey('home_ad_placeholder')));
     final artRect = t.getRect(art);
     final text = t.getRect(find.text('home_ad_slot_title'));
     final cta = t.getRect(find.byKey(const ValueKey('home_ad_placeholder_cta')));
-    expect(artRect.left - card.left, lessThan(16), reason: 'чапда');
+    expect(artRect.left, card.left, reason: 'чап четга ёпишган — ораликсиз');
+    expect(artRect.top, card.top, reason: 'юқоридан ораликсиз');
+    expect(artRect.height, card.height, reason: 'тўла баландлик');
     expect(artRect.right, lessThanOrEqualTo(text.left));
     expect(artRect.right, lessThanOrEqualTo(cta.left));
-    expect(artRect.width, closeTo(card.width * kHomeAdPlaceholderArtFraction - 8, 1));
+    // 800 px тест экрани: эни = баландлик × нисбат (чекловга етмайди).
+    expect(artRect.width, closeTo(HomeAdCarousel.height * kHomeAdPlaceholderArtAspect, 0.5));
+    // Карта бурчакни кесади (бурчак радиуси бўйича кесиш).
+    final mat = t.widget<Material>(find.byKey(const ValueKey('home_ad_placeholder')));
+    expect(mat.clipBehavior, Clip.antiAlias);
     await unmount(t);
     // Тор экран + катта шрифт.
     await t.binding.setSurfaceSize(const Size(320, 640));
@@ -108,7 +115,18 @@ void main() {
     await t.pump();
     expect(t.takeException(), isNull, reason: 'RenderFlex тошиши йўқ');
     expect(find.byKey(const ValueKey('home_ad_placeholder_cta')), findsOneWidget);
+    final narrowArt = t.getRect(find.byKey(const ValueKey('home_ad_placeholder_art')));
+    expect(narrowArt.left, 0, reason: 'тор экранда ҳам чап четда');
+    expect(narrowArt.width, closeTo(320 * kHomeAdPlaceholderArtMaxFraction, 0.5), reason: 'тор экранда эн чекланади');
+    expect(narrowArt.height, HomeAdCarousel.height);
     await unmount(t);
+  });
+
+  test('homeAdPlaceholderArtWidth: табиий эн, тор картада чеклов (чегара)', () {
+    expect(homeAdPlaceholderArtWidth(800, 104), closeTo(104 * 400 / 312, 1e-9));
+    expect(homeAdPlaceholderArtWidth(320, 104), closeTo(128, 1e-9));
+    final boundary = 104 * kHomeAdPlaceholderArtAspect / kHomeAdPlaceholderArtMaxFraction;
+    expect(homeAdPlaceholderArtWidth(boundary, 104), closeTo(104 * kHomeAdPlaceholderArtAspect, 1e-9));
   });
 
   testWidgets('1 реклама — статик (PageView йўқ, айланмайди); босилса onOpen(0)', (t) async {

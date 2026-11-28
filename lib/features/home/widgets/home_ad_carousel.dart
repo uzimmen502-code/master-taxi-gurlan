@@ -21,8 +21,19 @@ import 'home_info_ticker.dart' show kHomeBannerArtAsset;
 /// Home» — `adTier` `home`/`premium`/`pro_max`, [TvClip.showsOnHome]).
 enum HomeAdPlacement { markets, services, transport }
 
-/// «Реклама бериш» ўрни: мегафон расми эни (юқори баннер каби ~25%).
-const double kHomeAdPlaceholderArtFraction = 0.25;
+/// «Реклама бериш» ўрни: мегафон расми (banner_megaphone_v1.webp 400×312) нисбати.
+const double kHomeAdPlaceholderArtAspect = 400 / 312;
+
+/// Эга 2026-11-28 (2): мегафон баннернинг ЧАП четига ёпишган, бутун баландликни тўлдиради;
+/// эни = баландлик × нисбат, лекин тор экранда карта энининг шу улушидан ошмайди (матнга жой).
+const double kHomeAdPlaceholderArtMaxFraction = 0.4;
+
+/// Мегафон эни (карта ўлчамидан).
+double homeAdPlaceholderArtWidth(double cardWidth, double cardHeight) {
+  final natural = cardHeight * kHomeAdPlaceholderArtAspect;
+  final cap = cardWidth * kHomeAdPlaceholderArtMaxFraction;
+  return natural < cap ? natural : cap;
+}
 
 /// Битта слайд (UI маълумоти; манбадан мустақил — тестланади).
 @immutable
@@ -324,23 +335,25 @@ class _AdPlaceholder extends StatelessWidget {
         onTap: onAdvertise,
         child: LayoutBuilder(
           builder: (context, box) {
-            // Эга 2026-11-28: юқори баннердаги мегафон расми ЧАПДА, кўзгули (ўнгга — матнга қараган), ~25% эн.
-            final artW = box.maxWidth * kHomeAdPlaceholderArtFraction;
+            // Эга 2026-11-28: юқори баннердаги мегафон расми ЧАПДА, кўзгули (ўнгга — матнга қараган).
+            // Эга 2026-11-28 (2): чап четга ёпишган (ички ораликсиз), бутун баландликни тўлдиради,
+            // бурчакни картанинг Clip.antiAlias и кесади. Тор экранда энни чеклаганда даста томони
+            // (кўзгудан кейин — чап чет) кесилади, оғзи ва товуш чизиқлари кўринади.
+            final artW = homeAdPlaceholderArtWidth(box.maxWidth, box.maxHeight);
             return Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 SizedBox(
                   width: artW,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(8, 8, 0, 8),
-                    child: Transform.flip(
-                      key: const ValueKey('home_ad_placeholder_art'),
-                      flipX: true,
-                      child: Image.asset(
-                        kHomeBannerArtAsset,
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) => Icon(Icons.campaign_rounded, size: 36, color: c.brandText),
-                      ),
+                  child: Transform.flip(
+                    key: const ValueKey('home_ad_placeholder_art'),
+                    flipX: true,
+                    child: Image.asset(
+                      kHomeBannerArtAsset,
+                      fit: BoxFit.cover,
+                      // Кўзгудан олдинги чап = кўзгудан кейинги ўнг (оғиз томони) — шу сақланади.
+                      alignment: Alignment.centerLeft,
+                      errorBuilder: (_, __, ___) => Icon(Icons.campaign_rounded, size: 36, color: c.brandText),
                     ),
                   ),
                 ),

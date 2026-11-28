@@ -92,6 +92,7 @@
     "test:wallet-topup-support": "node test/wallet_topup_support.test.js",
     "test:wallet-fix-cancel-refund": "firebase emulators:exec --only firestore --project demo-wallet-fix \"node test/fix_wallet_cancel_refund.test.js\"",
     "test:wallet-invariants": "firebase emulators:exec --only firestore --project demo-wallet-inv \"node test/wallet_invariants_cf.test.js\"",
+    "test:wallet-history-corrections": "firebase emulators:exec --only firestore --project demo-wallet-history \"node test/wallet_history_corrections.test.js\"",
     "test:wallet-invariants-rules": "firebase emulators:exec --only firestore --project demo-wic-rules \"node test/wallet_invariants_rules.test.js\"",
     "test:wallet-topup-cf": "firebase emulators:exec --only firestore --project demo-wallet-topup \"node test/wallet_topup_cf.test.js\"",
     "test:wallet-topup-sweep": "firebase emulators:exec --only firestore --project demo-wallet-topup-sweep \"node test/wallet_topup_sweep_cf.test.js\"",

@@ -1,8 +1,15 @@
 /**
- * «Туғилган кунингизни киритинг» — ҲАФТАЛИК ПУШ (эга 2026-11-28, 9-банд).
+ * «Туғилган кунингизни киритинг» — ЭСЛАТМА ПУШ (эга 2026-11-28, 9-банд).
  *
- * Мақсад: туғилган санаси ЙЎҚ фойдаланувчиларга ҳафтада бир марта эслатма — шунда holiday.js
- * ўз туғилган куни эслатмалари (runSelfBirthdayReminders, users.birthDate) ишлай бошлайди.
+ * Эга қарори (2026-11-28, сўзма-сўз): «Матн маъқул, 4 кун давомида кунига бир мартада хабар берилсин,
+ * кейин ҳафтадан сўнг ҳар якшанба!»; «вақтининг аҳамияти йўқ» (соат созламаси йўқ); «соат 8:00 - 20:00 гача бўлсин»
+ * (ойна 08:00–19:59 Тошкент, 20:00 ва ундан кейин — йўқ).
+ *   1-фаза (daily):  биринчи `dailyCount` (сукут 4) Тошкент кунида кунига БИР марта.
+ *   2-фаза (weekly): охирги кунлик юборишдан 7 кун танаффус, кейин ҲАР ЯКШАНБА бир марта, ЧЕКСИЗ —
+ *                    сана киритилгунча / рад этилгунча (holidayRemindersOptIn === false) / ўчирилгунча / токен йўқолгунча.
+ *
+ * Мақсад: туғилган санаси ЙЎҚ фойдаланувчига эслатма — шунда holiday.js ўз туғилган куни эслатмалари
+ * (runSelfBirthdayReminders, users.birthDate) ишлай бошлайди.
  *
  * МАВЖУД занжир устида (параллел тизим ЙЎҚ, 3/4/43-банд):
  *   - манба — `users/{uid}.birthDate` (сатр; клиент `setBirthDateIfEmpty`, бош саҳифа карточкаси
@@ -13,10 +20,12 @@
  *     `internalPhones` + `pilotDistrictIds`).
  *
  * Коллекциялар (қоида йўқ = клиентга ёпиқ, фақат CF):
- *   settings/birthday_prompt          — {stage, internalPhones, pilotDistrictIds, maxSends, version, updatedAt, updatedBy}
+ *   settings/birthday_prompt          — {stage, internalPhones, pilotDistrictIds, dailyCount, weeklySunday, version, updatedAt, updatedBy}
  *                                        ҳужжат йўқ = OFF. Ёзиш ФАҚАТ adminSetBirthdayPromptSettings (admin_audit).
- *   birthday_prompt_state/{998…}      — {sends, lastWeek, firstAt, lastAt} — ҳафтада бир марта + N тагача (идемпотентлик).
- *   birthday_prompt_runs/{week}_{stage} — тарқатиш курсори, lease, статистика.
+ *   birthday_prompt_state/{998…}      — {phase, dailySends, weeklySends, lastDay, lastWeek, dailyDoneDay, firstSentAt, lastAt}
+ *                                        (идемпотентлик: кунда бир марта / ISO ҳафтада бир марта). Эски шакл {sends, lastWeek,
+ *                                        firstAt, lastAt} ҳам ўқилади (normalizeState).
+ *   birthday_prompt_runs/{day}_{stage} — кунлик тарқатиш курсори, lease, статистика.
  *
  * Пул йўқ. Ҳеч нарса сотилмайди/ечилмайди.
  */
@@ -38,19 +47,25 @@ const SCREEN = 'user_info'; // клиент: UserInfoScreen (туғилган с
 const TZ_OFFSET_MS = 5 * 3600000;
 const PHONE_RE = /^998\d{9}$/;
 const DISTRICT_RE = /^[a-z0-9_-]{2,40}$/;
-const SETTINGS_KEYS = Object.freeze(['stage', 'internalPhones', 'pilotDistrictIds', 'maxSends']);
+const SETTINGS_KEYS = Object.freeze(['stage', 'internalPhones', 'pilotDistrictIds', 'dailyCount', 'weeklySunday']);
 
-/** PROPOSED (эга тасдиқлаши керак): 4 ҳафта (≈1 ой) — кейин тўхтайди. Админ 1–12 оралиғида ўзгартиради. */
-const DEFAULT_MAX_SENDS = 4;
+/** Эга 2026-11-28: «4 кун давомида кунига бир мартада». Админ 1–14 оралиғида ўзгартиради. */
+const DEFAULT_DAILY_COUNT = 4;
+/** Эга 2026-11-28: «кейин ҳафтадан сўнг ҳар якшанба». Админ ўчириши мумкин (сукут — ёқиқ). */
+const DEFAULT_WEEKLY_SUNDAY = true;
+/** «ҳафтадан сўнг» — охирги кунлик юборишдан 7 кун (шу куни ҳам мумкин: 4-юбориш якшанба бўлса — кейинги якшанба). */
+const PAUSE_DAYS = 7;
 const LIMITS = Object.freeze({
-  maxSendsMin: 1, maxSendsMax: 12, phones: 50, districts: 30, // Firestore `in` — 30 тагача
-  page: 300, concurrency: 20, runBudgetMs: 420000, leaseMs: 570000, // lease > timeout 540 s, < cron оралиғи 600 s reasonMax: 300,
+  dailyCountMin: 1, dailyCountMax: 14, phones: 50, districts: 30, // Firestore `in` — 30 тагача
+  page: 300, concurrency: 20, runBudgetMs: 420000, leaseMs: 570000, // lease > timeout 540 s, < cron оралиғи 600 s
+  reasonMax: 300,
 });
-/** Юбориш ойнаси (PROPOSED): ЯКШАНБА 11:00–18:59 Тошкент. Cron шу ойнада ҳар 10 дақиқада давом эттиради. */
-const WINDOW = Object.freeze({ weekday: 0, fromHour: 11, toHour: 19 });
-const SCHEDULE = '*/10 11-18 * * 0';
+/** Юбориш ойнаси: ҲАР КУНИ 08:00–19:59 Тошкент (эга 2026-11-28: «соат 8:00 - 20:00 гача бўлсин»; соат созламаси йўқ). */
+const WINDOW = Object.freeze({ fromHour: 8, toHour: 20 });
+const SCHEDULE = '*/10 8-19 * * *';
+const PHASES = Object.freeze(['daily', 'weekly']);
 
-// ── Хабар матни (3 тил; uz_Latn — янги ҳарфлар Ö Ğ Ş Ç). PROPOSED матн; бош саҳифа карточкаси сарлавҳаси билан бир хил. ──
+// ── Хабар матни (3 тил; uz_Latn — янги ҳарфлар Ö Ğ Ş Ç). Эга 2026-11-28: «Матн маъқул» — ЎЗГАРТИРИЛМАСИН. ──
 const PROMPT_TEXT = Object.freeze({
   uz_Cyrl: {
     title: 'Туғилган кунингизни киритинг',
@@ -92,12 +107,19 @@ function isoWeekKey(dateKey) {
   return `${wy}-W${pad(week)}`;
 }
 const weekKeyOfMs = (ms) => isoWeekKey(h.dateKeyOf(ms));
+const dayKeyOfMs = (ms) => h.dateKeyOf(ms);
 
-/** Юбориш ойнасидами (Тошкент): якшанба 11:00–18:59. Кечикиб келган Scheduler қайта уриниши кечаси юбормасин. */
+/** Тошкент санаси якшанбами. */
+function isSundayKey(dateKey) {
+  if (!h.validDateKey(dateKey)) return false;
+  const [y, m, d] = dateKey.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay() === 0;
+}
+
+/** Юбориш ойнасидами (Тошкент): ҳар куни 08:00–19:59. Кечикиб келган Scheduler қайта уриниши кечаси юбормасин. */
 function inSendWindow(ms) {
-  const t = new Date(ms + TZ_OFFSET_MS);
-  const hr = t.getUTCHours();
-  return t.getUTCDay() === WINDOW.weekday && hr >= WINDOW.fromHour && hr < WINDOW.toHour;
+  const hr = new Date(ms + TZ_OFFSET_MS).getUTCHours();
+  return hr >= WINDOW.fromHour && hr < WINDOW.toHour;
 }
 
 /** Туғилган сана киритилганми — клиент `birthDatePromptVisibleFor` қоидаси: null/йўқ/бўш сатр = киритилмаган. */
@@ -121,13 +143,60 @@ function skipReasonOf(docId, u) {
   return null;
 }
 
-/** Шу ҳафтада юборса бўладими (идемпотентлик + чегара). state — birthday_prompt_state ҳужжати ёки null. */
-function claimDecision(state, week, maxSends) {
-  const s = isObj(state) ? state : {};
-  const sends = Number.isInteger(s.sends) && s.sends > 0 ? s.sends : 0;
+const nonNegInt = (v) => (Number.isInteger(v) && v > 0 ? v : 0);
+const msOf = (v) => (v && typeof v.toMillis === 'function' ? v.toMillis() : null);
+
+/**
+ * Ҳолат ҳужжати → ягона шакл (26-банд). Эски шакл {sends, lastWeek, firstAt, lastAt} (ҳафталик версия, deploy
+ * қилинмаган): `sends` — кунлик юборишлар сифатида ҳисобланади, `lastDay` — `lastAt`дан (бир кунда иккинчи марта йўқ),
+ * `lastWeek` сақланади (шу ҳафтада иккинчи якшанба юбориши йўқ).
+ */
+function normalizeState(raw) {
+  const s = isObj(raw) ? raw : {};
+  const legacy = !PHASES.includes(s.phase) && Number.isInteger(s.sends);
+  const lastAtMs = msOf(s.lastAt);
+  const lastDay = h.validDateKey(s.lastDay) ? s.lastDay : (lastAtMs != null ? h.dateKeyOf(lastAtMs) : null);
+  return {
+    legacy,
+    phase: PHASES.includes(s.phase) ? s.phase : 'daily',
+    dailySends: legacy ? nonNegInt(s.sends) : nonNegInt(s.dailySends),
+    weeklySends: nonNegInt(s.weeklySends),
+    lastDay,
+    lastWeek: typeof s.lastWeek === 'string' && s.lastWeek ? s.lastWeek : null,
+    dailyDoneDay: h.validDateKey(s.dailyDoneDay) ? s.dailyDoneDay : null,
+  };
+}
+
+/**
+ * Бугун (Тошкент `day`, ISO ҳафта `week`) юборса бўладими. cfg — {dailyCount, weeklySunday}.
+ * ok — {ok:true, kind:'daily'|'weekly', patch} (patch — ҳолатга ёзиладиган майдонлар); акс ҳолда {ok:false, reason}.
+ *   ALREADY_TODAY · ALREADY_THIS_WEEK · PAUSE (7 кун ичида) · NOT_SUNDAY · WEEKLY_OFF.
+ * `weekly` фазаси қайтмас: админ dailyCount ни оширса ҳам кунлик фазага қайтмайди.
+ */
+function claimDecision(state, day, week, cfg) {
+  const c = isObj(cfg) ? cfg : {};
+  const dailyCount = Number.isInteger(c.dailyCount) && c.dailyCount >= 1 ? c.dailyCount : DEFAULT_DAILY_COUNT;
+  const weeklySunday = c.weeklySunday !== false;
+  const s = normalizeState(state);
+  if (s.lastDay === day) return { ok: false, reason: 'ALREADY_TODAY' };
+  if (s.phase !== 'weekly' && s.dailySends < dailyCount) {
+    const n = s.dailySends + 1;
+    const done = n >= dailyCount;
+    return {
+      ok: true, kind: 'daily', send: n,
+      patch: { phase: done ? 'weekly' : 'daily', dailySends: n, weeklySends: s.weeklySends, lastDay: day, ...(done ? { dailyDoneDay: day } : {}) },
+    };
+  }
+  if (!weeklySunday) return { ok: false, reason: 'WEEKLY_OFF' };
+  if (!isSundayKey(day)) return { ok: false, reason: 'NOT_SUNDAY' };
   if (s.lastWeek === week) return { ok: false, reason: 'ALREADY_THIS_WEEK' };
-  if (sends >= maxSends) return { ok: false, reason: 'CAP_REACHED' };
-  return { ok: true, sends: sends + 1 };
+  const anchor = s.dailyDoneDay || s.lastDay; // 4-кунлик юбориш куни (эски/камайтирилган ҳолатда — охирги юбориш)
+  if (anchor && h.daysBetween(anchor, day) < PAUSE_DAYS) return { ok: false, reason: 'PAUSE' };
+  const n = s.weeklySends + 1;
+  return {
+    ok: true, kind: 'weekly', send: n,
+    patch: { phase: 'weekly', dailySends: s.dailySends, weeklySends: n, lastDay: day, lastWeek: week, dailyDoneDay: anchor || null },
+  };
 }
 
 /** Админ юборган созлама (фақат SETTINGS_KEYS). */
@@ -140,13 +209,14 @@ function validateSettings(s) {
     || new Set(s.internalPhones).size !== s.internalPhones.length) errors.push('INTERNAL_PHONES_INVALID internalPhones');
   if (!Array.isArray(s.pilotDistrictIds) || s.pilotDistrictIds.length > LIMITS.districts || !s.pilotDistrictIds.every((x) => typeof x === 'string' && DISTRICT_RE.test(x))
     || new Set(s.pilotDistrictIds).size !== s.pilotDistrictIds.length) errors.push('PILOT_DISTRICTS_INVALID pilotDistrictIds');
-  if (!Number.isInteger(s.maxSends) || s.maxSends < LIMITS.maxSendsMin || s.maxSends > LIMITS.maxSendsMax) errors.push('MAX_SENDS_INVALID maxSends');
+  if (!Number.isInteger(s.dailyCount) || s.dailyCount < LIMITS.dailyCountMin || s.dailyCount > LIMITS.dailyCountMax) errors.push('DAILY_COUNT_INVALID dailyCount');
+  if (typeof s.weeklySunday !== 'boolean') errors.push('WEEKLY_SUNDAY_INVALID weeklySunday');
   if (s.stage === 'pilot' && Array.isArray(s.pilotDistrictIds) && s.pilotDistrictIds.length === 0
     && Array.isArray(s.internalPhones) && s.internalPhones.length === 0) errors.push('PILOT_EMPTY pilotDistrictIds');
   return { ok: errors.length === 0, errors };
 }
 
-/** Сақланган ҳужжат → самарали созлама (йўқ/бузуқ = OFF; эски ҳужжатда йўқ майдон — сукут, 26-банд). */
+/** Сақланган ҳужжат → самарали созлама (йўқ/бузуқ = OFF; эски ҳужжатда йўқ майдон — сукут, 26-банд; эски maxSends эътиборсиз). */
 function normalizeSettings(raw) {
   const r = isObj(raw) ? raw : {};
   const list = (v, re, max) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string' && re.test(x)).slice(0, max) : []);
@@ -154,7 +224,8 @@ function normalizeSettings(raw) {
     stage: STAGES.includes(r.stage) ? r.stage : 'off',
     internalPhones: list(r.internalPhones, PHONE_RE, LIMITS.phones),
     pilotDistrictIds: list(r.pilotDistrictIds, DISTRICT_RE, LIMITS.districts),
-    maxSends: Number.isInteger(r.maxSends) && r.maxSends >= LIMITS.maxSendsMin && r.maxSends <= LIMITS.maxSendsMax ? r.maxSends : DEFAULT_MAX_SENDS,
+    dailyCount: Number.isInteger(r.dailyCount) && r.dailyCount >= LIMITS.dailyCountMin && r.dailyCount <= LIMITS.dailyCountMax ? r.dailyCount : DEFAULT_DAILY_COUNT,
+    weeklySunday: typeof r.weeklySunday === 'boolean' ? r.weeklySunday : DEFAULT_WEEKLY_SUNDAY,
     version: Number.isInteger(r.version) ? r.version : 0,
   };
 }
@@ -184,7 +255,9 @@ function attachBirthdayPrompt(exportsObj, deps) {
   const log = (o) => console.log(JSON.stringify({ module: MODULE, ...o }));
   const tail = (p) => String(p || '').slice(-4);
   const settingsRef = () => db.collection(SETTINGS_DOC[0]).doc(SETTINGS_DOC[1]);
+  const stateRef = (uid) => db.collection(STATE).doc(uid);
   const PROJECTION = ['birthDate', 'fcmToken', 'appLang', 'holidayRemindersOptIn', 'deleted', 'deletion'];
+  const bump = (stat, k) => { stat[k] = (stat[k] || 0) + 1; };
 
   const requireAdmin = async (context) => {
     try {
@@ -196,53 +269,69 @@ function attachBirthdayPrompt(exportsObj, deps) {
   };
 
   /**
-   * Битта номзод: транзакцияда «шу ҳафта — бир марта, жами ≤ maxSends» белгиси олинади, кейин хабар.
-   * Энг кўпи бир марта (retry/параллел чақирув иккинчи марта юбормайди). Хабар хатоси — шу ҳафта ўтказилади (log).
+   * Битта номзод: транзакцияда «бугун — бир марта / шу ҳафта — бир марта» белгиси олинади (claimDecision ҚАЙТА),
+   * кейин хабар. Энг кўпи бир марта (retry/параллел чақирув иккинчи марта юбормайди). Хабар хатоси — бугун ўтказилади (log).
    */
-  async function promptOne(uid, u, week, maxSends, stat) {
-    const ref = db.collection(STATE).doc(uid);
+  async function promptOne(uid, u, ctx, stat) {
+    const ref = stateRef(uid);
     const claim = await db.runTransaction(async (t) => {
       const s = await t.get(ref);
-      const dec = claimDecision(s.exists ? s.data() : null, week, maxSends);
+      const raw = s.exists ? (s.data() || {}) : null;
+      const dec = claimDecision(raw, ctx.day, ctx.week, ctx.cfg);
       if (!dec.ok) return dec;
-      t.set(ref, { sends: dec.sends, lastWeek: week, lastAt: ts(), ...(s.exists ? {} : { firstAt: ts() }) }, { merge: true });
+      const first = raw && (raw.firstSentAt || raw.firstAt);
+      t.set(ref, { ...dec.patch, lastAt: ts(), firstSentAt: first || ts() }, { merge: true });
       return dec;
     });
-    if (!claim.ok) { stat[claim.reason] = (stat[claim.reason] || 0) + 1; return; }
+    if (!claim.ok) { bump(stat, claim.reason); return; }
     const m = promptTextFor(u.appLang);
     try {
       await notifyUserInApp({
         userId: uid, title: m.title, body: m.body, category: 'info', source: SOURCE, dataType: SOURCE, screen: SCREEN,
-        extraNews: { promptWeek: week, promptSend: claim.sends }, extraData: { promptWeek: week },
+        extraNews: { promptDay: ctx.day, promptPhase: claim.kind, promptSend: claim.send },
+        extraData: { promptDay: ctx.day, promptPhase: claim.kind },
       });
       stat.sent += 1;
+      bump(stat, claim.kind === 'daily' ? 'sentDaily' : 'sentWeekly');
     } catch (e) {
-      stat.NOTIFY_FAILED = (stat.NOTIFY_FAILED || 0) + 1;
-      log({ action: 'birthdayPromptSend', result: 'error', errorCode: 'NOTIFY_FAILED', userId: tail(uid), week });
+      bump(stat, 'NOTIFY_FAILED');
+      log({ action: 'birthdayPromptSend', result: 'error', errorCode: 'NOTIFY_FAILED', userId: tail(uid), day: ctx.day, phase: claim.kind });
     }
   }
 
-  async function processDocs(docs, week, maxSends, stat) {
+  /**
+   * Саҳифа: (1) users майдонлари бўйича сараланади; (2) номзодлар ҳолати БИТТА getAll билан ўқилади ва
+   * claimDecision олдиндан текширилади (2-фазадаги кўпчилик якшанбадан ташқари шу ерда тўхтайди — транзакция йўқ);
+   * (3) фақат ўтганлар учун транзакция (қайта текширув — ягона ғолиб, 22-банд).
+   */
+  async function processDocs(docs, ctx, stat) {
     const candidates = [];
     for (const d of docs) {
       stat.scanned += 1;
       const reason = skipReasonOf(d.id, d.data());
-      if (reason) stat[reason] = (stat[reason] || 0) + 1; else candidates.push(d);
+      if (reason) bump(stat, reason); else candidates.push(d);
     }
-    await mapPool(candidates, LIMITS.concurrency, (d) => promptOne(d.id, d.data() || {}, week, maxSends, stat));
+    if (!candidates.length) return;
+    const states = await db.getAll(...candidates.map((d) => stateRef(d.id)));
+    const due = [];
+    candidates.forEach((d, i) => {
+      const dec = claimDecision(states[i].exists ? states[i].data() : null, ctx.day, ctx.week, ctx.cfg);
+      if (dec.ok) due.push(d); else bump(stat, dec.reason);
+    });
+    await mapPool(due, LIMITS.concurrency, (d) => promptOne(d.id, d.data() || {}, ctx, stat));
   }
 
-  async function processPhones(phones, week, maxSends, stat) {
+  async function processPhones(phones, ctx, stat) {
     const snaps = phones.length ? await db.getAll(...phones.map((p) => db.collection('users').doc(p)), { fieldMask: PROJECTION }) : [];
     const docs = snaps.filter((s) => s.exists);
     stat.MISSING_USER = (stat.MISSING_USER || 0) + (snaps.length - docs.length);
-    await processDocs(docs, week, maxSends, stat);
+    await processDocs(docs, ctx, stat);
   }
 
   /**
    * Бир чақирув: lease → (тестерлар) → курсор бўйича саҳифалар (вақт бюджети тугагунча) → курсор сақланади.
    * internal — фақат internalPhones; pilot — internalPhones + pilotDistrictIds туманлари (`districtId in`);
-   * public — бутун users (ҳужжат ID бўйича курсор). Ҳафта/босқич учун битта run ҳужжати.
+   * public — бутун users (ҳужжат ID бўйича курсор). Кун/босқич учун битта run ҳужжати.
    */
   async function runBirthdayPrompt(opts = {}) {
     const started = Date.now();
@@ -253,28 +342,30 @@ function attachBirthdayPrompt(exportsObj, deps) {
     const cfgSnap = await settingsRef().get();
     const cfg = normalizeSettings(cfgSnap.exists ? cfgSnap.data() : null);
     if (cfg.stage === 'off') { log({ action: 'birthdayPrompt', result: 'skip', reason: 'STAGE_OFF' }); return { result: 'skip', reason: 'STAGE_OFF' }; }
+    const day = dayKeyOfMs(nowMs);
     const week = weekKeyOfMs(nowMs);
-    const runRef = db.collection(RUNS).doc(`${week}_${cfg.stage}`);
+    const ctx = { day, week, cfg };
+    const runRef = db.collection(RUNS).doc(`${day}_${cfg.stage}`);
     const lease = await db.runTransaction(async (t) => {
       const s = await t.get(runRef);
       const r = s.exists ? (s.data() || {}) : {};
       if (r.done === true) return { ok: false, reason: 'DONE' };
-      const leaseMs = r.leaseUntil && typeof r.leaseUntil.toMillis === 'function' ? r.leaseUntil.toMillis() : 0;
+      const leaseMs = msOf(r.leaseUntil) || 0;
       if (leaseMs > nowMs) return { ok: false, reason: 'LEASED' };
       t.set(runRef, {
-        week, stage: cfg.stage, leaseUntil: admin.firestore.Timestamp.fromMillis(nowMs + LIMITS.leaseMs), updatedAt: ts(),
+        day, week, stage: cfg.stage, leaseUntil: admin.firestore.Timestamp.fromMillis(nowMs + LIMITS.leaseMs), updatedAt: ts(),
         ...(s.exists ? {} : { startedAt: ts(), done: false, testersDone: false, cursor: null }),
       }, { merge: true });
       return { ok: true, run: r };
     });
-    if (!lease.ok) { log({ action: 'birthdayPrompt', result: 'skip', reason: lease.reason, week, stage: cfg.stage }); return { result: 'skip', reason: lease.reason }; }
+    if (!lease.ok) { log({ action: 'birthdayPrompt', result: 'skip', reason: lease.reason, day, stage: cfg.stage }); return { result: 'skip', reason: lease.reason }; }
     const stat = { scanned: 0, sent: 0 };
     let cursor = lease.run.cursor || null;
     let done = false;
     let errorCode = null;
     try {
       if (cfg.stage !== 'public' && lease.run.testersDone !== true) {
-        await processPhones(cfg.internalPhones, week, cfg.maxSends, stat);
+        await processPhones(cfg.internalPhones, ctx, stat);
         await runRef.set({ testersDone: true, updatedAt: ts() }, { merge: true });
       }
       if (cfg.stage === 'internal' || (cfg.stage === 'pilot' && cfg.pilotDistrictIds.length === 0)) {
@@ -288,7 +379,7 @@ function attachBirthdayPrompt(exportsObj, deps) {
           const snap = await q.get();
           if (snap.empty) { done = true; break; }
           // Пилотда тестерлар аллақачон ўтди — такрор ҳолатда ҳолат ҳужжати иккинчи юборишни барибир тўсади.
-          await processDocs(snap.docs, week, cfg.maxSends, stat);
+          await processDocs(snap.docs, ctx, stat);
           cursor = snap.docs[snap.docs.length - 1].id;
           await runRef.set({ cursor, updatedAt: ts() }, { merge: true }); // саҳифадан КЕЙИН: узилса — саҳифа қайта, юбориш бир марта
           if (snap.size < pageSize) { done = true; break; }
@@ -296,18 +387,19 @@ function attachBirthdayPrompt(exportsObj, deps) {
       }
     } catch (e) {
       errorCode = 'RUN_FAILED';
-      log({ action: 'birthdayPrompt', result: 'error', errorCode, week, stage: cfg.stage, message: String((e && e.message) || e).slice(0, 200) });
+      log({ action: 'birthdayPrompt', result: 'error', errorCode, day, stage: cfg.stage, message: String((e && e.message) || e).slice(0, 200) });
     }
     const inc = {};
     for (const [k, v] of Object.entries(stat)) if (v) inc[`stats.${k}`] = FV.increment(v);
     await runRef.update({ ...inc, ...(done ? { done: true, doneAt: ts() } : {}), leaseUntil: FV.delete(), updatedAt: ts() });
-    const out = { result: errorCode ? 'error' : 'ok', week, stage: cfg.stage, done, ...stat, ...(errorCode ? { errorCode } : {}), duration: Date.now() - started };
+    const out = { result: errorCode ? 'error' : 'ok', day, week, stage: cfg.stage, done, ...stat, ...(errorCode ? { errorCode } : {}), duration: Date.now() - started };
     log({ action: 'birthdayPrompt', ...out });
     return out;
   }
 
-  // Ҳафтада бир марта: якшанба 11:00 дан (Тошкент) ҳар 10 дақиқада давом — курсор тугаса `done`, қолганлари бўш ишлайди.
-  exportsObj.birthdayPromptWeekly = functions
+  // Ҳар куни 08:00 дан 19:50 гача (Тошкент) ҳар 10 дақиқада давом — курсор тугаса `done`, қолганлари бўш ишлайди.
+  // Ном: аввал birthdayPromptWeekly (deploy қилинмаган, 2026-11-28) → birthdayPromptDaily.
+  exportsObj.birthdayPromptDaily = functions
     .runWith({ timeoutSeconds: 540, memory: '512MB' })
     .pubsub.schedule(SCHEDULE)
     .timeZone('Asia/Tashkent')
@@ -320,8 +412,14 @@ function attachBirthdayPrompt(exportsObj, deps) {
     return {
       ok: true,
       settings: normalizeSettings(s.exists ? s.data() : null),
-      defaults: { maxSends: DEFAULT_MAX_SENDS, schedule: SCHEDULE, timeZone: 'Asia/Tashkent' },
-      runs: runs.docs.map((d) => { const r = d.data() || {}; return { id: d.id, week: r.week || '', stage: r.stage || '', done: r.done === true, stats: r.stats || {} }; }),
+      defaults: {
+        dailyCount: DEFAULT_DAILY_COUNT, weeklySunday: DEFAULT_WEEKLY_SUNDAY, pauseDays: PAUSE_DAYS,
+        dailyCountMin: LIMITS.dailyCountMin, dailyCountMax: LIMITS.dailyCountMax, schedule: SCHEDULE, timeZone: 'Asia/Tashkent',
+      },
+      runs: runs.docs.map((d) => {
+        const r = d.data() || {};
+        return { id: d.id, day: r.day || '', week: r.week || '', stage: r.stage || '', done: r.done === true, stats: r.stats || {} };
+      }),
     };
   });
 
@@ -341,7 +439,7 @@ function attachBirthdayPrompt(exportsObj, deps) {
       if (expected != null && expected !== curVersion) throw fail('failed-precondition', 'VERSION_CONFLICT', { version: curVersion });
       if (cur && sm.stableStringify(pick(cur)) === sm.stableStringify(pick(s))) return { changed: false, version: curVersion };
       const version = curVersion + 1;
-      t.set(settingsRef(), { ...pick(s), version, updatedAt: ts(), updatedBy: actor, ...(cur ? {} : { createdAt: ts() }) });
+      t.set(settingsRef(), { ...pick(s), version, updatedAt: ts(), updatedBy: actor, ...(cur ? { createdAt: cur.createdAt || ts() } : { createdAt: ts() }) });
       t.set(db.collection(ADMIN_AUDIT).doc(), {
         kind: 'birthday_prompt_settings', actor, target: `${SETTINGS_DOC.join('/')} v${version}`, before: pick(cur), after: pick(s), reason, at: ts(),
       });
@@ -357,7 +455,7 @@ function attachBirthdayPrompt(exportsObj, deps) {
 module.exports = {
   attachBirthdayPrompt,
   // тоза (тестлар)
-  isoWeekKey, weekKeyOfMs, inSendWindow, hasBirthDate, skipReasonOf, claimDecision, validateSettings, normalizeSettings,
-  promptTextFor, mapPool, messagesOf,
-  PROMPT_TEXT, DEFAULT_MAX_SENDS, LIMITS, WINDOW, SCHEDULE, SETTINGS_DOC, STATE, RUNS, SOURCE, SCREEN,
+  isoWeekKey, weekKeyOfMs, dayKeyOfMs, isSundayKey, inSendWindow, hasBirthDate, skipReasonOf, normalizeState, claimDecision,
+  validateSettings, normalizeSettings, promptTextFor, mapPool, messagesOf,
+  PROMPT_TEXT, DEFAULT_DAILY_COUNT, DEFAULT_WEEKLY_SUNDAY, PAUSE_DAYS, LIMITS, WINDOW, SCHEDULE, SETTINGS_DOC, STATE, RUNS, SOURCE, SCREEN,
 };

@@ -1,5 +1,5 @@
 /**
- * «Туғилган кунингизни киритинг» ҳафталик пуш — firestore.rules (эга 2026-11-28).
+ * «Туғилган кунингизни киритинг» пуш (4 кун + ҳар якшанба) — firestore.rules (эга 2026-11-28).
  *   firebase emulators:exec --only firestore --project demo-bday-prompt-rules "node test/birthday_prompt_rules.test.js"
  *   (RULES_PATH — бошқа файл, масалан stripped build)
  */
@@ -32,7 +32,7 @@ async function main() {
     const db = c.firestore();
     await db.doc(`users/${ADMIN}`).set({ role: 'admin' });
     await db.doc(`users/${USER}`).set({ role: 'user' });
-    await db.doc('settings/birthday_prompt').set({ stage: 'internal', internalPhones: [USER], pilotDistrictIds: [], maxSends: 4, version: 1 });
+    await db.doc('settings/birthday_prompt').set({ stage: 'internal', internalPhones: [USER], pilotDistrictIds: [], dailyCount: 4, weeklySunday: true, version: 1 });
     await db.doc('settings/app').set({ x: 1 });
     await db.doc(`birthday_prompt_state/${USER}`).set({ sends: 1, lastWeek: '2026-W48' });
     await db.doc('birthday_prompt_runs/2026-W48_internal').set({ done: true });

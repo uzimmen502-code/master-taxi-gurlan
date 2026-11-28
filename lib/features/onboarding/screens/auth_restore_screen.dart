@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/utils/formatters.dart';
+import '../../qr_login/services/qr_web_auth.dart';
 import '../../../repositories/device_binding_repository.dart';
 import '../../../services/device_fingerprint_service.dart';
 import '../../../shared/navigation/app_home_route.dart';
@@ -27,6 +31,19 @@ class _AuthRestoreScreenState extends State<AuthRestoreScreen> {
     if (FirebaseAuth.instance.currentUser != null) {
       _goHome();
       return;
+    }
+
+    // Компьютерда QR орқали кирилган браузер: device binding эмас — web сессия (renewSecret).
+    if (kIsWeb) {
+      try {
+        if (await QrWebAuth.tryRenew()) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('phone_reverified', true);
+          unawaited(QrWebSessionGuard.instance.start());
+          _goHome();
+          return;
+        }
+      } catch (_) {}
     }
 
     try {

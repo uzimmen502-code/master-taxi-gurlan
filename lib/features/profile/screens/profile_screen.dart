@@ -1,7 +1,9 @@
 import '../../relatives/widgets/family_prompt.dart' show FamilyLinksEntryTile;
+import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -22,6 +24,8 @@ import '../../../repositories/user_repository.dart';
 import '../../../services/location_service.dart';
 import '../../seller/screens/seller_pos_screen.dart';
 import '../../onboarding/screens/onboarding_screen.dart';
+import '../../qr_login/data/qr_login_api.dart';
+import '../../qr_login/screens/web_sessions_screen.dart';
 import '../../realty/screens/my_realty_listings_screen.dart';
 import '../controllers/profile_controller.dart';
 import '../widgets/cabinet_ui.dart';
@@ -140,6 +144,25 @@ class _ProfileViewState extends State<_ProfileView> {
   /// Ҳамён қатори учун жонли баланс (бош экрандан ҳамён карточкаси олиб
   /// ташланган, эга қарори 2026-10-18: ҳамёнга кириш — Кабинетнинг биринчи қатори).
   late final Stream<int> _walletBalance = walletBalanceStream();
+
+  /// «Компьютерда кириш» (QR, эга 2026-11-28): фақат телефонда, сервер босқичи рухсат берса
+  /// ёки фаол web кириш бўлса (OFF'да ҳам чиқиш мумкин бўлсин). Жараёнда бир марта сўралади.
+  bool _webSessionsVisible = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!kIsWeb) unawaited(_probeWebSessions());
+  }
+
+  Future<void> _probeWebSessions() async {
+    try {
+      final l = FirebaseQrLoginApi.cachedList ?? await FirebaseQrLoginApi().listSessions();
+      if (mounted && (l.enabled || l.items.isNotEmpty)) {
+        setState(() => _webSessionsVisible = true);
+      }
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -264,6 +287,17 @@ class _ProfileViewState extends State<_ProfileView> {
                     if (mounted) controller.load();
                   },
                 ),
+                if (_webSessionsVisible)
+                  CabinetRow(
+                    key: const ValueKey('profile-web-sessions'),
+                    icon: Icons.computer_rounded,
+                    title: context.tr('qrl_sessions_title'),
+                    subtitle: context.tr('qrl_sessions_sub'),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const WebSessionsScreen()),
+                    ),
+                  ),
               ],
             ),
             // Курьерлик, кафе-ресторан / уй ошпази, ҳайдовчи (автомобиль, смена,

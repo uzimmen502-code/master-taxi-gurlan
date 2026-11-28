@@ -11,6 +11,7 @@ import '../../../repositories/user_repository.dart';
 import '../controllers/onboarding_controller.dart';
 import '../widgets/device_binding_conflict_sheet.dart';
 import '../../../repositories/device_binding_repository.dart';
+import '../../qr_login/widgets/qr_web_login_entry.dart';
 import 'onboarding_bootstrap_screen.dart';
 
 /// Ихчам онбординг: исм + телефон → fingerprint bind → Home.
@@ -281,6 +282,8 @@ class _OnboardingViewState extends State<_OnboardingView> {
             ),
           ),
           const SizedBox(height: 16),
+          // Веб: ҳисоби бор бўлса — рақам киритмасдан телефондаги QR орқали (сервер OFF — кўринмайди).
+          const QrWebLoginEntry(),
           _card(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

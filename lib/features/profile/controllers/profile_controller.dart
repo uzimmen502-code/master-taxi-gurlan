@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/user_error.dart';
 import '../../intercity_taxi/driver/intercity_driver_resume.dart';
+import '../../qr_login/services/qr_web_auth.dart';
 import '../../../models/user_model.dart';
 import '../../../models/order_model.dart';
 import '../../../models/trip_model.dart';
@@ -873,6 +874,8 @@ class ProfileController extends ChangeNotifier {
         await ProviderPresenceRepository().goOffline(userId);
       } catch (_) {}
     }
+    // QR орқали кирилган компьютер: шу web сессия серверда ҳам бекор (телефонга тегмайди).
+    if (kIsWeb) await QrWebAuth.selfLogout();
     await FirebaseAuth.instance.signOut();
     await prefs.remove('phone_reverified');
     // Til tanlovi saqlanadi — chiqishda til qurilma tiliga qaytmasin

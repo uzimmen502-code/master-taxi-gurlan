@@ -42,17 +42,6 @@ class AdminMarketService {
     });
   }
 
-  /// `settings/app.marketAutoApprove` — янги/қайта юборилган эълонлар дарҳол active.
-  Future<void> setAutoApprove({
-    required String adminPhone,
-    required bool enabled,
-  }) async {
-    await _call('adminSetMarketAutoApprove', {
-      'adminPhone': adminPhone,
-      'enabled': enabled,
-    });
-  }
-
   /// `settings/app.platformFeaturedAuto` — Тавсия этамиз витринаси АВТО/ҚЎЛДА.
   Future<void> setPlatformFeaturedAuto({
     required String adminPhone,

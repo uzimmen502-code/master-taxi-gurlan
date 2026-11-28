@@ -8,6 +8,8 @@ import '../../../core/utils/formatters.dart';
 import '../../tv_market/models/tv_clip.dart';
 import '../../tv_market/services/tv_social.dart';
 import '../widgets/tv_social_settings_bar.dart';
+import '../services/admin_moderation_modes_service.dart';
+import '../widgets/moderation_mode_bar.dart';
 
 /// Админ панел — TV Market клиплар модерацияси.
 class TvClipsModerationScreen extends StatefulWidget {
@@ -230,7 +232,11 @@ class _TvClipsModerationScreenState extends State<TvClipsModerationScreen> {
     return Column(
       children: [
         _header(),
-        const _TvAutoApproveBar(),
+        const ModerationModeBar(
+          mode: ModerationMode.tv,
+          onLabel: 'АВТО — янги видеолар дарҳол фийдда; соцсет чипи бўлса AVA расмий саҳифасига тизим ўзи жойлайди',
+          offLabel: 'ҚЎЛДА — тасдиқдан кейин фийдда чиқади; танланган Instagram / Facebook’га ҳам тизим жойлайди',
+        ),
         const TvSocialSettingsBar(),
         Expanded(
           child: _loading
@@ -988,112 +994,3 @@ class _TvClipDetailDialog extends StatelessWidget {
 // ---------------------------------------------------------------------------
 // Auto/Manual toggle bar
 // ---------------------------------------------------------------------------
-
-class _TvAutoApproveBar extends StatefulWidget {
-  const _TvAutoApproveBar();
-
-  @override
-  State<_TvAutoApproveBar> createState() => _TvAutoApproveBarState();
-}
-
-class _TvAutoApproveBarState extends State<_TvAutoApproveBar> {
-  bool _busy = false;
-
-  Future<void> _setAuto(bool enabled) async {
-    setState(() => _busy = true);
-    try {
-      await FirebaseFirestore.instance
-          .collection('settings')
-          .doc('app')
-          .set({'tvAutoApprove': enabled}, SetOptions(merge: true));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
-      );
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('settings')
-          .doc('app')
-          .snapshots(),
-      builder: (context, snap) {
-        final auto = snap.data?.data()?['tvAutoApprove'] == true;
-        return Container(
-          width: double.infinity,
-          margin: const EdgeInsets.fromLTRB(18, 10, 18, 0),
-          padding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: auto ? AvaLight.okSoft : Colors.orange.shade50,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color:
-                  auto ? AvaLight.ok : Colors.orange.shade200,
-            ),
-          ),
-          child: Row(children: [
-            Icon(
-              auto ? Icons.flash_on : Icons.admin_panel_settings,
-              color:
-                  auto ? AvaLight.ok : Colors.orange.shade800,
-              size: 22,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                auto
-                    ? 'АВТО — янги видеолар дарҳол фийдда; соцсет чипи бўлса AVA расмий саҳифасига тизим ўзи жойлайди'
-                    : 'ҚЎЛДА — тасдиқдан кейин фийдда чиқади; танланган Instagram / Facebook’га ҳам тизим жойлайди',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: auto
-                      ? AvaLight.ok
-                      : Colors.orange.shade900,
-                ),
-              ),
-            ),
-            if (_busy)
-              const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            else ...[
-              OutlinedButton(
-                onPressed: auto ? () => _setAuto(false) : null,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.orange.shade800,
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  minimumSize: const Size(0, 36),
-                ),
-                child:
-                    const Text('ҚЎЛДА', style: TextStyle(fontSize: 12)),
-              ),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: auto ? null : () => _setAuto(true),
-                icon: const Icon(Icons.flash_on, size: 16),
-                label:
-                    const Text('АВТО', style: TextStyle(fontSize: 12)),
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.button,
-                  foregroundColor: AppColors.onPrimary,
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  minimumSize: const Size(0, 36),
-                ),
-              ),
-            ],
-          ]),
-        );
-      },
-    );
-  }
-}

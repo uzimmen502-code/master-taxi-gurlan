@@ -419,7 +419,9 @@ class AdminSupermarketService {
   Future<bool> partnerAutoApprove() async =>
       ((await _db.collection('settings').doc('app').get()).data() ?? const {})['supermarketPartnerAutoApprove'] == true;
 
-  Future<void> setPartnerAutoApprove(bool enabled) => _call('adminSetSupermarketPartnerAutoApprove', {'enabled': enabled});
+  /// Yagona moderatsiya rejimi callable'i (audit; ega 2026-11-28 audit C-1).
+  Future<void> setPartnerAutoApprove(bool enabled) =>
+      _call('adminSetModerationMode', {'mode': 'supermarketPartner', 'enabled': enabled});
 
   /// Намунага номзодлар: супермаркет таклифи, ҳамкорники эмас, ҳали намуна эмас (эски «AVA» маҳсулотлари).
   Future<List<String>> sampleCandidates() async {

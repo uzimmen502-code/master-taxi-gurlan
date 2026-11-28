@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,6 +12,8 @@ import '../../wholesale/repositories/wholesale_sellers_repository.dart';
 import '../services/admin_auth_service.dart';
 import '../utils/admin_paged_list.dart';
 import '../widgets/admin_load_more_bar.dart';
+import '../services/admin_moderation_modes_service.dart';
+import '../widgets/moderation_mode_bar.dart';
 
 /// Улгуржи бозор ёки Хитой бозори — admin модерацияси.
 /// `JobsModerationScreen`нинг live-stream карта-рўйхат андозаси асосида.
@@ -189,8 +190,8 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
         final all = snap.data ?? const <WholesaleSeller>[];
         int count(String s) => all.where((e) => e.approvalStatus == s).length;
         return Column(children: [
-          const _AutoApproveBar(
-            settingsField: 'wholesaleSellerAutoApprove',
+          const ModerationModeBar(
+            mode: ModerationMode.wholesaleSeller,
             onLabel: 'АВТО тасдиқ: ЁҚИҚ — янги сотувчилар дарҳол тасдиқланади',
             offLabel:
                 'ҚЎЛДА тасдиқ — янги сотувчилар admin тасдиғини кутади',
@@ -485,8 +486,8 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
         int count(String s) => all.where((e) => e.status == s).length;
         return Column(children: [
           // `settings/app` даги битта майдон — иккала бозор учун умумий.
-          const _AutoApproveBar(
-            settingsField: 'wholesaleProductAutoApprove',
+          const ModerationModeBar(
+            mode: ModerationMode.wholesaleProduct,
             onLabel: 'АВТО тасдиқ: ЁҚИҚ — янги маҳсулотлар дарҳол фаол '
                 '(Улгуржи ва Хитой бозори учун битта созлама)',
             offLabel: 'ҚЎЛДА тасдиқ — янги маҳсулотлар «Кутилмоқда»га '
@@ -905,115 +906,6 @@ String _productStatusLabel(String status) {
       return 'Ёпилган';
     default:
       return status;
-  }
-}
-
-/// `settings/app.{settingsField}` — ҚЎЛДА / АВТО тасдиқ (`JobsModerationScreen`
-/// даги `_JobsAutoApproveBar` андозаси, лекин CF ўрнига тўғридан-тўғри ёзув —
-/// `settings/{docId}` учун `isAdmin()` рухсати аллақачон мавжуд).
-class _AutoApproveBar extends StatefulWidget {
-  const _AutoApproveBar({
-    required this.settingsField,
-    required this.onLabel,
-    required this.offLabel,
-  });
-
-  final String settingsField;
-  final String onLabel;
-  final String offLabel;
-
-  @override
-  State<_AutoApproveBar> createState() => _AutoApproveBarState();
-}
-
-class _AutoApproveBarState extends State<_AutoApproveBar> {
-  bool _busy = false;
-
-  Future<void> _setAuto(bool enabled) async {
-    setState(() => _busy = true);
-    try {
-      await FirebaseFirestore.instance.collection('settings').doc('app').set({
-        widget.settingsField: enabled,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
-      );
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream:
-          FirebaseFirestore.instance.collection('settings').doc('app').snapshots(),
-      builder: (context, snap) {
-        final auto = snap.data?.data()?[widget.settingsField] == true;
-        return Container(
-          width: double.infinity,
-          margin: const EdgeInsets.fromLTRB(18, 10, 18, 0),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: auto ? AvaLight.okSoft : Colors.orange.shade50,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: auto ? AvaLight.ok : Colors.orange.shade200,
-            ),
-          ),
-          child: Row(children: [
-            Icon(
-              auto ? Icons.flash_on : Icons.admin_panel_settings,
-              color: auto ? AvaLight.ok : Colors.orange.shade800,
-              size: 22,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                auto ? widget.onLabel : widget.offLabel,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: auto ? AvaLight.ok : Colors.orange.shade900,
-                ),
-              ),
-            ),
-            if (_busy)
-              const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            else ...[
-              OutlinedButton(
-                onPressed: auto ? () => _setAuto(false) : null,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.orange.shade800,
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  minimumSize: const Size(0, 36),
-                ),
-                child: const Text('ҚЎЛДА', style: TextStyle(fontSize: 12)),
-              ),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: auto ? null : () => _setAuto(true),
-                icon: const Icon(Icons.flash_on, size: 16),
-                label: const Text('АВТО', style: TextStyle(fontSize: 12)),
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.button,
-                  foregroundColor: AppColors.onPrimary,
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  minimumSize: const Size(0, 36),
-                ),
-              ),
-            ],
-          ]),
-        );
-      },
-    );
   }
 }
 

@@ -57,16 +57,6 @@ class DatingService {
     });
   }
 
-  static Future<void> setAutoApprove({
-    required String adminPhone,
-    required bool enabled,
-  }) async {
-    await _fn.httpsCallable('adminSetDatingAutoApprove').call({
-      'adminPhone': adminPhone,
-      'enabled': enabled,
-    });
-  }
-
   static Future<void> submitReport({
     required String targetId,
     required String reason,

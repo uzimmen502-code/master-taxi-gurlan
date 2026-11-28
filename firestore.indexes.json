@@ -1,6 +1,22 @@
 {
   "indexes": [
     {
+      "collectionGroup": "sm_partner_payables",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "partnerKey", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "sm_partner_payments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "partnerKey", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "splash_ads",
       "queryScope": "COLLECTION",
       "fields": [

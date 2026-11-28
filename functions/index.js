@@ -179,6 +179,12 @@ const supermarketApi = attachSupermarket(exports, {
 // «AVA Супермаркет» 2-босқич (эга 2026-11-21): Excel импорт (фақат админ) — Улгуржи импорти парсер/расм қатламлари + ягона таклиф ёзиш йўли.
 const { attachSupermarketImport } = require('./supermarket_import');
 attachSupermarketImport(exports, { functions, db, admin, smApi: supermarketApi });
+// «AVA Супермаркет» ҳамкорга тўлов (эга 2026-11-28): етказилганда ҳамкор қарзи мавжуд ledger'га (идемпотент),
+// қўлда тўлов белгиси, тескари ёзув, ҳамкор баланси. Пул тизимдан ташқарига ЎТМАЙДИ. settings/sm_partner_payout (сукут OFF).
+const { attachSmPartnerPayout } = require('./sm_partner_payout');
+attachSmPartnerPayout(exports, {
+  functions, db, admin, settlementLedger, requireCallerRoles, requirePartner: supermarketApi.requirePartner,
+});
 // «AVA Супермаркет» 3-босқич (эга 2026-11-21): фақат ҳисоботлар — харид режаси + кунлик статистика (тизим ҳеч нарса сотиб олмайди).
 const { attachSupermarketReports } = require('./supermarket_reports');
 attachSupermarketReports(exports, { functions, db, admin, requireCallerRoles });

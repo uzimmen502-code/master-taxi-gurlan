@@ -1950,6 +1950,24 @@ service cloud.firestore {
       }
     }
 
+    // «AVA Супермаркет» ҳамкорга тўлов (эга 2026-11-28): қарз ёзувлари, қўлда тўловлар, жамлама, созлама тарихи —
+    // пул маълумоти: клиентга на ўқиш, на ёзиш (админ ва ҳамкор фақат CF орқали кўради, 18/20-банд).
+    match /sm_partner_payables/{id} {
+      allow read, write: if false;
+      match /events/{eventId} {
+        allow read, write: if false;
+      }
+    }
+    match /sm_partner_payments/{id} {
+      allow read, write: if false;
+    }
+    match /sm_partner_payout_summary/{id} {
+      allow read, write: if false;
+    }
+    match /sm_partner_payout_history/{id} {
+      allow read, write: if false;
+    }
+
     // Глобал қидирув индекси — read:true; write фақат CF (Admin SDK).
     match /search_index/{id} {
       allow read: if true;
@@ -2214,7 +2232,10 @@ service cloud.firestore {
           && docId != 'wallet_bot'
           && docId != 'courier_task_payout'
           && docId != 'courier_service_fee'
+          && docId != 'sm_partner_payout'
           && (docId != 'supermarket' || isAdmin());
+      // `sm_partner_payout` (ҳамкорга тўлов комиссияси/босқичи, эга 2026-11-28) — фақат CF
+      // `adminGet/SetSmPartnerPayoutSettings` (версия + тарих + admin_audit); клиентга на ўқиш, на ёзиш.
       // `supermarket` — testerIds (телефонлар): мижоз ўқимайди (`getSupermarketAccess`), админ ўқийди; ёзиш фақат CF.
       // prices/app/anomaly — фақат isAdmin (олдин очиқ update бўлган).
       // `prices` ичидаги маҳаллий такси тарифи — фақат CF
@@ -2237,6 +2258,7 @@ service cloud.firestore {
           && docId != 'courier_service_fee'
           && docId != 'courier_task_payout'
           && docId != 'supermarket'
+          && docId != 'sm_partner_payout'
           && (docId != 'anomaly_settings' || isSuperAdmin())
           && (
             docId != 'prices'

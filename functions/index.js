@@ -190,6 +190,10 @@ attachHoliday(exports, { functions, db, admin, callerPhone, canonicalUid, requir
 // respondRelativeInvite/unlinkRelative, getMyFamilyLinks, adminUpsertFamilyBonusProgram, adminGetFamilyBonusPrograms.
 const { attachFamilyLinks } = require('./family_links');
 attachFamilyLinks(exports, { functions, db, admin, callerPhone, canonicalUid, requireCallerRoles, notifyUserInApp });
+// «Туғилган кунингизни киритинг» ҳафталик пуш (эга 2026-11-28, 9-банд): users.birthDate йўқларга, settings/birthday_prompt
+// босқичи (ҳужжат йўқ = OFF), ҳафтада бир марта + N тагача (birthday_prompt_state). birthdayPromptWeekly, adminGet/SetBirthdayPromptSettings.
+const { attachBirthdayPrompt } = require('./birthday_prompt');
+attachBirthdayPrompt(exports, { functions, db, admin, requireCallerRoles, notifyUserInApp });
 // «Автомобил суғуртаси» (эга 2026-11-28): ариза → админ нарх жадвали (версия) → ҳамён/бонус/мой чегирмаси → агент полис
 // юклайди → муддат профилга; 4/3 кун эслатма; машина рағбати (бонус ёки мой дастури, сервис маркази ҳисоботи). Фақат ЯНГИ функциялар.
 const { attachCarInsurance } = require('./car_insurance');

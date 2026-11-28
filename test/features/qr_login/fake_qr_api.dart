@@ -17,7 +17,6 @@ class FakeQrApi implements QrLoginApi {
     approxCity: 'Urgench',
     createdAtMs: 1,
     expiresAtMs: 2,
-    outflowBlockHours: 24,
   );
   Object? peekError;
   final List<bool> decisions = [];

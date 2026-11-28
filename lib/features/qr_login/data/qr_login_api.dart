@@ -40,14 +40,12 @@ class QrPeekResult {
     this.approxCity = '',
     this.createdAtMs = 0,
     this.expiresAtMs = 0,
-    this.outflowBlockHours = 0,
   });
   final String sid;
   final String browserLabel;
   final String approxCity;
   final int createdAtMs;
   final int expiresAtMs;
-  final int outflowBlockHours;
 }
 
 class QrConsumeResult {
@@ -207,7 +205,6 @@ class FirebaseQrLoginApi implements QrLoginApi {
       approxCity: _str(d['approxCity']),
       createdAtMs: _int(d['createdAtMs']),
       expiresAtMs: _int(d['expiresAtMs']),
-      outflowBlockHours: _int(d['outflowBlockHours']),
     );
   }
 

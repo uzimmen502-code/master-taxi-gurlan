@@ -106,15 +106,9 @@ class _QrLoginConfirmScreenState extends State<QrLoginConfirmScreen> {
                       _row(context, Icons.schedule_rounded, 'qrl_confirm_time', _time(info.createdAtMs)),
                       const SizedBox(height: 14),
                       _note(context, context.tr('qrl_confirm_warning'), Colors.orange.shade50, Colors.orange.shade900),
-                      if (info.outflowBlockHours > 0) ...[
-                        const SizedBox(height: 8),
-                        _note(
-                          context,
-                          context.tr('qrl_confirm_outflow').replaceAll('{hours}', '${info.outflowBlockHours}'),
-                          c.surface,
-                          c.ink2,
-                        ),
-                      ],
+                      const SizedBox(height: 8),
+                      // Ега 2026-11-28: битта рақам — 1 та компьютер (олдинги компьютер чиқарилади).
+                      _note(context, context.tr('qrl_confirm_one_computer'), c.surface, c.ink2),
                     ],
                     if (_errorKey != null) ...[
                       const SizedBox(height: 12),

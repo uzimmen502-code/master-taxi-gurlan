@@ -94,13 +94,16 @@ void main() {
       return a;
     }
 
-    testWidgets('сарлавҳа, браузер, жой, огоҳлантириш ва {hours} соат ёпиқ', (tester) async {
+    testWidgets('сарлавҳа, браузер, жой, огоҳлантириш, «1 та компьютер»; пул блоки ҳақида ёзув ЙЎҚ', (tester) async {
       await open(tester);
       expect(find.text(t('qrl_confirm_title')), findsOneWidget);
       expect(find.text('Chrome · Windows'), findsOneWidget);
       expect(find.text('Urgench'), findsOneWidget);
       expect(find.text(t('qrl_confirm_warning')), findsOneWidget);
-      expect(find.text(t('qrl_confirm_outflow').replaceAll('{hours}', '24')), findsOneWidget);
+      expect(find.text(t('qrl_confirm_one_computer')), findsOneWidget);
+      // Эга 2026-11-28: QR тасдиғидан кейин пул чиқими блоки йўқ.
+      expect(t('qrl_confirm_outflow'), 'qrl_confirm_outflow', reason: 'калит олиб ташланган');
+      expect(find.textContaining('24'), findsNothing);
     });
 
     testWidgets('«Тасдиқлайман» → decide(true), экран true билан ёпилади', (tester) async {

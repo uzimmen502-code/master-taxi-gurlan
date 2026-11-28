@@ -12,6 +12,9 @@
  * модерация: админ тасдиқласа — `splash_ads/{orderId}` (оғирлик = кунига тўланган сумма), рад этса — ТЎЛИҚ
  * қайтариш + сабаб + хабар. Ҳолатлар: pending → approved | rejected (17-банд).
  *
+ * НАМУНА (уй) реклама (эга 2026-11-28): `house: true` + тил бўйича `imageUrls` — мижоз ФАҚАТ ҳудудда бошқа
+ * реклама йўқ бўлганда кўрсатади (пуллик улушга тегмайди). Яратиш: `tools/create_splash_house_ad.js`.
+ *
  * Коллекциялар (ёзиш ФАҚАТ CF):
  *   splash_ads/{id}                — оммавий креатив (рекламачи телефони ЁЗИЛМАЙДИ, 40-банд)
  *   splash_ad_stats/{adId}_{day}   — кунлик кўрсатишлар {adId, day, impressions, devices} (админ ўқийди)
@@ -69,7 +72,29 @@ const LIMITS = Object.freeze({
   maxDurationDays: 366, statsDays: 7, statsAdsPerDay: 30, logTtlDays: 30,
   purchaseDistricts: 10, startAheadDays: 60, myOrders: 30, phones: 100, note: 200, expireBatch: 300,
 });
-const AD_KEYS = Object.freeze(['title', 'text', 'imageUrl', 'linkUrl', 'startAtMs', 'endAtMs', 'districts', 'regionIds', 'priority', 'weight', 'active']);
+const AD_KEYS = Object.freeze(['title', 'text', 'imageUrl', 'imageUrls', 'linkUrl', 'startAtMs', 'endAtMs', 'districts', 'regionIds', 'priority', 'weight', 'active', 'house']);
+
+/**
+ * НАМУНА (уй) реклама (эга 2026-11-28: «экранда намуна учун чорловчи Реклама банери»): `house: true` —
+ * AVA'нинг ўз «Реклама бериш»га чорловчи креативи. Мижоз уни ФАҚАТ шу ҳудудда пуллик/оддий реклама
+ * бўлмаганда кўрсатади (пуллик рекламанинг улушини олмайди). `imageUrls` — тил бўйича расм
+ * ({uz_Cyrl, uz_Latn, ru}); `imageUrl` — эски мижозлар учун сукут (мажбурий, агар `imageUrls` берилса).
+ */
+function cleanImageUrls(v) {
+  if (v === undefined) return { ok: true, value: undefined };
+  if (!isObj(v)) return { ok: false, value: undefined };
+  const value = {};
+  for (const k of Object.keys(v)) if (!LANGS.includes(k)) return { ok: false, value: undefined };
+  for (const l of LANGS) {
+    const u = str(v[l]);
+    if (!u) continue;
+    if (!u.startsWith(STORAGE_URL_PREFIX) || u.length > LIMITS.imageUrl) return { ok: false, value: undefined };
+    value[l] = u;
+  }
+  return { ok: true, value };
+}
+/** Сақланган `imageUrls` ни солиштириш шаклига (LANGS тартиби). */
+const normImageUrls = (v) => { const c = cleanImageUrls(isObj(v) ? v : {}); return c.ok ? c.value : {}; };
 
 const MSG = Object.freeze({
   UNAUTHENTICATED: ['Илтимос, тизимга киринг.', 'Iltimos, tizimga kiring.', 'Пожалуйста, войдите в систему.'],
@@ -175,10 +200,33 @@ function validateAd(raw) {
   const weight = raw.weight === undefined ? 1 : raw.weight;
   if (!isInt(weight, 1, MAX_WEIGHT)) errors.push('weight');
   if (typeof raw.active !== 'boolean') errors.push('active');
+  // Ихтиёрий (эски админ формаси юбормайди — `undefined` = мавжуд қиймат сақланади, upsert'да).
+  if (raw.house !== undefined && typeof raw.house !== 'boolean') errors.push('house');
+  const iu = cleanImageUrls(raw.imageUrls);
+  if (!iu.ok) errors.push('imageUrls');
+  else if (iu.value && Object.keys(iu.value).length && !imageUrl) errors.push('imageUrl'); // эски мижоз учун сукут расм шарт
   if (errors.length) return { ok: false, errors: [...new Set(errors)], clean: null };
   return {
     ok: true, errors: [],
-    clean: { title, text, imageUrl, linkUrl, startAtMs, endAtMs, districts: d.list, regionIds: r.list, priority, weight, active: raw.active },
+    clean: {
+      title, text, imageUrl, imageUrls: iu.value, linkUrl, startAtMs, endAtMs, districts: d.list, regionIds: r.list, priority, weight,
+      active: raw.active, house: raw.house,
+    },
+  };
+}
+
+/**
+ * Админ (тўғридан-тўғри) реклама ҳужжатининг майдонлари — `adminUpsertSplashAd` ва
+ * `tools/create_splash_house_ad.js` учун ЯГОНА шакл (7-банд). [clean] — `validateAd(...).clean`
+ * (`house`/`imageUrls` аниқланган). `version`/`updatedAt`/`createdAt` ни чақирувчи қўшади.
+ */
+function adminAdFields(clean, TS) {
+  return {
+    title: clean.title, text: clean.text, imageUrl: clean.imageUrl, imageUrls: clean.imageUrls || {}, linkUrl: clean.linkUrl,
+    startAt: TS.fromMillis(clean.startAtMs), endAt: TS.fromMillis(clean.endAtMs),
+    districts: clean.districts, regionIds: clean.regionIds, areaKeys: areaKeysOf(clean.districts, clean.regionIds),
+    priority: clean.priority, weight: clean.weight, source: 'admin', house: clean.house === true,
+    active: clean.active, visible: clean.active,
   };
 }
 
@@ -383,10 +431,12 @@ function attachSplashAds(exportsObj, deps) {
   const pick = (d) => {
     if (!d) return null;
     return {
-      title: d.title || '', text: isObj(d.text) ? d.text : {}, imageUrl: d.imageUrl || '', linkUrl: d.linkUrl || '',
+      title: d.title || '', text: isObj(d.text) ? d.text : {}, imageUrl: d.imageUrl || '', imageUrls: normImageUrls(d.imageUrls),
+      linkUrl: d.linkUrl || '',
       startAtMs: msOf(d.startAt), endAtMs: msOf(d.endAt), districts: Array.isArray(d.districts) ? d.districts : [],
       regionIds: Array.isArray(d.regionIds) ? d.regionIds : [],
       priority: Number.isInteger(d.priority) ? d.priority : 0, weight: Number.isInteger(d.weight) ? d.weight : 1, active: d.active === true,
+      house: d.house === true,
     };
   };
   const same = (a, b) => JSON.stringify(AD_KEYS.map((k) => a[k])) === JSON.stringify(AD_KEYS.map((k) => b[k]));
@@ -399,20 +449,24 @@ function attachSplashAds(exportsObj, deps) {
     const rawId = str(data && data.ad && data.ad.id);
     if (rawId && !AD_ID_RE.test(rawId)) throw fail('invalid-argument', 'SPLASH_AD_INVALID', { errors: ['id'] });
     const ref = rawId ? db.collection(ADS).doc(rawId) : db.collection(ADS).doc();
-    const clean = v.clean;
     const reason = reasonOf(data);
     const out = await db.runTransaction(async (t) => {
       const snap = await t.get(ref);
       if (snap.exists && (snap.data() || {}).source === 'paid') throw fail('failed-precondition', 'SPLASH_AD_PAID_READONLY');
       const cur = snap.exists ? pick(snap.data() || {}) : null;
+      // Ихтиёрий майдонлар юборилмаган бўлса (эски админ формаси) — мавжуди сақланади: `house` — ўзгармайди;
+      // `imageUrls` — фақат асосий расм ўзгармаган бўлса (админ расмни алмаштирса, эски тил расмлари кўринмасин).
+      const clean = {
+        ...v.clean,
+        house: v.clean.house !== undefined ? v.clean.house : (cur ? cur.house : false),
+        imageUrls: v.clean.imageUrls !== undefined ? v.clean.imageUrls
+          : (cur && cur.imageUrl === v.clean.imageUrl ? cur.imageUrls : {}),
+      };
       if (cur && same(cur, clean)) return { changed: false, version: (snap.data() || {}).version || 1 };
       const version = (snap.exists && Number.isInteger((snap.data() || {}).version) ? snap.data().version : 0) + 1;
       // Оммавий ҳужжат: админ телефони ЁЗИЛМАЙДИ (40-банд) — ким ўзгартиргани `admin_audit`да.
       t.set(ref, {
-        title: clean.title, text: clean.text, imageUrl: clean.imageUrl, linkUrl: clean.linkUrl,
-        startAt: TS.fromMillis(clean.startAtMs), endAt: TS.fromMillis(clean.endAtMs),
-        districts: clean.districts, regionIds: clean.regionIds, areaKeys: areaKeysOf(clean.districts, clean.regionIds),
-        priority: clean.priority, weight: clean.weight, source: 'admin', active: clean.active, visible: clean.active,
+        ...adminAdFields(clean, TS),
         version, updatedAt: ts(), ...(snap.exists ? {} : { createdAt: ts() }),
       });
       t.set(db.collection(ADMIN_AUDIT).doc(), {
@@ -761,7 +815,7 @@ function attachSplashAds(exportsObj, deps) {
 }
 
 module.exports = {
-  attachSplashAds, validateAd, sanitizeImpressions, dayKeyOf, dayStartMs, areaKeysOf, priceOf, imageOwnedBy,
+  attachSplashAds, validateAd, adminAdFields, sanitizeImpressions, dayKeyOf, dayStartMs, areaKeysOf, priceOf, imageOwnedBy,
   validatePurchase, validateTariff, validateConfig, orderIdOf, testOverrides,
   MAX_IMPRESSIONS_PER_DAY, DURATIONS, ADS, STATS, IMP_LOG, ORDERS,
 };

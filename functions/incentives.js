@@ -26,7 +26,7 @@
  *
  * Диагностика кодлари: PHONE_REQUIRED, PROGRAM_INVALID, PROGRAM_OFF, NOT_IN_STAGE, NOT_STARTED, ENDED,
  * NOT_NEW_USER, GENDER_MISMATCH, AGE_UNKNOWN, AGE_OUT_OF_RANGE, CAR_PROFILE_REQUIRED, BUDGET_EXHAUSTED,
- * DAILY_BUDGET_EXHAUSTED, GRANT_NOT_FOUND, VALIDATION_<field>.
+ * DAILY_BUDGET_EXHAUSTED, GRANT_NOT_FOUND, PROGRAM_SPECIAL, PROGRAM_KEY_TAKEN, VALIDATION_<field>.
  */
 'use strict';
 
@@ -46,6 +46,19 @@ const ID_RE = /^[A-Za-z0-9_-]{2,60}$/;
 const UID_RE = /^\d{9,15}$/;
 const MAX_AMOUNT = 10000000;
 const TASHKENT_OFFSET_MS = 5 * 3600 * 1000;
+
+/**
+ * Махсус дастурлар (эга 2026-11-28): ЯГОНА ёзиш йўли — ўз модули (holiday.js relatives_birthdays,
+ * family_links.js spouse_link/relative_link, car_insurance.js car_insurance_bonus — stage доим 'off').
+ * Умумий adminUpsertIncentiveProgram / adminSetIncentiveStage уларга ТЕГМАЙДИ: ҳужжатда `kind` бўлса ёки
+ * ID шу рўйхатда бўлса — PROGRAM_SPECIAL.
+ */
+const SPECIAL_PROGRAM_IDS = Object.freeze(['relatives_birthdays', 'spouse_link', 'relative_link', 'car_insurance_bonus']);
+
+function isSpecialProgram(id, data) {
+  const d = data || {};
+  return SPECIAL_PROGRAM_IDS.includes(String(id || '')) || (d.kind != null && String(d.kind) !== '');
+}
 
 function vErr(field) {
   const e = new Error(`VALIDATION_${field}`);
@@ -184,6 +197,9 @@ function validateProgram(input) {
   if (!isInt(p.budgetTotal, amount, 100000000000)) throw vErr('budgetTotal');
   const budgetDaily = p.budgetDaily == null ? 0 : p.budgetDaily;
   if (!isInt(budgetDaily, 0, 100000000000)) throw vErr('budgetDaily');
+  // 0 — чекловсиз; акс ҳолда камида битта рағбат (бўлмаса claimIncentive ҳар доим DAILY_BUDGET_EXHAUSTED) ва
+  // умумий бюджетдан ошмасин (эга 2026-11-28).
+  if (budgetDaily !== 0 && (budgetDaily < amount || budgetDaily > p.budgetTotal)) throw vErr('budgetDaily');
   const startAtMs = toMs(p.startAt);
   const endAtMs = toMs(p.endAt);
   if (startAtMs != null && endAtMs != null && endAtMs <= startAtMs) throw vErr('endAt');
@@ -564,6 +580,7 @@ function attachIncentives(exportsObj, deps) {
     const reqId = String((data && data.programId) || '').trim();
     if (reqId && !ID_RE.test(reqId)) throw fail('invalid-argument', 'PROGRAM_INVALID');
     const ref = reqId ? db.collection(PROGRAMS).doc(reqId) : db.collection(PROGRAMS).doc(clean.key);
+    if (isSpecialProgram(ref.id, null) || isSpecialProgram(clean.key, null)) throw fail('failed-precondition', 'PROGRAM_SPECIAL');
     const doc = {
       key: clean.key, title: clean.title, stage: clean.stage,
       internalPhones: clean.internalPhones, pilotDistrictIds: clean.pilotDistrictIds,
@@ -581,6 +598,9 @@ function attachIncentives(exportsObj, deps) {
       const snap = await t.get(ref);
       if (snap.exists) {
         const prev = snap.data();
+        if (isSpecialProgram(ref.id, prev)) throw fail('failed-precondition', 'PROGRAM_SPECIAL');
+        // «Янги дастур» (programId йўқ) мавжуд калит билан — устидан ёзилмайди.
+        if (!reqId) throw fail('already-exists', 'PROGRAM_KEY_TAKEN');
         // Бюджетни берилгандан камайтириб бўлмайди.
         const granted = ((prev.counters || {}).grantedAmount) || 0;
         if (clean.budgetTotal < granted) throw fail('invalid-argument', 'VALIDATION_budgetTotal_below_granted');
@@ -639,10 +659,12 @@ function attachIncentives(exportsObj, deps) {
     const stage = String((data && data.stage) || '');
     if (!ID_RE.test(programId)) throw fail('invalid-argument', 'PROGRAM_INVALID');
     if (!STAGES.includes(stage)) throw fail('invalid-argument', 'VALIDATION_stage');
+    if (isSpecialProgram(programId, null)) throw fail('failed-precondition', 'PROGRAM_SPECIAL');
     const ref = db.collection(PROGRAMS).doc(programId);
     await db.runTransaction(async (t) => {
       const snap = await t.get(ref);
       if (!snap.exists) throw fail('not-found', 'PROGRAM_INVALID');
+      if (isSpecialProgram(programId, snap.data())) throw fail('failed-precondition', 'PROGRAM_SPECIAL');
       t.update(ref, { stage, updatedAt: ts(), updatedBy: actor });
       t.create(db.collection('admin_audit').doc(), {
         action: 'incentiveStage', programId, actor, from: snap.data().stage || 'off', to: stage, at: ts(),
@@ -759,7 +781,7 @@ function attachIncentives(exportsObj, deps) {
 module.exports = {
   attachIncentives, validateProgram, evaluateEligibility, parseBirthDate, ageAt, hasCarProfile,
   frozenPatch, withFrozen,
-  tashkentDayKey, grantIdOf, STAGES,
+  tashkentDayKey, grantIdOf, STAGES, SPECIAL_PROGRAM_IDS, isSpecialProgram,
   computeIncentivePlan, normCategory, readActiveGrantsInTx, applyIncentiveSpendInTx,
   prepareIncentiveRefundInTx, commitIncentiveRefundInTx,
 };

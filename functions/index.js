@@ -2771,27 +2771,9 @@ exports.creditChange = functions.https.onCall(async (data, context) => {
  * ҳеч қачон чақирмаган; Cloud Logging 2026-10-29…11-28 — 0 чақирув. Ўрнига: ҳамёндан тўлов —
  * `placeOrderPostPaid` ва модул callable'лари; ечиш — `requestWalletWithdraw` /
  * `walletToCash` / `cashExchange`. `creditSupplier` (админ) — ҚОЛДИ: `courier_payout.js` қўлда тўлов йўли.
- * Export'лар сақланади (deploy уларни тўсатдан ўчирмасин), танаси — шу стуб.
+ * 17-band (ega 2026-11-28): ENDPOINT_RETIRED stub'lari ham manbadan olib tashlandi — jonli nusxalarni
+ * egasi `firebase functions:delete` bilan o'chiradi (docs/takrorlanishlar_17_band_2026-11-28_uz.md).
  */
-const ENDPOINT_RETIRED = 'ENDPOINT_RETIRED';
-const ENDPOINT_RETIRED_MESSAGES = Object.freeze({
-  uz_Cyrl: 'Бу амал эскирган ва ўчирилган. Иловани янгиланг.',
-  uz_Latn: "Bu amal eskirgan va o'chirilgan. Ilovani yangilang.",
-  ru: 'Эта операция устарела и отключена. Обновите приложение.',
-});
-
-function retiredEndpoint(name) {
-  return functions.https.onCall(async (data, context) => {
-    const phone = context && context.auth ? digits(callerPhone(context)) : '';
-    console.warn(JSON.stringify({
-      action: name, result: 'rejected', errorCode: ENDPOINT_RETIRED,
-      authed: Boolean(context && context.auth), callerTail: phone.slice(-4),
-    }));
-    throw new functions.https.HttpsError('failed-precondition', ENDPOINT_RETIRED_MESSAGES.uz_Cyrl, {
-      code: ENDPOINT_RETIRED, endpoint: name, messages: { ...ENDPOINT_RETIRED_MESSAGES },
-    });
-  });
-}
 
 // W-2 (ega 2026-11-28): creditSupplier ATAYLAB qoldirildi — `courier_payout.js` qo'lda to'lov yo'li
 // (autoPayoutEnabled=false bo'lganda moliya shu bilan to'laydi; courier_payout_cf testlari). Faqat admin/superadmin.
@@ -2879,9 +2861,6 @@ exports.creditSupplier = functions.https.onCall(async (data, context) => {
 
   return { ok: true, credited: amount };
 });
-
-/** @deprecated W-2 — эски «балансдан ечиш» (dispatcher бошқанинг ҳамёнидан ечарди). ENDPOINT_RETIRED. */
-exports.debitForOrder = retiredEndpoint('debitForOrder');
 
 /** Кошелёк (аниқ сумма) + омбор + order + ledger + нақд қайтим — битта транзакция. */
 function maxWalletDebit(balance, orderTotal) {
@@ -3021,14 +3000,6 @@ async function applyStockReservations(reserved) {
   if (writes > 0) await batch.commit();
   return count;
 }
-
-/** @deprecated — хавфли (auth/reprice йўқ). Фақат `placeOrderPostPaid`. */
-exports.placeOrderWithWallet = functions.https.onCall(async () => {
-  throw new functions.https.HttpsError(
-    'failed-precondition',
-    'Deprecated: use placeOrderPostPaid',
-  );
-});
 
 // ══════════════════════════════════════
 // POST-PAID ORDERS (буюртмада кошелёк ечилмайди)
@@ -5938,8 +5909,8 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
   return tx.result;
 });
 
-/** @deprecated W-2 — эски `payout_requests` аризаси. Мавжуд `pending` аризалар `confirmPayout`/`rejectPayout` билан ёпилади. ENDPOINT_RETIRED. */
-exports.requestPayout = retiredEndpoint('requestPayout');
+// W-2 / 17-band (ega 2026-11-28): eski `requestPayout` (payout_requests arizasi) manbadan olib tashlandi;
+// mavjud `pending` arizalar `confirmPayout`/`rejectPayout` bilan yopiladi.
 
 /** Админ: нақд чиқаришни тасдиқлаш */
 // Тўловни тасдиқлаш/рад этиш — админ панелдаги «Молия» бўлими каби фақат
@@ -6103,9 +6074,6 @@ async function sendAnomalyTelegramMessage(text) {
     return false;
   }
 }
-
-/** @deprecated W-2 — клиент ҳеч қачон чақирмаган лимит текшируви. ENDPOINT_RETIRED. */
-exports.checkWithdrawalLimit = retiredEndpoint('checkWithdrawalLimit');
 
 /** wallet_ledger яратилганда катта сумма — risk_events + Telegram. */
 exports.detectAnomaly = functions.firestore
@@ -7820,26 +7788,6 @@ exports.adminChangeOwnPin = functions.https.onCall(async (data, context) => {
     at: admin.firestore.FieldValue.serverTimestamp(),
   });
   return { ok: true };
-});
-
-/**
- * Admin web: umumiy maxfiy kod bilan kirish — O'CHIRILDI (ega qarori
- * 2026-10-08, admin audit D-5). Avval bitta umumiy kodning sha256 xeshi
- * shu manba kodida turardi; to'g'ri kod ishonchli operator raqamiga custom
- * token berar va kerak bo'lsa uning rolini `admin` qilib qo'yardi — shaxsiy
- * PIN (D-1, `adminWebSignIn`) qoidasini chetlab o'tardi. Funksiya nomi
- * saqlandi: eski admin sahifasi chaqirsa — tushunarli rad (deploy nomi bilan
- * yangilanadi, o'chirish shart emas).
- */
-exports.adminWebSignInWithCode = functions.https.onCall(async () => {
-  console.warn(JSON.stringify({
-    action: 'adminWebSignInWithCode', result: 'refused',
-    errorCode: 'ADMIN_CODE_LOGIN_DISABLED',
-  }));
-  throw new functions.https.HttpsError(
-      'failed-precondition',
-      'Махфий код билан кириш ўчирилган. Телефон ва шахсий PIN билан киринг.',
-      { code: 'ADMIN_CODE_LOGIN_DISABLED' });
 });
 
 /** Буюртма status patch — `OrdersRepository._statusPatch` билан синхрон. */
@@ -11138,14 +11086,6 @@ exports.adminResetTaxiDriversRegistry = functions.https.onCall(async (data, cont
   return { ok: true, dryRun: false, stats };
 });
 
-/** Mobil/web: PIN bilan `users/{phone}.role = admin` — eski usul (mobil profildan olib tashlandi). */
-exports.promoteToAdminWithPin = functions.https.onCall(async (data, context) => {
-  throw new functions.https.HttpsError(
-    'failed-precondition',
-    'Mobil PIN o\'chirilgan. Admin web → Foydalanuvchilar bo\'limidan rol bering.',
-  );
-});
-
 /**
  * Qo'llab-quvvatlash: telefonga admin rol (faqat ADMIN_BOOTSTRAP_SECRET bilan).
  * Firebase: `firebase functions:secrets:set ADMIN_BOOTSTRAP_SECRET`
@@ -11194,21 +11134,6 @@ exports.sendSupportChatReply = functions.https.onCall(async (data, context) => {
   }
   // Қўлда ёзилган жавоб — push + homeBadgePersonal керак (systemOrder эмас).
   await appendSystemSupportChatMessage(chatId, text, { systemOrder: false });
-  return { ok: true };
-});
-
-/** Callable: support чатига админ хабари (Admin SDK — fromAdmin: true, systemOrder). */
-exports.appendAdminSystemChat = functions.https.onCall(async (data, context) => {
-  const adminPhone = String(data.adminPhone || '');
-  await assertAdmin(adminPhone, context);
-
-  const chatId = String(data.chatId || '').replace(/\D/g, '');
-  const text = String(data.text || '').trim();
-  if (!chatId || chatId.length < 9 || !text) {
-    throw new functions.https.HttpsError('invalid-argument', 'chatId va text majburiy');
-  }
-
-  await appendSystemSupportChatMessage(chatId, text);
   return { ok: true };
 });
 
@@ -13351,71 +13276,6 @@ exports.marshrutDriverAutoOffline = functions.pubsub
       return null;
     }
   });
-
-/**
- * Migration: titleLower + searchTokens for cheap_product ads.
- * Callable; requires authenticated admin/superadmin user doc.
- */
-exports.migrateCheapProductTitleLower = functions.https.onCall(
-  async (data, context) => {
-    if (!context.auth) {
-      throw new functions.https.HttpsError(
-        'unauthenticated',
-        'Auth required',
-      );
-    }
-    const phone = (context.auth.token.phone_number || '').replace('+', '');
-    if (!phone) {
-      throw new functions.https.HttpsError('failed-precondition', 'No phone');
-    }
-    const userSnap = await db.collection('users').doc(phone).get();
-    const role = userSnap.exists ? userSnap.data().role : '';
-    if (!['admin', 'superadmin'].includes(role)) {
-      throw new functions.https.HttpsError('permission-denied', 'Admin only');
-    }
-
-    let updated = 0;
-    let lastId = null;
-    const pageSize = 400;
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-      let q = db
-        .collection('ads')
-        .where('type', '==', 'cheap_product')
-        .orderBy(admin.firestore.FieldPath.documentId())
-        .limit(pageSize);
-      if (lastId) q = q.startAfter(lastId);
-      const snap = await q.get();
-      if (snap.empty) break;
-
-      const batch = db.batch();
-      let writes = 0;
-      for (const doc of snap.docs) {
-        lastId = doc.id;
-        const d = doc.data();
-        const title = (d.title || '').toString();
-        if (!title) continue;
-        const description = (d.description || '').toString();
-        const lower = (d.titleLower || '').toString();
-        const tokens = Array.isArray(d.searchTokens) ? d.searchTokens : [];
-        const needLower = !lower;
-        const needTokens = tokens.length === 0;
-        if (!needLower && !needTokens) continue;
-        const patch = {};
-        if (needLower) patch.titleLower = title.toLowerCase();
-        if (needTokens) {
-          patch.searchTokens = buildMarketSearchTokens(title, description);
-        }
-        batch.update(doc.ref, patch);
-        writes++;
-        updated++;
-      }
-      if (writes > 0) await batch.commit();
-      if (snap.size < pageSize) break;
-    }
-    return { updated };
-  },
-);
 
 /**
  * Marshrut yo'lovchi — o'z `pending` taklifini yopish (2026-10-08):
@@ -16116,74 +15976,6 @@ exports.renewTvAd = functions.https.onCall(async (data, context) => {
   }
 });
 
-exports.migratePhoneFormats = functions.https.onCall(
-    async (data, context) => {
-      if (!context.auth) {
-        throw new functions.https.HttpsError(
-            'unauthenticated', 'Auth required');
-      }
-      const callerPhone = context.auth.token.phone_number
-          ?.replace(/\D/g, '') ?? '';
-      const callerDoc = await db.collection('users')
-          .doc(callerPhone).get();
-      if (!['admin', 'superadmin']
-          .includes(callerDoc.data()?.role)) {
-        throw new functions.https.HttpsError(
-            'permission-denied', 'Admin only');
-      }
-
-      const dryRun = data.dryRun !== false; // default dry run
-      const collections = ['drivers', 'queue',
-        'intercity_drivers', 'driver_requests'];
-      const results = {};
-
-      for (const col of collections) {
-        const snap = await db.collection(col).get();
-        results[col] = { found: 0, migrated: 0, skipped: 0 };
-
-        for (const doc of snap.docs) {
-          const id = doc.id;
-          // Only migrate 9-digit IDs
-          if (!/^\d{9}$/.test(id)) {
-            results[col].skipped++;
-            continue;
-          }
-          const newId = '998' + id;
-          results[col].found++;
-
-          if (!dryRun) {
-            // Copy to new doc
-            const newRef = db.collection(col).doc(newId);
-            const existing = await newRef.get();
-            if (!existing.exists) {
-              await newRef.set(doc.data());
-            }
-            // Copy subcollections (clients under intercity_drivers)
-            if (col === 'intercity_drivers') {
-              const clients = await doc.ref
-                  .collection('clients').get();
-              for (const c of clients.docs) {
-                await newRef.collection('clients')
-                    .doc(c.id).set(c.data());
-              }
-            }
-            // Mark old doc as migrated (don't delete yet)
-            await doc.ref.update({
-              _migratedTo: newId,
-              _migratedAt: admin.firestore.FieldValue
-                  .serverTimestamp(),
-            });
-            results[col].migrated++;
-          } else {
-            results[col].migrated++; // dry run count
-          }
-        }
-      }
-
-      return { dryRun, results };
-    },
-);
-
 // Шаҳарлараро рейс: жўнашга ≤ 10 дақиқа қолганда салон тўлмаган бўлса 2 соатга
 // суриш (кунига ≤ 4 марта). Мантиқ — `intercity_auto_shift.js`. Эски версия
 // ҳеч ким ёзмайдиган `intercity_drivers.departureTime` ни ўқирди (ишламасди).
@@ -16393,72 +16185,6 @@ exports.closePeriod = functions.https.onCall(async (data, context) => {
   return { ok: true, periodId, locked: true, totals };
 });
 
-// ─────────────────────────────────────────────────────────────────────
-// Settlement Ledger — Driver Float (Qadam 2).
-//   floatTopUp     — haydovchi naqd depozit topshiradi (admin/finance yozadi)
-//                    Dr admin_cash / Cr driver_float:{uid}, floatMax cap bilan.
-//   floatReturn    — float qaytarish (finance tasdig'i)
-//                    Dr driver_float:{uid} / Cr admin_cash, manfiylik bo'lmasin.
-//   driverFloatStatus — float balansi + zona (read-only).
-// Idempotent: klient `opId` (UUID) yuboradi. Cap/manfiylik TRANSACTION
-// ichida (assert) tekshiriladi. To'liq dizayn: docs/settlement_ledger_v1_uz.md
-// ─────────────────────────────────────────────────────────────────────
-
-/** `data`'dan haydovchi uid (998 + 9), summa (butun, >0) va opId ni tekshiradi. */
-function parseFloatOpInput(data) {
-  const driverUid = canonicalUid(data && (data.driverUid || data.driverPhone));
-  const amount = Math.trunc(Number((data && data.amount) || 0));
-  const opId = String((data && data.opId) || '').trim();
-  if (!driverUid || driverUid.length < 12) {
-    throw new functions.https.HttpsError('invalid-argument', 'driverUid noto\'g\'ri');
-  }
-  if (!Number.isInteger(amount) || amount <= 0) {
-    throw new functions.https.HttpsError('invalid-argument', 'amount musbat butun bo\'lsin');
-  }
-  if (!opId || opId.length < 6) {
-    throw new functions.https.HttpsError('invalid-argument', 'opId (idempotency key) kerak');
-  }
-  return { driverUid, amount, opId };
-}
-
-async function floatStatusOf(driverUid) {
-  const config = await settlementLedger.getConfig(db);
-  const ref = db.collection(settlementLedger.COL_ACCOUNTS)
-      .doc(settlementLedger.driverFloatAccount(driverUid));
-  const snap = await ref.get();
-  const a = snap.exists ? (snap.data() || {}) : {};
-  const balance = a.balance || 0;
-  const lastTopUpAmount = a.lastTopUpAmount || 0;
-  const dto = a.deferredTimeoutAt && a.deferredTimeoutAt.toMillis
-      ? a.deferredTimeoutAt.toMillis() : null;
-  return {
-    driverUid,
-    balance,
-    zone: settlementLedger.floatZone(balance, config),
-    settlementEnabled: settlementLedger.settlementEnabled(balance, config),
-    blocked: balance < 0,
-    blockedReason: balance < 0 ? (a.blockedReason || 'deferred_debt') : '',
-    lastTopUpAmount,
-    deferredFloor: settlementLedger.deferredFloor(lastTopUpAmount, config),
-    deferredTimeoutAt: dto,
-    config,
-  };
-}
-
-/** Float top-up deprecated — Cash Exchange (cashExchange) ishlatilsin. */
-exports.floatTopUp = functions.https.onCall(async () => {
-  throw new functions.https.HttpsError(
-      'failed-precondition',
-      'floatTopUp yopilgan. cashExchange (Cash In → Wallet) ishlating');
-});
-
-/** Float return deprecated — walletToCash ishlatilsin. */
-exports.floatReturn = functions.https.onCall(async () => {
-  throw new functions.https.HttpsError(
-      'failed-precondition',
-      'floatReturn yopilgan. walletToCash (Wallet → Cash) ishlating');
-});
-
 /**
  * Cash Exchange — bitta UI amali, orqada 2 journal:
  *   1) cash_in:        Dr admin_cash / Cr admin_clearing
@@ -16663,19 +16389,6 @@ exports.migrateFloatToWallet = functions.https.onCall(async (data, context) => {
     skippedNegative,
     skippedZeroCount: skippedZero.length,
   };
-});
-
-exports.driverFloatStatus = functions.https.onCall(async (data, context) => {
-  await requireCallerRoles(
-      context,
-      ['admin', 'superadmin', 'finance', 'auditor'],
-      'Finance/audit role required',
-  );
-  const driverUid = canonicalUid(data && (data.driverUid || data.driverPhone));
-  if (!driverUid || driverUid.length < 12) {
-    throw new functions.https.HttpsError('invalid-argument', 'driverUid noto\'g\'ri');
-  }
-  return floatStatusOf(driverUid);
 });
 
 // ─────────────────────────────────────────────────────────────────────

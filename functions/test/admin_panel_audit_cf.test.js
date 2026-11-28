@@ -40,8 +40,8 @@
  *      tools/backfill_admin_news_target (dry-run, apply, idempotent, rollback)
  *   V  onTvClipDeleted (do'kon mahsulotidan clipId olib tashlanadi),
  *      onTvClipVideoReplacedV2 (QO'LDA rejimda qayta moderatsiya)
- *   W  adminWebSignInWithCode o'chirilgan — umumiy kod PIN'ni chetlab
- *      o'tolmaydi (D-5)
+ *   W  adminWebSignInWithCode manbadan olib tashlangan (D-5, keyin 17-band) — umumiy kod
+ *      PIN'ni chetlab o'tolmaydi
  */
 'use strict';
 const assert = require('assert');
@@ -876,14 +876,9 @@ async function main() {
 
   // ── W. Umumiy maxfiy kod bilan kirish o'chirildi (D-5) ──────────────
   await reset();
-  await check('W1 adminWebSignInWithCode — har qanday kod rad; rol va hisob o\'zgarmaydi', async () => {
-    // Avvalgi «ishonchli operator» raqami — admin bo'lmasa kod uni admin qilardi.
-    const legacyOperator = '998912778777';
-    await db.collection('users').doc(legacyOperator).set({ role: 'user' });
-    for (const code of ['', '123456', 'any-secret-code']) {
-      await rejectsWith(fns.adminWebSignInWithCode.run({ code }, {}), 'failed-precondition');
-    }
-    assert.strictEqual((await db.collection('users').doc(legacyOperator).get()).data().role, 'user');
+  await check('W1 adminWebSignInWithCode — umuman yo\'q (17-band, ega 2026-11-28); faqat shaxsiy PIN yo\'li qoldi', async () => {
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(fns, 'adminWebSignInWithCode'), false);
+    assert.strictEqual(typeof fns.adminWebSignIn.run, 'function');
   });
 
   // ── M. Admin kirish: telefon + shaxsiy PIN (D-1) ────────────────────

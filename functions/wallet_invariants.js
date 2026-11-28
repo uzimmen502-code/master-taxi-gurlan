@@ -81,6 +81,8 @@ async function collectState(db, { pageSize = 500 } = {}) {
     users: new Map(), // uid -> bonusBalance (raw, ≠ 0)
     wallet: new Map(), // uid -> [{effect, createdAtMs, type}]
     userExists: new Map(),
+    /** Ўчирилган ҳисоблар (account_deletion): тарих архивга кўчган — I-3/I-3F текширилмайди, I-1 текширилади. */
+    deleted: new Set(),
     reads: 0,
   };
   state.reads += await scanCollection(db, ledger.COL_ACCOUNTS, pageSize, (d) => {
@@ -99,8 +101,10 @@ async function collectState(db, { pageSize = 500 } = {}) {
     const snap = await q.get();
     state.reads += snap.size;
     snap.docs.forEach((d) => {
-      state.users.set(d.id, (d.data() || {}).bonusBalance);
+      const x = d.data() || {};
+      state.users.set(d.id, x.bonusBalance);
       state.userExists.set(d.id, true);
+      if (x.deleted === true) state.deleted.add(d.id);
     });
     if (snap.size < pageSize) break;
     last = snap.docs[snap.docs.length - 1];
@@ -114,7 +118,10 @@ async function collectState(db, { pageSize = 500 } = {}) {
     const refs = pcOnly.slice(i, i + 100).map((u) => db.collection('users').doc(u));
     const snaps = await db.getAll(...refs);
     state.reads += snaps.length;
-    snaps.forEach((s, j) => state.userExists.set(pcOnly[i + j], s.exists));
+    snaps.forEach((s, j) => {
+      state.userExists.set(pcOnly[i + j], s.exists);
+      if (s.exists && (s.data() || {}).deleted === true) state.deleted.add(pcOnly[i + j]);
+    });
   }
   // wallet_ledger — текшириладиган ҳар ҳамён учун (саҳифалаб).
   const uids = new Set([...state.users.keys(), ...pcOnly]);
@@ -202,7 +209,7 @@ function evaluate(state, { baselineMs = BASELINE_MS } = {}) {
 
   // ── I-1 / I-3 / I-3F / аномалиялар (ҳар ҳамён) ──────────────────────
   const i1 = { ok: true, mismatches: [], mismatchCount: 0, sumAbsDiff: 0 };
-  const i3 = { ok: true, baselineIso: new Date(baselineMs).toISOString(), mismatches: [], mismatchCount: 0 };
+  const i3 = { ok: true, baselineIso: new Date(baselineMs).toISOString(), mismatches: [], mismatchCount: 0, deletedSkipped: 0 };
   const i3f = { ok: true, mismatches: [], mismatchCount: 0 };
   const anomalies = { ok: true, items: [], count: 0 };
   const flag = (item) => { anomalies.count += 1; capPush(anomalies.items, item); };
@@ -235,7 +242,8 @@ function evaluate(state, { baselineMs = BASELINE_MS } = {}) {
       });
     }
 
-    // I-3 / I-3F
+    // I-3 / I-3F (ўчирилган ҳисобда тарих `account_deletion_archive`га кўчган — солиштирилмайди)
+    if (state.deleted && state.deleted.has(uid)) { i3.deletedSkipped += 1; continue; }
     const rows = state.wallet.get(uid) || [];
     let after = 0;
     let all = 0;

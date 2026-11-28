@@ -169,6 +169,24 @@ const run = (extra = {}) => inv.runWalletInvariantCheck({ db, admin, log: { log(
     assert.deepStrictEqual(kinds, ['negative_bonus', 'non_integer_wallet_row', 'wallet_row_without_createdAt']);
   });
 
+  await seedClean();
+  await check('W10 o\'chirilgan hisob (tarix arxivda): I-3/I-3F tekshirilmaydi, I-1 tekshiriladi', async () => {
+    // A hisobini o'chirish: forfeit (ledger 0 ga), bonusBalance 0, tarix arxivga ko'chgan, deleted:true.
+    await ledger.postEntry(db, {
+      idempotencyKey: `bonus:acct_del_forfeit_${A}`, kind: 'account_deletion_forfeit',
+      legs: [{ account: ledger.passengerCreditAccount(A), dr: 13000 }, { account: 'admin_clearing', cr: 13000 }],
+    }, { mirrorBonus: false });
+    const rows = await wl(A).get();
+    await Promise.all(rows.docs.map((d) => d.ref.delete()));
+    await db.collection('users').doc(A).set({ deleted: true, bonusBalance: 0 });
+    let r = await run({ writeReport: false });
+    assert.strictEqual(r.ok, true, JSON.stringify(r.invariants));
+    assert.strictEqual(r.invariants.I3.deletedSkipped, 1);
+    await db.collection('users').doc(A).set({ deleted: true, bonusBalance: 5 });
+    r = await run({ writeReport: false });
+    assert.deepStrictEqual(r.invariants.I1.mismatches.map((m) => [m.uid, m.diff]), [[A, 5]]);
+  });
+
   await check('W9 belgi qoidasi (sof)', async () => {
     assert.strictEqual(inv.walletRowEffect({ type: 'realty_tier_purchase', amount: 2000, debitCredit: 'debit' }), -2000);
     assert.strictEqual(inv.walletRowEffect({ type: 'purchase_debit', amount: -300 }), -300);

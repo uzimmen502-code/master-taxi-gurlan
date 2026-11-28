@@ -31,11 +31,10 @@ const ALLOW = {
   'assistant_chat.js': 2,
   'ev_charging.js': 2,
   'index.js': 49,
-  'supermarket.js': 4,
   'wholesale_orders.js': 3,
 };
 // Бошланғич 94 (2026-11-28). Ҳар кўчиришда шу сон ҳам камайтирилади.
-const BASELINE_TOTAL = 64;
+const BASELINE_TOTAL = 60;
 
 // Ёзиш нақшлари (ўқиш — масалан жавоб объектидаги `bonusBalance` ёки `where('bonusBalance', ...)` — санаалмайди).
 //   W1 `.set/.update/.create(…, { … bonusBalance: …` (объект литерали ичида)

@@ -1328,16 +1328,20 @@ function attachSupermarket(exportsObj, deps) {
           t.update(refs[i], { stock: fromMilli(op.newStockMilli), ...(op.newStockMilli === 0 ? { smStatus: 'out_of_stock', smAutoOutOfStock: true } : {}) });
         });
         if (walletDebit > 0) {
-          t.set(userRef, { bonusBalance: balance - walletDebit, balanceUpdatedAt: ts() }, { merge: true });
-          settlementLedger.commitBonusInTx(t, bonusCtx, {
+          // Журнал бор, буюртма эса янги — аномалия: аввал bonusBalance журналсиз ечиларди, энди рад.
+          if (bonusCtx.jExists) throw fail('failed-precondition', 'INVALID_REQUEST', { errorCode: 'JOURNAL_EXISTS' });
+          // Ягона ёзиш йўли (W-1): журнал + bonusBalance (мутлақ, шу транзакцияда ўқилган) + wallet_ledger.
+          settlementLedger.walletPost(t, bonusCtx, {
             delta: -walletDebit, kind: 'order_wallet', refType: 'order', refId: orderRef.id,
             meta: { module: 'platform', subtype: 'supermarket', orderTotal: walletDebit, walletDebit, cashDue: 0, ...(incentiveApplied > 0 ? { incentiveApplied, grossTotal: priced.hold } : {}) },
             postedBy: userRef.id, postedRole: 'client',
-          });
-          t.set(userRef.collection('wallet_ledger').doc(), {
-            type: 'purchase_debit', amount: -walletDebit, module: 'platform', refType: 'order', refId: orderRef.id,
-            meta: { orderTotal: walletDebit, cashDue: 0, subtype: 'supermarket', weighHold: priced.extras, ...(incentiveApplied > 0 ? { incentiveApplied } : {}) },
-            createdAt: ts(), createdBy: 'client',
+            nextBalance: balance - walletDebit,
+            walletLedgerType: 'purchase_debit',
+            walletLedger: {
+              module: 'platform', refType: 'order', refId: orderRef.id,
+              meta: { orderTotal: walletDebit, cashDue: 0, subtype: 'supermarket', weighHold: priced.extras, ...(incentiveApplied > 0 ? { incentiveApplied } : {}) },
+              createdBy: 'client',
+            },
           });
         }
         if (incentiveApplied > 0) incentivesLib.applyIncentiveSpendInTx(t, db, admin, { uid: userRef.id, grants: incentiveGrants, plan, orderId: orderRef.id });
@@ -1536,16 +1540,20 @@ function attachSupermarket(exportsObj, deps) {
       if (moves) {
         const delta = adj.refund > 0 ? adj.refund : -adj.debit;
         const note = adj.refund > 0 ? REFUND_NOTES[action] : DEBIT_NOTES[action];
-        t.set(customerRef, { bonusBalance: bal + delta, balanceUpdatedAt: ts() }, { merge: true });
-        settlementLedger.commitBonusInTx(t, bonusCtx, {
+        // smAdjustSeq шу транзакцияда ошади — журнал бор бўлиши аномалия; аввал bonusBalance журналсиз ўзгарарди, энди рад.
+        if (bonusCtx.jExists) throw fail('failed-precondition', 'INVALID_REQUEST', { errorCode: 'JOURNAL_EXISTS' });
+        // Ягона ёзиш йўли (W-1).
+        settlementLedger.walletPost(t, bonusCtx, {
           delta, kind: adj.refund > 0 ? 'sm_adjust_refund' : 'sm_adjust_debit', refType: 'order', refId: orderId,
           meta: { action, seq, chargedBefore: charged, chargedAfter: adj.next },
           postedBy: actor, postedRole: actorRole || 'admin',
-        });
-        t.set(customerRef.collection('wallet_ledger').doc(), {
-          type: adj.refund > 0 ? 'order_partial_refund' : 'purchase_debit', amount: delta, module: 'platform', refType: 'order', refId: orderId,
-          meta: { subtype: 'supermarket', action, noteKey: note.key, messages: note.messages, note: note.messages.uz_Cyrl },
-          createdAt: ts(), createdBy: by,
+          nextBalance: bal + delta,
+          walletLedgerType: adj.refund > 0 ? 'order_partial_refund' : 'purchase_debit',
+          walletLedger: {
+            module: 'platform', refType: 'order', refId: orderId,
+            meta: { subtype: 'supermarket', action, noteKey: note.key, messages: note.messages, note: note.messages.uz_Cyrl },
+            createdBy: by,
+          },
         });
       }
       const weighPending = m.lines.some((l) => !l.removed && l.weighed && l.actualQty == null);

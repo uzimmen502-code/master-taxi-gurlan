@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/utils/formatters.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -11,6 +10,8 @@ import '../services/admin_market_service.dart';
 import '../widgets/admin_load_more_bar.dart';
 import '../widgets/market_ad_edit_dialog.dart';
 import '../widgets/market_complaints_bar.dart';
+import '../services/admin_moderation_modes_service.dart';
+import '../widgets/moderation_mode_bar.dart';
 
 class MarketModerationScreen extends StatefulWidget {
   const MarketModerationScreen({super.key});
@@ -242,7 +243,11 @@ class _MarketModerationScreenState extends State<MarketModerationScreen> {
     return Column(
       children: [
         _header(),
-        const _MarketAutoApproveBar(),
+        const ModerationModeBar(
+          mode: ModerationMode.market,
+          onLabel: 'Авто фаоллаштириш: ЁҚИҚ — янги эълонлар дарҳол актив',
+          offLabel: 'Қўлда фаоллаштириш — янги эълонлар «Кутилмоқда»га тушади',
+        ),
         const MarketComplaintsBar(),
         Expanded(
           child: _loading
@@ -1219,122 +1224,6 @@ class _MarketImageGalleryDialogState extends State<_MarketImageGalleryDialog> {
           ],
         ),
       ),
-    );
-  }
-}
-
-/// `settings/app.marketAutoApprove` — ҚЎЛДА / АВТО.
-class _MarketAutoApproveBar extends StatefulWidget {
-  const _MarketAutoApproveBar();
-
-  @override
-  State<_MarketAutoApproveBar> createState() => _MarketAutoApproveBarState();
-}
-
-class _MarketAutoApproveBarState extends State<_MarketAutoApproveBar> {
-  bool _busy = false;
-
-  Future<void> _setAuto(bool enabled) async {
-    final adminPhone = context.read<AdminAuthService>().phoneDigits ?? '';
-    if (adminPhone.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Admin telefon topilmadi — qayta kiring'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-    setState(() => _busy = true);
-    try {
-      await context.read<AdminMarketService>().setAutoApprove(
-            adminPhone: adminPhone,
-            enabled: enabled,
-          );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
-      );
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('settings')
-          .doc('app')
-          .snapshots(),
-      builder: (context, snap) {
-        final auto = snap.data?.data()?['marketAutoApprove'] == true;
-        return Container(
-          width: double.infinity,
-          margin: const EdgeInsets.fromLTRB(18, 10, 18, 0),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: auto ? AvaLight.okSoft : Colors.orange.shade50,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: auto ? AvaLight.ok : Colors.orange.shade200,
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                auto ? Icons.flash_on : Icons.admin_panel_settings,
-                color: auto ? AvaLight.ok : Colors.orange.shade800,
-                size: 22,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  auto
-                      ? 'Авто фаоллаштириш: ЁҚИҚ — янги эълонлар дарҳол актив'
-                      : 'Қўлда фаоллаштириш — янги эълонлар «Кутилмоқда»га тушади',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color:
-                        auto ? AvaLight.ok : Colors.orange.shade900,
-                  ),
-                ),
-              ),
-              if (_busy)
-                const SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              else ...[
-                OutlinedButton(
-                  onPressed: auto ? () => _setAuto(false) : null,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.orange.shade800,
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    minimumSize: const Size(0, 36),
-                  ),
-                  child: const Text('ҚЎЛДА', style: TextStyle(fontSize: 12)),
-                ),
-                const SizedBox(width: 8),
-                FilledButton.icon(
-                  onPressed: auto ? null : () => _setAuto(true),
-                  icon: const Icon(Icons.flash_on, size: 16),
-                  label: const Text('АВТО', style: TextStyle(fontSize: 12)),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.button,
-                    foregroundColor: AppColors.onPrimary,
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    minimumSize: const Size(0, 36),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        );
-      },
     );
   }
 }

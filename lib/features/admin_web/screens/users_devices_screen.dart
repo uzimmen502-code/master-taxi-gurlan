@@ -275,7 +275,14 @@ class _DevicesColumnPanel extends StatelessWidget {
                   },
                 ),
                 const SizedBox(height: 8),
-                const _DeviceBindingAutoApproveToggle(),
+                // Avvalgi «Avtomatik tasdiqlash» kaliti olib tashlandi: ega 2026-11-28 xavfsizlik qarori —
+                // server `deviceBindingAutoApprove` ni E'TIBORSIZ qoldiradi (yangi qurilma faqat «Бу сизми?»
+                // yoki admin «Қурилма тасдиқлари» orqali). Kalit ko'rinib tursa, admin uni ishlaydi deb o'ylardi.
+                const Text(
+                  'Янги қурилма автоматик тасдиқланмайди: фойдаланувчи эски телефонида «Бу сизми?» '
+                  'саволига жавоб беради ёки админ «Қурилма тасдиқлари» бўлимида кўриб чиқади.',
+                  style: TextStyle(fontSize: 12, color: Colors.black54),
+                ),
               ],
             ),
           ),
@@ -318,86 +325,6 @@ class _DevicesColumnPanel extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _DeviceBindingAutoApproveToggle extends StatefulWidget {
-  const _DeviceBindingAutoApproveToggle();
-
-  @override
-  State<_DeviceBindingAutoApproveToggle> createState() =>
-      _DeviceBindingAutoApproveToggleState();
-}
-
-class _DeviceBindingAutoApproveToggleState
-    extends State<_DeviceBindingAutoApproveToggle> {
-  final _service = DeviceBindingAdminService();
-  bool _busy = false;
-
-  Future<void> _setEnabled(bool value) async {
-    final adminPhone = _adminPhoneForCf(context);
-    if (adminPhone.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Admin telefon topilmadi — qayta kiring'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-    setState(() => _busy = true);
-    final err = await _service.setAutoApprove(
-      adminPhone: adminPhone,
-      enabled: value,
-    );
-    if (!mounted) return;
-    setState(() => _busy = false);
-    if (err != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(err), backgroundColor: Colors.red),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('settings')
-          .doc('app')
-          .snapshots(),
-      builder: (context, snap) {
-        final enabled = snap.data?.data()?['deviceBindingAutoApprove'] == true;
-        return Row(
-          children: [
-            Expanded(
-              child: Text(
-                enabled
-                    ? 'Avtomatik tasdiqlash: YOQIQ'
-                    : 'Avtomatik tasdiqlash: O\'CHIQ',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: enabled ? AvaLight.ok : Colors.black54,
-                ),
-              ),
-            ),
-            if (_busy)
-              const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            else
-              Switch.adaptive(
-                value: enabled,
-                activeThumbColor: AppColors.primary,
-                onChanged: _setEnabled,
-              ),
-          ],
-        );
-      },
     );
   }
 }

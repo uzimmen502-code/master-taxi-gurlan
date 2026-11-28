@@ -5,11 +5,14 @@ import 'package:flutter/services.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
+import '../services/admin_moderation_modes_service.dart';
+import '../widgets/moderation_mode_bar.dart';
 
 /// Admin — 🏠 Кўчмас мулк нархлари ва созламалари.
 ///
-/// `settings/app` ҳужжатига ёзади: `realtyPricing`, `realtyAgentPhone`,
-/// `realtyAutoApprove`. Firestore rule: `settings/{docId}` — `isAdmin()`
+/// `settings/app` ҳужжатига ёзади: `realtyPricing`, `realtyAgentPhone`.
+/// `realtyAutoApprove` — ФАҚАТ [ModerationModeBar] → `adminSetModerationMode` (audit;
+/// rules уни клиент ёзувидан ёпади, ega 2026-11-28 audit C-1). Firestore rule: `settings/{docId}` — `isAdmin()`
 /// бўлса client тўғридан-тўғри ёзади (`tv_ad_pricing_admin_screen.dart`
 /// билан бир хил нақш, CF шарт эмас).
 ///
@@ -49,7 +52,6 @@ class _RealtySettingsAdminPanelState extends State<RealtySettingsAdminPanel> {
   };
   final _agentPhoneCtrl = TextEditingController();
 
-  bool _autoApprove = true;
   bool _loading = true;
   bool _saving = false;
   String? _error;
@@ -97,7 +99,6 @@ class _RealtySettingsAdminPanelState extends State<RealtySettingsAdminPanel> {
           .get();
       final data = doc.data() ?? const <String, dynamic>{};
       _agentPhoneCtrl.text = '${data['realtyAgentPhone'] ?? ''}';
-      _autoApprove = data['realtyAutoApprove'] != false;
     } catch (e) {
       _error = 'Юклашда хатолик: $e';
     }
@@ -166,7 +167,6 @@ class _RealtySettingsAdminPanelState extends State<RealtySettingsAdminPanel> {
           'realtyPricing': pricing,
           'realtyPackagePricing': packagePricing,
           'realtyAgentPhone': phone,
-          'realtyAutoApprove': _autoApprove,
           'realtyPricingUpdatedAt': FieldValue.serverTimestamp(),
         },
         SetOptions(merge: true),
@@ -286,15 +286,12 @@ class _RealtySettingsAdminPanelState extends State<RealtySettingsAdminPanel> {
                 ),
               ),
               const SizedBox(height: 16),
-              SwitchListTile(
-                value: _autoApprove,
-                onChanged: (v) => setState(() => _autoApprove = v),
-                title: const Text('Эълонлар текширувсиз лентага тушсин'),
-                subtitle: const Text(
-                  'Ўчирилса — ҳар бир янги ва таҳрирланган эълон '
-                  '«Текширувда» бўлимига тушади',
-                ),
-                contentPadding: EdgeInsets.zero,
+              // «Сақлаш» тугмасига боғлиқ эмас — дарҳол серверга (audit) ёзилади.
+              const ModerationModeBar(
+                mode: ModerationMode.realty,
+                margin: EdgeInsets.zero,
+                onLabel: 'АВТО — эълонлар текширувсиз лентага тушади',
+                offLabel: 'ҚЎЛДА — ҳар бир янги ва таҳрирланган эълон «Текширувда» бўлимига тушади',
               ),
               const SizedBox(height: 20),
 

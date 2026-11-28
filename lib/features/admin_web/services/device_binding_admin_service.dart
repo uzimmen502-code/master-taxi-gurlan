@@ -7,24 +7,8 @@ class DeviceBindingAdminService {
 
   final FirebaseFunctions _functions;
 
-  Future<String?> setAutoApprove({
-    required String adminPhone,
-    required bool enabled,
-  }) async {
-    try {
-      final fn =
-          _functions.httpsCallable('adminSetDeviceBindingAutoApprove');
-      await fn.call(<String, dynamic>{
-        'adminPhone': adminPhone,
-        'enabled': enabled,
-      });
-      return null;
-    } on FirebaseFunctionsException catch (e) {
-      return e.message ?? e.code;
-    } catch (e) {
-      return 'Xatolik: $e';
-    }
-  }
+  // `setAutoApprove` (adminSetDeviceBindingAutoApprove) olib tashlandi — ega 2026-11-28: server sozlamani
+  // e'tiborsiz qoldiradi, admin UI'da kalit yo'q.
 
   Future<String?> autoApprove({
     required String adminPhone,

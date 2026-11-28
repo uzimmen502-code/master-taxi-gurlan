@@ -10,6 +10,8 @@ import '../../../repositories/dating_repository.dart';
 import '../../dating/services/dating_service.dart';
 import '../services/admin_auth_service.dart';
 import '../services/admin_dating_service.dart';
+import '../services/admin_moderation_modes_service.dart';
+import '../widgets/moderation_mode_bar.dart';
 
 /// Admin: tanishuv profillari moderatsiyasi + shikoyatlar.
 class DatingModerationScreen extends StatelessWidget {
@@ -44,7 +46,11 @@ class DatingModerationScreen extends StatelessWidget {
         ),
         body: const Column(
           children: [
-            _DatingAutoApproveBar(),
+            ModerationModeBar(
+              mode: ModerationMode.dating,
+              onLabel: 'Автоматик тасдиқлаш: ЁҚИҚ — янги профиллар дарҳол тасдиқланади',
+              offLabel: 'Қўлда тасдиқлаш — янги профиллар «Текширувда»га тушади',
+            ),
             Expanded(
               child: TabBarView(
                 children: [
@@ -59,129 +65,6 @@ class DatingModerationScreen extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _DatingAutoApproveBar extends StatefulWidget {
-  const _DatingAutoApproveBar();
-
-  @override
-  State<_DatingAutoApproveBar> createState() => _DatingAutoApproveBarState();
-}
-
-class _DatingAutoApproveBarState extends State<_DatingAutoApproveBar> {
-  bool _busy = false;
-
-  String _adminPhone(BuildContext context) {
-    final auth = context.read<AdminAuthService>();
-    if (auth.phoneDigits != null && auth.phoneDigits!.isNotEmpty) {
-      return auth.phoneDigits!;
-    }
-    final d = phoneDigits(auth.phone ?? '');
-    return d.length >= 9 ? d : '';
-  }
-
-  Future<void> _setAuto(bool enabled) async {
-    final adminPhone = _adminPhone(context);
-    if (adminPhone.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Admin telefon topilmadi — qayta kiring'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-    setState(() => _busy = true);
-    try {
-      await DatingService.setAutoApprove(
-        adminPhone: adminPhone,
-        enabled: enabled,
-      );
-    } on FirebaseFunctionsException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message ?? e.code)),
-      );
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('settings')
-          .doc('app')
-          .snapshots(),
-      builder: (context, snap) {
-        final auto = snap.data?.data()?['datingAutoApprove'] == true;
-        return Container(
-          width: double.infinity,
-          margin: const EdgeInsets.fromLTRB(12, 10, 12, 4),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: auto ? AvaLight.okSoft : Colors.orange.shade50,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: auto ? AvaLight.ok : Colors.orange.shade200,
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                auto ? Icons.flash_on : Icons.admin_panel_settings,
-                color: auto ? AvaLight.ok : Colors.orange.shade800,
-                size: 22,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  auto
-                      ? 'Автоматик тасдиқлаш: YOQIQ — янги профиллар дарҳол тасдиқланади'
-                      : 'Қўлда тасдиқлаш — янги профиллар «Текширувда»га тушади',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: auto ? AvaLight.ok : Colors.orange.shade900,
-                  ),
-                ),
-              ),
-              if (_busy)
-                const SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              else ...[
-                OutlinedButton(
-                  onPressed: auto ? () => _setAuto(false) : null,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.orange.shade800,
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    minimumSize: const Size(0, 36),
-                  ),
-                  child: const Text('ҚЎЛДА', style: TextStyle(fontSize: 12)),
-                ),
-                const SizedBox(width: 8),
-                FilledButton.icon(
-                  onPressed: auto ? null : () => _setAuto(true),
-                  icon: const Icon(Icons.flash_on, size: 16),
-                  label: const Text('АВТО', style: TextStyle(fontSize: 12)),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.button,
-                    foregroundColor: AppColors.onPrimary,
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    minimumSize: const Size(0, 36),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        );
-      },
     );
   }
 }

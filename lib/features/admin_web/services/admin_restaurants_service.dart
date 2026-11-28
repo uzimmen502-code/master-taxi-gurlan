@@ -48,8 +48,6 @@ class AdminRestaurantsService {
   Future<Map<String, dynamic>> setFeeSettings(Map<String, dynamic> changes, {required String reason}) =>
       _call('adminSetRestaurantFeeSettings', {...changes, 'reason': reason});
 
-  Future<void> setAutoApprove(bool enabled) => _call('adminSetRestaurantAutoApprove', {'enabled': enabled});
-
   Future<List<String>> setStage({required String stage, required List<String> testerIds}) async {
     final r = await _call('adminSetRestaurantsStage', {'stage': stage, 'testerIds': testerIds});
     return ((r['testerIds'] as List?) ?? const []).map((e) => e.toString()).toList();

@@ -67,7 +67,8 @@ class FactoriesRepository {
   }
 
   Future<void> adminSetAutoApprove(bool enabled) async {
-    await _fns.httpsCallable('adminSetProducerAutoApprove').call<Object?>({'enabled': enabled});
+    // Yagona moderatsiya rejimi callable'i (audit; ega 2026-11-28 audit C-1). Eski adminSetProducerAutoApprove ham ishlaydi.
+    await _fns.httpsCallable('adminSetModerationMode').call<Object?>({'mode': 'producerVerify', 'enabled': enabled});
   }
 
   /// `settings/app.producerVerifyAutoApprove` (админ экрани).

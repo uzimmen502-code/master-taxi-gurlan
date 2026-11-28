@@ -320,6 +320,52 @@ async function main() {
     assert.strictEqual((await call('claimIncentive', { programId: 'women' }, NB)).amount, 100000);
   });
 
+  await check('P3 sof: kunlik budjet — 0 yoki miqdor ≤ kunlik ≤ umumiy (ega 2026-11-28)', () => {
+    assert.strictEqual(validateProgram(women({ budgetDaily: 0 })).budgetDaily, 0);
+    assert.strictEqual(validateProgram(women({ budgetDaily: 100000 })).budgetDaily, 100000, 'chegara: = miqdor');
+    assert.strictEqual(validateProgram(women({ budgetDaily: 300000 })).budgetDaily, 300000, 'chegara: = umumiy');
+    assert.throws(() => validateProgram(women({ budgetDaily: 99999 })), /VALIDATION_budgetDaily/);
+    assert.throws(() => validateProgram(women({ budgetDaily: 1 })), /VALIDATION_budgetDaily/);
+    assert.throws(() => validateProgram(women({ budgetDaily: 300001 })), /VALIDATION_budgetDaily/);
+    assert.throws(() => validateProgram(women({ budgetDaily: -1 })), /VALIDATION_budgetDaily/);
+    // Prod hujjatlari (women_100k 100k/1M/10M, car_200k 200k/2M/20M) — o'tadi.
+    assert.ok(validateProgram(women({ key: 'women_100k', budgetTotal: 10000000, budgetDaily: 1000000 })));
+    assert.ok(validateProgram(car({ key: 'car_200k', budgetTotal: 20000000, budgetDaily: 2000000 })));
+    // Hamma uchun (newUsersSince = 2020-01-01) — qabul qilinadi.
+    assert.strictEqual(validateProgram(women({ audience: { gender: 'female', newUsersSince: Date.UTC(2020, 0, 1) } })).audience.newUsersSinceMs, Date.UTC(2020, 0, 1));
+  });
+
+  await check('K1 maxsus dasturlar (kind / ro\'yxat) — umumiy upsert va bosqich PROGRAM_SPECIAL, hujjat o\'zgarmaydi', async () => {
+    const base = { title: { uz_Cyrl: 'С', uz_Latn: 'S', ru: 'С' }, stage: 'off', amount: 50000, buckets: [], counters: { grantedAmount: 0 } };
+    await db.doc('incentive_programs/car_insurance_bonus').set({ ...base, kind: 'car_insurance_bonus', key: 'car_insurance_bonus' });
+    await db.doc('incentive_programs/spouse_link').set({ ...base, kind: 'spouse_link', key: 'spouse_link' });
+    await db.doc('incentive_programs/other_special').set({ ...base, kind: 'something_new', key: 'other_special' });
+    await expectCode(call('adminSetIncentiveStage', { programId: 'car_insurance_bonus', stage: 'public' }, ADMIN), 'PROGRAM_SPECIAL');
+    await expectCode(call('adminSetIncentiveStage', { programId: 'spouse_link', stage: 'public' }, ADMIN), 'PROGRAM_SPECIAL');
+    await expectCode(call('adminSetIncentiveStage', { programId: 'other_special', stage: 'internal' }, ADMIN), 'PROGRAM_SPECIAL');
+    await expectCode(call('adminUpsertIncentiveProgram', { ...women({ key: 'car_insurance_bonus', stage: 'public' }), programId: 'car_insurance_bonus' }, ADMIN), 'PROGRAM_SPECIAL');
+    await expectCode(call('adminUpsertIncentiveProgram', { ...women({ key: 'other_special' }), programId: 'other_special' }, ADMIN), 'PROGRAM_SPECIAL');
+    // Hali yaratilmagan maxsus ID ham band (relatives_birthdays, relative_link).
+    await expectCode(call('adminUpsertIncentiveProgram', women({ key: 'relative_link' }), ADMIN), 'PROGRAM_SPECIAL');
+    await expectCode(call('adminSetIncentiveStage', { programId: 'relatives_birthdays', stage: 'off' }, ADMIN), 'PROGRAM_SPECIAL');
+    assert.strictEqual((await progDoc('car_insurance_bonus')).stage, 'off');
+    assert.strictEqual((await progDoc('spouse_link')).stage, 'off');
+    assert.strictEqual((await progDoc('relative_link')), undefined);
+    // Oddiy dastur bosqichi — ishlaydi (regressiya yo'q).
+    await call('adminSetIncentiveStage', { programId: 'women', stage: 'off' }, ADMIN);
+    assert.strictEqual((await progDoc('women')).stage, 'off');
+  });
+
+  await check('K2 «Yangi dastur» band kalit bilan — PROGRAM_KEY_TAKEN, mavjud dastur ustidan yozilmaydi; tahrir (programId) — ishlaydi', async () => {
+    const before = await progDoc('women');
+    await expectCode(call('adminUpsertIncentiveProgram', women({ amount: 1000, budgetTotal: 1000000 }), ADMIN), 'PROGRAM_KEY_TAKEN');
+    const after = await progDoc('women');
+    assert.deepStrictEqual([after.amount, after.version], [before.amount, before.version]);
+    await call('adminUpsertIncentiveProgram', { ...women({ budgetTotal: 5000000, budgetDaily: 500000 }), programId: 'women' }, ADMIN);
+    assert.strictEqual((await progDoc('women')).budgetDaily, 500000);
+    await expectCode(call('adminUpsertIncentiveProgram', { ...women({ budgetTotal: 5000000, budgetDaily: 50000 }), programId: 'women' }, ADMIN), 'VALIDATION_budgetDaily');
+  });
+
   const passed = results.filter(Boolean).length;
   console.log(`${passed}/${results.length} passed`);
   process.exit(passed === results.length ? 0 : 1);

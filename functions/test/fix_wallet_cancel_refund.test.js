@@ -51,20 +51,24 @@ async function orderPaidThenCancelledWithoutJournal(uid, orderId, amount) {
     legs: [{ account: ledger.passengerCreditAccount(uid), dr: amount }, { account: 'admin_clearing', cr: amount }],
   }, { mirrorBonus: true });
   await db.collection('users').doc(uid).update({ bonusBalance: admin.firestore.FieldValue.increment(amount) });
+  const now = admin.firestore.FieldValue.serverTimestamp();
   await db.collection('users').doc(uid).collection('wallet_ledger').add({
-    type: 'order_cancel_refund', amount, refType: 'order', refId: orderId, module: 'platform',
+    type: 'purchase_debit', amount: -amount, refType: 'order', refId: orderId, module: 'platform', createdAt: now,
+  });
+  await db.collection('users').doc(uid).collection('wallet_ledger').add({
+    type: 'order_cancel_refund', amount, refType: 'order', refId: orderId, module: 'platform', createdAt: now,
   });
 }
 async function seed() {
   await clearEmulator();
   await db.collection('users').doc(U).set({ phone: U });
-  await topup(U, 19562, 'opening:x');
+  await topup(U, 19562, `opening:${U}`);
   await orderPaidThenCancelledWithoutJournal(U, 'ord_Ix7u', 17000);
   await orderPaidThenCancelledWithoutJournal(U, 'ord_5xum', 2562);
   await db.collection('users').doc(OK).set({ phone: OK });
-  await topup(OK, 5000, 'top:ok');
+  await topup(OK, 5000, `opening:${OK}`);
   await db.collection('users').doc(BAD).set({ phone: BAD });
-  await topup(BAD, 1000, 'top:bad');
+  await topup(BAD, 1000, `opening:${BAD}`);
   await orderPaidThenCancelledWithoutJournal(BAD, 'ord_bad', 1000);
   await db.collection('users').doc(BAD).update({ bonusBalance: admin.firestore.FieldValue.increment(500) });
 }
@@ -157,6 +161,27 @@ async function seed() {
     assert.strictEqual(plan[0].reason, 'row_check_failed');
     const res = await tool.applyPlan(db, plan);
     assert.strictEqual(res.posted.length, 0);
+  });
+
+  await check('F8 yozishdan keyingi tekshiruv: BAD qolsa — ok:false; BAD tuzatilsa — I-1/I-2/I-3 hammasi yashil', async () => {
+    await seed();
+    await tool.applyPlan(db, await tool.planAll(db));
+    const quiet = console.log;
+    console.log = () => {};
+    let v1;
+    let v2;
+    try {
+      v1 = await tool.verifyAfterApply(db);
+      // BAD'даги қўшимча 500 олиб ташланса — фарқ айнан журналсиз қайтимга тенг бўлади ва восита уни ҳам ёпади.
+      await db.collection('users').doc(BAD).update({ bonusBalance: admin.firestore.FieldValue.increment(-500) });
+      const res = await tool.applyPlan(db, await tool.planAll(db));
+      assert.strictEqual(res.posted.length, 1);
+      v2 = await tool.verifyAfterApply(db);
+    } finally { console.log = quiet; }
+    assert.strictEqual(v1.ok, false);
+    assert.deepStrictEqual(v1.report.invariants.I1.mismatches.map((m) => m.uid), [BAD]);
+    assert.strictEqual(v2.ok, true, JSON.stringify(v2.report.invariants));
+    assert.strictEqual(v2.report.invariants.I1.ok && v2.report.invariants.I2.ok && v2.report.invariants.I3.ok, true);
   });
 
   const passed = results.filter(Boolean).length;

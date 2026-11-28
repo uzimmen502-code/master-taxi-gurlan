@@ -4304,6 +4304,13 @@ service cloud.firestore {
       allow create, update, delete: if false; // CF (Admin SDK) only
     }
 
+    // Ҳамён инвариантлари кунлик ҳисоботи (walletInvariantDailyCheck, W-1 3-босқич).
+    // Ичида uid ва баланс фарқлари бор — фақат молия/аудит ўқийди, ёзиш фақат CF.
+    match /ledger_reconcile_runs/{runId} {
+      allow read: if isFinanceReader();
+      allow create, update, delete: if false; // CF (Admin SDK) only
+    }
+
     // ─── Юк биржаси (умумий эълонлар) ─────────────────────────────────
     function yukListingCreateOk() {
       let d = request.resource.data;

@@ -244,9 +244,32 @@ async function main() {
   console.log(`  Ёзилди: ${res.posted.length}; аллақачон бор: ${res.idempotent.length}; ` +
       `STALE: ${res.stale.length}; хато: ${res.failed.length}`);
   for (const f of res.failed) console.log(`    ${mask(f.uid)} ${mask(f.orderId)}: ${f.error}`);
-  const rep = await ledger.reconcile(db);
-  console.log(`\nReconcile: balanced=${rep.balanced} identityOk=${rep.identityOk} ` +
-      `projectionOk=${rep.projectionOk} mismatches=${rep.mismatches.length}`);
+  const v = await verifyAfterApply(db);
+  if (!v.ok) {
+    console.error('\n❌ ЁЗИШДАН КЕЙИНГИ ТЕКШИРУВ ЎТМАДИ — юқоридаги фарқларни кўриб чиқинг; керак бўлса --rollback.');
+    process.exitCode = 2;
+  }
+}
+
+/**
+ * Ёзишдан кейин ҲАММА ҳамён учун I-1, I-2, I-3 ва аномалиялар ЯШИЛ бўлиши шарт (wallet_invariants.js — кунлик
+ * текширув билан бир хил код). I-3F (тўлиқ тарих) — маълум тарихий фарқлар `wallet_history_corrections.js`да;
+ * у алоҳида чиқарилади ва бу восита натижасига таъсир қилмайди.
+ */
+async function verifyAfterApply(db) {
+  // eslint-disable-next-line global-require
+  const inv = require(path.join(__dirname, '..', 'wallet_invariants'));
+  const rep = inv.evaluate(await inv.collectState(db));
+  const i = rep.invariants;
+  const ok = i.I1.ok && i.I2.ok && i.I3.ok && i.anomalies.ok;
+  console.log(`\nТекширув (${rep.wallets} ҳамён): I-1 ${i.I1.ok ? 'OK' : `ХАТО ${i.I1.mismatchCount}`}, ` +
+      `I-2 ${i.I2.ok ? 'OK' : 'ХАТО'}, I-3 ${i.I3.ok ? 'OK' : `ХАТО ${i.I3.mismatchCount}`}, ` +
+      `аномалия ${i.anomalies.count}; I-3F (тарих, маълумот учун) ${i.I3F.mismatchCount}`);
+  for (const m of i.I1.mismatches) console.log(`    I-1 ${mask(m.uid)}: bonusBalance ${m.bonusBalance}, ledger ${m.ledger}`);
+  for (const m of i.I3.mismatches) console.log(`    I-3 ${mask(m.uid)}: фарқ ${m.diff}`);
+  if (!i.I2.ok) console.log(`    I-2: ${JSON.stringify({ e: i.I2.entryErrors, a: i.I2.accountMismatches })}`);
+  for (const m of i.I3F.mismatches) console.log(`    I-3F ${mask(m.uid)}: фарқ ${m.diff}`);
+  return { ok, report: rep };
 }
 
 if (require.main === module) {
@@ -256,4 +279,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { planAll, planUser, applyPlan, rollback, TAG, journalId, refundKey };
+module.exports = { planAll, planUser, applyPlan, rollback, verifyAfterApply, TAG, journalId, refundKey };

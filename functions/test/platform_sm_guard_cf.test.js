@@ -64,8 +64,8 @@ async function main() {
   await check('G3 эски товар аввалгидек (regression); бўш smGroupId — эски товар', async () => {
     const r = await place([{ productId: 'legacy', qty: 2 }]);
     const o = (await db.doc(`orders/${r.orderId}`).get()).data();
-    // pricingVersion 2: 1–9 дона +5 % (platform_pricing) → 1050 × 2 = 2100; fee 11 % = 231
-    assert.deepStrictEqual([o.type, o.itemsTotal, o.deliveryFee, o.total], ['platform', 2100, 231, 2331]);
+    // Ягона нарх (эга 2026-11-28: поғоналар йўқ) → 1000 × 2 = 2000; fee 11 % = 220
+    assert.deepStrictEqual([o.type, o.itemsTotal, o.deliveryFee, o.total], ['platform', 2000, 220, 2220]);
     const r2 = await place([{ productId: 'sm_empty', qty: 1 }]);
     assert.ok(r2.orderId);
   });

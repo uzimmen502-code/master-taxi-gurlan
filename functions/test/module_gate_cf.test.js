@@ -12,7 +12,7 @@
  *       ўқиш хатоси → FAIL-OPEN; 60 с кэш
  *   B*  upsertMyBusiness (`business_map`): ёпиқ → MODULE_CLOSED; таҳрир ва дубликат — тўсилмайди
  *   J*  submitJobAd (`jobs`): ёпиқ → MODULE_CLOSED; ўша requestId дубликати — тўсилмайди
- *   M*  submitMarketAd (`cheap_products_home`): ёпиқ → MODULE_CLOSED; requestId идемпотентлиги
+ *   M*  submitMarketAd — F-1 (эга 2026-11-28): эски «Аралаш» эълони ёпиқ → MARKET_AD_RETIRED (ёзув йўқ)
  *   R*  restaurantRegister (`restaurants`): ёпиқ → MODULE_CLOSED; requestId идемпотентлиги
  *   A*  onAdUpdate: бозор эълони контенти ўзгарса → pending (фақат ҚЎЛДА режим, фақат 4 калит)
  *   T*  onTvClipVideoReplacedV2: клип ном/тавсиф/муқоваси ўзгарса → pending (content_edited)
@@ -279,59 +279,27 @@ async function main() {
     assert.strictEqual((await call('submitJobAd', { ...JOB, requestId: rid() }, U_OTHER)).ok, true);
   });
 
-  // ── M: submitMarketAd ────────────────────────────────────────────────
+  // ── M: submitMarketAd — F-1 (ega 2026-11-28): eski «Аралаш» e'loni YOPIQ ─────────
+  // Avvalgi M1–M5 (requestId idempotentligi, MODULE_CLOSED) — yangi e'lon umuman yaratilmaydi.
   await reset();
-  await check('M1 cheap_products_home enabled: bir xil requestId ikki marta → BITTA e\'lon, birinchi natija', async () => {
+  await check('M1 F-1: modul ochiq — submitMarketAd → MARKET_AD_RETIRED (3 til), e\'lon YO\'Q', async () => {
     await setDefaults({ cheap_products_home: 'enabled' });
-    const id = rid();
-    const r1 = await call('submitMarketAd', { ...marketAd(U_GURLAN), requestId: id }, U_GURLAN);
-    const r2 = await call('submitMarketAd', { ...marketAd(U_GURLAN), requestId: id }, U_GURLAN);
-    assert.strictEqual(r1.status, 'pending');
-    assert.strictEqual(r2.adId, r1.adId);
-    assert.strictEqual(r2.duplicate, true);
-    assert.strictEqual(r1.duplicate, undefined);
-    assert.strictEqual(await count('ads', 'ownerId', U_GURLAN), 1);
+    await expectCode(call('submitMarketAd', { ...marketAd(U_GURLAN), requestId: rid() }, U_GURLAN), 'MARKET_AD_RETIRED', 'failed-precondition');
+    await assert.rejects(call('submitMarketAd', marketAd(U_GURLAN), U_GURLAN), (e) => {
+      for (const l of ['uz_Cyrl', 'uz_Latn', 'ru']) assert.ok(e.details.messages[l], l);
+      assert.ok(e.details.messages.uz_Cyrl.includes('«＋»'));
+      return true;
+    });
+    assert.strictEqual(await count('ads', 'ownerId', U_GURLAN), 0);
   });
-  await check('M2 boshqa requestId → ikkinchi e\'lon; requestId\'siz (eski APK) → har safar yangi; yaroqsiz (7 belgi) → idempotent emas', async () => {
-    await call('submitMarketAd', { ...marketAd(U_GURLAN), requestId: rid() }, U_GURLAN);
-    assert.strictEqual(await count('ads', 'ownerId', U_GURLAN), 2);
-    await call('submitMarketAd', marketAd(U_GURLAN), U_GURLAN);
-    await call('submitMarketAd', marketAd(U_GURLAN), U_GURLAN);
-    assert.strictEqual(await count('ads', 'ownerId', U_GURLAN), 4);
-    await call('submitMarketAd', { ...marketAd(U_GURLAN), requestId: 'abcdefg' }, U_GURLAN);
-    await call('submitMarketAd', { ...marketAd(U_GURLAN), requestId: 'abcdefg' }, U_GURLAN);
-    assert.strictEqual(await count('ads', 'ownerId', U_GURLAN), 6);
-    // chegara: aynan 8 belgi — idempotent
-    await call('submitMarketAd', { ...marketAd(U_GURLAN), requestId: 'abcdefgh' }, U_GURLAN);
-    await call('submitMarketAd', { ...marketAd(U_GURLAN), requestId: 'abcdefgh' }, U_GURLAN);
-    assert.strictEqual(await count('ads', 'ownerId', U_GURLAN), 7);
-  });
-  await check('M3 boshqa foydalanuvchi o\'sha requestId bilan — o\'z e\'loni', async () => {
-    const id = rid();
-    const a = await call('submitMarketAd', { ...marketAd(U_GURLAN), requestId: id }, U_GURLAN);
-    const b = await call('submitMarketAd', { ...marketAd(U_OTHER), requestId: id }, U_OTHER);
-    assert.notStrictEqual(a.adId, b.adId);
-  });
-  await check('M4 POYGA: bir xil requestId bilan ikki parallel chaqiruv — bitta e\'lon', async () => {
-    const id = rid();
-    const before = await count('ads', 'ownerId', U_OTHER);
-    const out = await Promise.all([
-      call('submitMarketAd', { ...marketAd(U_OTHER), requestId: id }, U_OTHER),
-      call('submitMarketAd', { ...marketAd(U_OTHER), requestId: id }, U_OTHER),
-    ]);
-    assert.strictEqual(out[0].adId, out[1].adId);
-    assert.strictEqual(await count('ads', 'ownerId', U_OTHER), before + 1);
-  });
-  await check('M5 hidden → MODULE_CLOSED; yopiq modulda o\'sha requestId — dublikat (xato emas)', async () => {
-    const id = rid();
-    const first = await call('submitMarketAd', { ...marketAd(U_GURLAN), requestId: id }, U_GURLAN);
+  await check('M2 F-1: modul yopiq ham MARKET_AD_RETIRED (darvozadan oldin); boshqa foydalanuvchi ham', async () => {
     await setDefaults({ cheap_products_home: 'hidden' });
-    await expectCode(call('submitMarketAd', { ...marketAd(U_GURLAN), requestId: rid() }, U_GURLAN), 'MODULE_CLOSED', 'failed-precondition');
-    const again = await call('submitMarketAd', { ...marketAd(U_GURLAN), requestId: id }, U_GURLAN);
-    assert.strictEqual(again.adId, first.adId);
-    assert.strictEqual(again.duplicate, true);
+    await expectCode(call('submitMarketAd', { ...marketAd(U_OTHER), requestId: rid() }, U_OTHER), 'MARKET_AD_RETIRED', 'failed-precondition');
+    assert.strictEqual((await db.collection('ads').get()).size, 0);
   });
-
+  await check('M3 F-1: yaroqsiz kiritish ham yozuvsiz rad (validatsiyadan oldin)', async () => {
+    await expectCode(call('submitMarketAd', { title: '' }, U_GURLAN), 'MARKET_AD_RETIRED', 'failed-precondition');
+  });
   // ── R: restaurantRegister ────────────────────────────────────────────
   await reset();
   await check('R1 restaurants enabled: bir xil requestId → bitta restoran (a\'zo ham bitta)', async () => {
@@ -387,7 +355,7 @@ async function main() {
     moderatedAt: admin.firestore.Timestamp.fromMillis(1000),
     expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + 60 * 86400000),
   });
-  await check('A1 QO\'LDA: egasi title/description/imageUrls/price o\'zgartirsa → pending (owner_edit) + pending muddati', async () => {
+  await check('A1 QO\'LDA: egasi title/description/imageUrls/price o\'zgartirsa → pending (owner_edit); muddat o\'zgarmaydi (F-1)', async () => {
     for (const [i, patch] of [{ title: 'Velosiped 2' }, { description: 'Boshqa' }, { imageUrls: ['https://x/ads%2F2.jpg'] }, { price: 350001 }].entries()) {
       const id = `ma${i}`;
       await seedMarket(id);
@@ -395,12 +363,13 @@ async function main() {
       assert.strictEqual(d.status, 'pending', JSON.stringify(patch));
       assert.strictEqual(d.moderationReason, 'owner_edit');
     }
-    // Ikkinchi trigger (active → pending) pending muddatini yozadi — mavjud zanjir.
+    // F-1 (ega 2026-11-28): ikkinchi trigger (active → pending) muddatni UZAYTIRMAYDI — eski e'lon o'z TTL'i bilan tugaydi.
     const ref = db.collection('ads').doc('ma0');
     const after = await ref.get();
+    const expBefore = after.data().expiresAt.toMillis();
     await fns.onAdUpdate.run({ before: { data: () => ({ ...after.data(), status: 'active' }) }, after }, { params: { adId: 'ma0' } });
     const exp = (await ref.get()).data().expiresAt.toMillis();
-    assert.ok(exp < Date.now() + 40 * 86400000, 'pending TTL');
+    assert.strictEqual(exp, expBefore, 'F-1: expiresAt o\'zgarmaydi');
   });
   await check('A2 hisoblagich (views) / sellerName / searchTokens o\'zgarishi → active qoladi', async () => {
     await seedMarket('mb');

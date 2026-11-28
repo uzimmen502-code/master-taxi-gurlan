@@ -397,12 +397,19 @@ async function main() {
     await renew({ collection: 'realty_listings', id: 're1' });
     assert.strictEqual((await get('realty_listings', 're1')).status, 'pending');
   });
-  await check('R3 ads renew — муддати ўзи тугаган inactive → pending; админ рад этгани — LISTING_NOT_EXPIRED', async () => {
+  // F-1 (эга 2026-11-28): эски «Аралаш» эълони (`ads`) қайта жойлаштирилмайди — MARKET_AD_RETIRED, ёзув йўқ.
+  await check('R3 ads renew — F-1: муддати ўзи тугаган inactive ҳам MARKET_AD_RETIRED (3 тил), inactive қолади; бегона — NOT_OWNER', async () => {
     await db.collection('ads').doc('ae1').set({ type: 'cheap_product', ownerId: OWNER, status: 'inactive', autoExpiredAt: TS.now() });
-    await renew({ collection: 'ads', id: 'ae1' });
-    assert.strictEqual((await get('ads', 'ae1')).status, 'pending');
+    await assert.rejects(renew({ collection: 'ads', id: 'ae1' }), (e) => {
+      assert.strictEqual(e.code, 'failed-precondition');
+      assert.strictEqual(e.details.code, 'MARKET_AD_RETIRED');
+      for (const l of ['uz_Cyrl', 'uz_Latn', 'ru']) assert.ok(e.details.messages[l], l);
+      return true;
+    });
+    assert.strictEqual((await get('ads', 'ae1')).status, 'inactive');
     await db.collection('ads').doc('ae2').set({ type: 'cheap_product', ownerId: OWNER, status: 'inactive', autoExpiredAt: TS.now(), adminRejected: true });
-    await expectCode(renew({ collection: 'ads', id: 'ae2' }), 'LISTING_NOT_EXPIRED');
+    await expectCode(renew({ collection: 'ads', id: 'ae2' }), 'MARKET_AD_RETIRED');
+    await expectCode(renew({ collection: 'ads', id: 'ae1' }, OTHER), 'NOT_OWNER');
   });
 
   // ── Супуриш ──

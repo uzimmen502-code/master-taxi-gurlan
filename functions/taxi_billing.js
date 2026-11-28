@@ -59,8 +59,24 @@ const EARNINGS_ACCOUNT = 'earnings:ava_taxi_fee';
 const SEAT_BASIS = 4;
 /** Starter tugashiga shuncha kun qolganda haydovchiga «AVA haqi» xabari ko'rsatiladi (ega, 2026-10-15). */
 const STARTER_NOTICE_DAYS = 3;
-/** 2% = 200 bps. Butun son arifmetikasi uchun bps. */
-const RATE_BPS = 200;
+/**
+ * 2% = 200 bps — STANDART (sozlama yo'q bo'lsa). Butun son arifmetikasi uchun bps.
+ * Ega 2026-11-28 (takrorlanishlar auditi T-4): komissiya admin tomonidan o'zgartiriladi —
+ * `taxi_commission/current {bps, version}` (faqat CF `adminSetTaxiCommission`, versiya +
+ * o'zgarmas tarix `taxi_commission_history/v{n}` + `admin_audit`). Hujjat yo'q → 200 bps, versiya 0.
+ * Har reysga qo'llangan `rateBps` va `taxiCommissionVersion` yoziladi (9-qoida): sozlama
+ * keyin o'zgarsa, e'lon qilingan reys narxi (reprice ham) o'sha stavkada qoladi.
+ */
+const DEFAULT_RATE_BPS = 200;
+/** Eski nom (testlar / tashqi import) — standart stavka. */
+const RATE_BPS = DEFAULT_RATE_BPS;
+const RATE_BPS_MIN = 0;
+const RATE_BPS_MAX = 10000;
+const COMMISSION_COLLECTION = 'taxi_commission';
+const COMMISSION_DOC_ID = 'current';
+const COMMISSION_HISTORY = 'taxi_commission_history';
+const COMMISSION_ADMIN_ROLES = Object.freeze(['admin', 'superadmin']);
+const ADMIN_AUDIT = 'admin_audit';
 const BILLING_VERSION = 1;
 /** Pasaytirishda refund — reys davomida nechta marta (D-TAXI-12 abuse). */
 const MAX_DOWNWARD_REFUNDS = 1;
@@ -68,11 +84,12 @@ const MAX_DOWNWARD_REFUNDS = 1;
 /**
  * Komissiya — SOF, DETERMINISTIK, BUTUN SO'M (T-4, 8-qoida).
  *
- *   fee = ceil(farePerSeat × 4 × 200 / 10000)
+ *   fee = ceil(farePerSeat × 4 × rateBps / 10000)    (rateBps standart 200)
  *
  * `ceil`: AVA o'ziga zarar qilmaydi, farq eng ko'pi 1 so'm.
+ * `rateBps` — SERVER beradi (sozlama yoki reys snapshot'i), klientdan EMAS.
  */
-function calculateTaxiFee(farePerSeat) {
+function calculateTaxiFee(farePerSeat, rateBps = DEFAULT_RATE_BPS) {
   // Faqat HAQIQIY son: `'350000'` satri ham rad etiladi — pul maydoni
   // tipi klientdan kelganda aniq bo'lishi kerak (18-qoida).
   const fare = typeof farePerSeat === 'number' ? farePerSeat : Number.NaN;
@@ -81,11 +98,61 @@ function calculateTaxiFee(farePerSeat) {
     e.code = 'invalid-argument';
     throw e;
   }
+  if (!isValidRateBps(rateBps)) {
+    const e = new Error('rateBps butun son 0..10000 bo\'lishi kerak');
+    e.code = 'internal';
+    throw e;
+  }
   const grossBasis = fare * SEAT_BASIS;
-  const feeAmount = Math.ceil((grossBasis * RATE_BPS) / 10000);
+  const feeAmount = Math.ceil((grossBasis * rateBps) / 10000);
   return {
-    farePerSeat: fare, seatBasis: SEAT_BASIS, rateBps: RATE_BPS,
-    rate: RATE_BPS / 10000, grossBasis, feeAmount,
+    farePerSeat: fare, seatBasis: SEAT_BASIS, rateBps,
+    rate: rateBps / 10000, grossBasis, feeAmount,
+  };
+}
+
+function isValidRateBps(v) {
+  return Number.isInteger(v) && v >= RATE_BPS_MIN && v <= RATE_BPS_MAX;
+}
+
+/**
+ * `taxi_commission/current` → `{ bps, version, configured }`. Hujjat yo'q → standart 200, versiya 0.
+ * Buzuq qiymat (faqat CF yozadi, shuning uchun kutilmaydi) → standart + `configured:false`.
+ */
+function resolveCommission(doc) {
+  const d = doc || null;
+  if (d && isValidRateBps(d.bps)) {
+    const v = Number.isInteger(d.version) && d.version >= 0 ? d.version : 0;
+    return { bps: d.bps, version: v, configured: true };
+  }
+  return { bps: DEFAULT_RATE_BPS, version: 0, configured: false, invalid: Boolean(d && d.bps !== undefined) };
+}
+
+/** E'lon qilingan reys stavkasi: snapshot `rateBps`; eski reysda yo'q bo'lsa — standart 200 (avvalgi xulq). */
+function tripRateBps(trip) {
+  const r = (trip || {}).rateBps;
+  return isValidRateBps(r) ? r : DEFAULT_RATE_BPS;
+}
+
+/** Admin kiritishi: `bps` faqat butun son 0..10000 (satr ham rad), `reason` ≤ 300. */
+function validateCommissionInput(data) {
+  const d = data || {};
+  const bps = d.bps;
+  if (typeof bps !== 'number' || !isValidRateBps(bps)) {
+    const e = new Error('BPS_INVALID');
+    e.code = 'invalid-argument';
+    throw e;
+  }
+  const ev = d.expectedVersion;
+  if (ev !== undefined && ev !== null && !(Number.isInteger(ev) && ev >= 0)) {
+    const e = new Error('EXPECTED_VERSION_INVALID');
+    e.code = 'invalid-argument';
+    throw e;
+  }
+  return {
+    bps,
+    expectedVersion: ev === undefined || ev === null ? null : ev,
+    reason: String(d.reason || '').trim().slice(0, 300),
   };
 }
 
@@ -199,7 +266,7 @@ function parseSeats(raw) {
 function attachTaxiBilling(exports, deps) {
   const {
     functions, db, admin, callerPhone, canonicalUid, settlementLedger,
-    notifyUserInApp, now: nowFn,
+    notifyUserInApp, now: nowFn, requireCallerRoles,
   } = deps;
   const now = () => (nowFn ? nowFn() : new Date());
   const Timestamp = admin.firestore.Timestamp;
@@ -232,6 +299,16 @@ function attachTaxiBilling(exports, deps) {
     return { phone, usersDocId: userRef.id, accountId, cap };
   }
 
+  /** Joriy komissiya (server sozlamasi). O'qish xatosi — xato (pulli yo'lda taxmin qilinmaydi). */
+  async function currentCommission() {
+    const snap = await db.collection(COMMISSION_COLLECTION).doc(COMMISSION_DOC_ID).get();
+    const c = resolveCommission(snap.exists ? snap.data() : null);
+    if (c.invalid) {
+      console.warn(JSON.stringify({ module: 'taxi_billing', action: 'currentCommission', result: 'fallback', errorCode: 'TAXI_COMMISSION_INVALID' }));
+    }
+    return c;
+  }
+
   async function walletBalance(usersDocId) {
     const s = await db.collection(settlementLedger.COL_ACCOUNTS)
       .doc(settlementLedger.passengerCreditAccount(usersDocId)).get();
@@ -246,7 +323,11 @@ function attachTaxiBilling(exports, deps) {
    */
   async function quote(data, context) {
     const me = await resolveCaller(context);
-    const fee = calculateTaxiFee(data && data.farePerSeat);
+    const commission = await currentCommission();
+    const fee = {
+      ...calculateTaxiFee(data && data.farePerSeat, commission.bps),
+      taxiCommissionVersion: commission.version,
+    };
     const when = now();
 
     const status = caps.statusOf(me.cap, 'taxi');
@@ -491,7 +572,9 @@ function attachTaxiBilling(exports, deps) {
       farePerSeat: q.farePerSeat,
       seatBasis: SEAT_BASIS,
       rate: q.rate,
-      rateBps: RATE_BPS,
+      // 9-qoida: qo'llangan stavka va sozlama versiyasi reysda (keyin reprice ham shu stavkada).
+      rateBps: q.rateBps,
+      taxiCommissionVersion: q.taxiCommissionVersion,
       grossBasis: q.grossBasis,
       feeAmount: q.feeAmount,
       quotedFee: q.quotedFee,
@@ -549,7 +632,10 @@ function attachTaxiBilling(exports, deps) {
         c = await charge({
           usersDocId: me.usersDocId, phone: me.phone, tripId: tripRef.id,
           amount: q.feeAmount, version: BILLING_VERSION, kind: 'taxi_fee',
-          meta: { farePerSeat: q.farePerSeat, grossBasis: q.grossBasis },
+          meta: {
+            farePerSeat: q.farePerSeat, grossBasis: q.grossBasis,
+            rateBps: q.rateBps, taxiCommissionVersion: q.taxiCommissionVersion,
+          },
         });
       } catch (e) {
         await setRequestStatus('error');
@@ -793,7 +879,8 @@ function attachTaxiBilling(exports, deps) {
     if (trip.driverUid !== me.phone) throw err('permission-denied', 'Reys sizniki emas');
     if (trip.status !== 'published') throw err('failed-precondition', 'Reys e\'lon holatida emas', { reason: 'not_published' });
 
-    const fee = calculateTaxiFee(data.farePerSeat);
+    // 9-qoida: reys e'lon qilingan stavkada (snapshot `rateBps`; eski reys — 200), joriy sozlamada EMAS.
+    const fee = calculateTaxiFee(data.farePerSeat, tripRateBps(trip));
     const when = now();
     const oldFare = trip.farePerSeat;
     const oldFee = Number(trip.feeAmount) || 0;
@@ -824,7 +911,7 @@ function attachTaxiBilling(exports, deps) {
       const delta = newFee - oldFee;
       const c = await charge({
         usersDocId: me.usersDocId, phone: me.phone, tripId: tripRef.id, amount: delta,
-        version, kind: 'taxi_fee_delta', meta: { oldFare, newFare: fee.farePerSeat },
+        version, kind: 'taxi_fee_delta', meta: { oldFare, newFare: fee.farePerSeat, rateBps: fee.rateBps },
         precheck: guard,
         onCommit: (tx) => tx.update(tripRef, {
           farePerSeat: fee.farePerSeat, grossBasis: fee.grossBasis, feeAmount: newFee,
@@ -1099,16 +1186,97 @@ function attachTaxiBilling(exports, deps) {
     };
   }
 
+  // ── Komissiya sozlamasi (ega 2026-11-28): admin/superadmin, versiya + tarix + admin_audit ──
+  async function requireCommissionAdmin(context) {
+    if (typeof requireCallerRoles !== 'function') throw err('internal', 'ROLE_CHECK_UNAVAILABLE');
+    return requireCallerRoles(context, COMMISSION_ADMIN_ROLES, 'Admin role required');
+  }
+
+  const commissionView = (d) => {
+    const c = resolveCommission(d);
+    const doc = d || {};
+    const at = doc.updatedAt && typeof doc.updatedAt.toMillis === 'function' ? doc.updatedAt.toMillis() : null;
+    return {
+      bps: c.bps,
+      version: c.version,
+      configured: c.configured,
+      defaultBps: DEFAULT_RATE_BPS,
+      minBps: RATE_BPS_MIN,
+      maxBps: RATE_BPS_MAX,
+      updatedAtMs: at,
+      updatedBy: typeof doc.updatedBy === 'string' ? doc.updatedBy : '',
+    };
+  };
+
+  /** Admin — joriy taksi komissiyasi (hujjat yo'q → 200 bps, versiya 0, configured:false). */
+  async function adminGetCommission(data, context) {
+    await requireCommissionAdmin(context);
+    const snap = await db.collection(COMMISSION_COLLECTION).doc(COMMISSION_DOC_ID).get();
+    return { ok: true, ...commissionView(snap.exists ? snap.data() : null) };
+  }
+
+  /**
+   * Admin — komissiya stavkasi. data: { bps: butun 0..10000, reason?, expectedVersion? }.
+   * Bir xil qiymat → versiya OCHILMAYDI (`unchanged:true`, idempotent). `expectedVersion`
+   * berilsa va joriy versiyaga teng bo'lmasa → `aborted` VERSION_CONFLICT (ikki admin poygasi).
+   * Faqat YANGI e'lonlarga ta'sir qiladi; e'lon qilingan reyslar o'z `rateBps` snapshot'ida.
+   */
+  async function adminSetCommission(data, context) {
+    const actor = await requireCommissionAdmin(context);
+    let input;
+    try {
+      input = validateCommissionInput(data);
+    } catch (e) {
+      throw err('invalid-argument', e.message, { code: e.message });
+    }
+    const ref = db.collection(COMMISSION_COLLECTION).doc(COMMISSION_DOC_ID);
+    const ts = () => admin.firestore.FieldValue.serverTimestamp();
+    const out = await db.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      const cur = snap.exists ? (snap.data() || {}) : null;
+      const prev = resolveCommission(cur);
+      if (input.expectedVersion !== null && input.expectedVersion !== prev.version) {
+        throw err('aborted', 'VERSION_CONFLICT', { code: 'VERSION_CONFLICT', currentVersion: prev.version });
+      }
+      if (prev.configured && prev.bps === input.bps) {
+        return { version: prev.version, bps: prev.bps, unchanged: true };
+      }
+      const next = prev.version + 1;
+      const doc = { bps: input.bps, version: next, reason: input.reason, updatedAt: ts(), updatedBy: actor };
+      t.set(ref, doc);
+      t.create(db.collection(COMMISSION_HISTORY).doc(`v${next}`), {
+        ...doc,
+        previous: { version: prev.version, bps: prev.bps, configured: prev.configured },
+        changedBy: actor,
+        changedAt: ts(),
+      });
+      t.set(db.collection(ADMIN_AUDIT).doc(), {
+        kind: 'taxi_commission', actor, target: `${COMMISSION_COLLECTION}/${COMMISSION_DOC_ID}`,
+        from: String(prev.version), to: String(next), reason: input.reason,
+        detail: { bps: input.bps, prevBps: prev.bps, prevConfigured: prev.configured },
+        at: ts(),
+      });
+      return { version: next, bps: input.bps, unchanged: false };
+    });
+    console.log(JSON.stringify({
+      module: 'taxi_billing', action: 'adminSetTaxiCommission', result: 'ok',
+      version: out.version, bps: out.bps, unchanged: out.unchanged, userId: actor,
+    }));
+    return { ok: true, ...out };
+  }
+
   exports.quoteTaxiFee = functions.https.onCall(quote);
   exports.publishTaxiTrip = functions.https.onCall(publish);
   exports.repriceTaxiTrip = functions.https.onCall(reprice);
   exports.rescheduleTaxiTrip = functions.https.onCall(reschedule);
   exports.cancelTaxiTrip = functions.https.onCall(cancel);
   exports.completeTaxiTrip = functions.https.onCall(complete);
+  exports.adminGetTaxiCommission = functions.https.onCall(adminGetCommission);
+  exports.adminSetTaxiCommission = functions.https.onCall(adminSetCommission);
 
   return {
     quote, publish, reprice, reschedule, cancel, complete, charge, refund,
-    resolveCaller, settleOutstanding,
+    resolveCaller, settleOutstanding, adminGetCommission, adminSetCommission,
   };
 }
 
@@ -1159,6 +1327,8 @@ module.exports = {
   TRIPS, PRICE_CHANGES, RESCHEDULES, FRAUD_CASES, AGREEMENTS, EARNINGS_ACCOUNT, PUBLISH_REQUESTS,
   rescheduleWrites,
   SEAT_BASIS, RATE_BPS, BILLING_VERSION, MAX_DOWNWARD_REFUNDS, STARTER_NOTICE_DAYS,
+  DEFAULT_RATE_BPS, RATE_BPS_MIN, RATE_BPS_MAX, COMMISSION_COLLECTION, COMMISSION_DOC_ID, COMMISSION_HISTORY,
   calculateTaxiFee, starterNoticeOf, attachTaxiBilling,
+  isValidRateBps, resolveCommission, tripRateBps, validateCommissionInput,
   DEPARTURE_PAST_TOLERANCE_MS, SEATS_MIN, SEATS_MAX,
 };

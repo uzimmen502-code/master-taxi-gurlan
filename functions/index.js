@@ -41,7 +41,11 @@ const { MODES: COURIER_AUTH_MODES, makeCourierAuth } = require('./courier_auth')
 const { makeProcurementCatalog } = require('./procurement_catalog');
 // AVA дўкони улгуржи поғоналари (эга қарори 2026-10-06) — ягона қоида.
 const platformPricing = require('./platform_pricing');
+// AVA дўкони етказиш ҳақи — ягона манба (T-1, эга 2026-11-28).
+const platformDeliveryFee = require('./platform_delivery_fee');
 const marketImages = require('./market_images');
+// F-1 (ega 2026-11-28): eski «Аралаш» e'lonlari yopiq — yagona manba.
+const marketAdRetired = require('./market_ad_retired');
 // MEDIUM-4 (аудит 2026-10-31): модул дарвозаси серверда ҳам (клиент `ServiceConfigHolder` нусхаси).
 const moduleGate = require('./module_gate');
 // Admin «Аҳоли бозори» рўйхати — саҳифалар ва «Яна юклаш» (2026-10-08).
@@ -55,6 +59,8 @@ const { runAutoShift, hhmm: tashkentHhmm } = require('./intercity_auto_shift');
 const intercityExpiry = require('./intercity_expiry');
 attachTaxiBilling(exports, {
   functions, db, admin, callerPhone, canonicalUid, settlementLedger, notifyUserInApp,
+  // adminGet/SetTaxiCommission (ega 2026-11-28) — admin/superadmin.
+  requireCallerRoles,
 });
 // Mahalliy taksi — SERVER narxi (ega qarori 2026-10-07): trip yaratish,
 // narx qulfi va admin tarif versiyasi. Yakunlash — pastdagi completeLocalTrip.
@@ -1724,6 +1730,25 @@ exports.onAdUpdate = functions.firestore
     if (before.status === after.status) return;
 
     const isMarket = String(after.type || '') === 'cheap_product';
+    // F-1 (ega 2026-11-28): eski bozor e'lonlari yopiq — muddat UZAYTIRILMAYDI (mavjud TTL bilan tugaydi).
+    const marketRetired = isMarket && marketAdRetired.MARKET_ADS_RETIRED;
+
+    // F-1: QAYTA JOYLASHTIRISH (`inactive → pending`: ega to'g'ridan-to'g'ri yozuvi — rules
+    // `cheapProductOwnerUpdateOk` — yoki eski ilova) yopiq → `inactive`ga qaytariladi, jim (push yo'q).
+    // Admin yozuvi (`moderatedAt` o'zgaradi) tegilmaydi.
+    if (marketRetired && before.status === 'inactive' && after.status === 'pending'
+        && !tsChanged(before.moderatedAt, after.moderatedAt)) {
+      console.warn(JSON.stringify({
+        module: 'market', action: 'onAdUpdate', result: 'reverted',
+        errorCode: marketAdRetired.MARKET_AD_RETIRED, adId: change.after.id,
+      }));
+      await change.after.ref.update({
+        status: 'inactive',
+        retiredRevertedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      return null;
+    }
 
     // Авто: pending → active (янги эълон / қайта модерация).
     if (
@@ -1732,14 +1757,16 @@ exports.onAdUpdate = functions.firestore
       && before.status !== 'pending'
       && (await isMarketAutoApproveEnabled())
     ) {
-      await change.after.ref.update({
+      const patch = {
         status: 'active',
         publishedAt: admin.firestore.FieldValue.serverTimestamp(),
-        expiresAt: marketActiveExpiresAt(),
         moderatedAt: admin.firestore.FieldValue.serverTimestamp(),
         moderatedBy: 'auto',
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      };
+      // F-1: eski e'lon tahriri qayta tasdiqlansa ham `expiresAt` o'sha-o'sha.
+      if (!marketRetired) patch.expiresAt = marketActiveExpiresAt();
+      await change.after.ref.update(patch);
       return null;
     }
 
@@ -1758,6 +1785,8 @@ exports.onAdUpdate = functions.firestore
     // Авто-тасдиқ ёқиқ бўлса юқоридаги тармоқ аллақачон `active` қилиб,
     // ўз муддатини ёзган ва бу ергача етиб келмайди.
     if (isMarket && after.status === 'pending' && before.status !== 'pending') {
+      // F-1: eski e'lon — muddat yangilanmaydi (tahrir moderatsiyada, lekin TTL o'sha-o'sha).
+      if (marketRetired) return null;
       await change.after.ref.update({
         expiresAt: marketPendingExpiresAt(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -1808,6 +1837,8 @@ exports.onAdUpdate = functions.firestore
         // тушиб, жимгина қайтиб кетарди — сотувчи 60 кундан кейин эълони
         // лентадан тушганини УМУМАН билмасди (аудит, 2026-09-27).
         const autoExpired = tsChanged(before.autoExpiredAt, after.autoExpiredAt);
+        // F-1: qayta joylashtirish qaytarildi (yuqorida) — jim.
+        if (tsChanged(before.retiredRevertedAt, after.retiredRevertedAt)) return;
         // Owner hide — jim; admin reject/hide ва автомат тугаш — хабар.
         if (autoExpired) {
           title = '⏳ Бозор эълонингиз муддати тугади';
@@ -1819,7 +1850,7 @@ exports.onAdUpdate = functions.firestore
           return;
         }
         body = autoExpired
-          ? (preview || 'Қайта жойлаштириш — «Менинг эълонларим»да')
+          ? (preview || (marketRetired ? 'Маҳсулотни «＋» орқали қўшинг' : 'Қайта жойлаштириш — «Менинг эълонларим»да'))
           : (preview || after.adminNote || 'Менинг эълонларимда кўринг');
         dataType = autoExpired ? 'market_ad_expired' : 'market_ad_moderation';
         break;
@@ -2734,6 +2765,36 @@ exports.creditChange = functions.https.onCall(async (data, context) => {
   return { ok: true, credited: delta };
 });
 
+/**
+ * W-2 (takrorlanishlar auditi 2026-11-28, ega 2026-11-28): eski pul endpointlari O'CHIRILDI (debitForOrder, requestPayout, checkWithdrawalLimit).
+ * Клиент чақирувлари 2026-06-14 (a6a0ac37) да олиб ташланган, `checkWithdrawalLimit`ни клиент
+ * ҳеч қачон чақирмаган; Cloud Logging 2026-10-29…11-28 — 0 чақирув. Ўрнига: ҳамёндан тўлов —
+ * `placeOrderPostPaid` ва модул callable'лари; ечиш — `requestWalletWithdraw` /
+ * `walletToCash` / `cashExchange`. `creditSupplier` (админ) — ҚОЛДИ: `courier_payout.js` қўлда тўлов йўли.
+ * Export'лар сақланади (deploy уларни тўсатдан ўчирмасин), танаси — шу стуб.
+ */
+const ENDPOINT_RETIRED = 'ENDPOINT_RETIRED';
+const ENDPOINT_RETIRED_MESSAGES = Object.freeze({
+  uz_Cyrl: 'Бу амал эскирган ва ўчирилган. Иловани янгиланг.',
+  uz_Latn: "Bu amal eskirgan va o'chirilgan. Ilovani yangilang.",
+  ru: 'Эта операция устарела и отключена. Обновите приложение.',
+});
+
+function retiredEndpoint(name) {
+  return functions.https.onCall(async (data, context) => {
+    const phone = context && context.auth ? digits(callerPhone(context)) : '';
+    console.warn(JSON.stringify({
+      action: name, result: 'rejected', errorCode: ENDPOINT_RETIRED,
+      authed: Boolean(context && context.auth), callerTail: phone.slice(-4),
+    }));
+    throw new functions.https.HttpsError('failed-precondition', ENDPOINT_RETIRED_MESSAGES.uz_Cyrl, {
+      code: ENDPOINT_RETIRED, endpoint: name, messages: { ...ENDPOINT_RETIRED_MESSAGES },
+    });
+  });
+}
+
+// W-2 (ega 2026-11-28): creditSupplier ATAYLAB qoldirildi — `courier_payout.js` qo'lda to'lov yo'li
+// (autoPayoutEnabled=false bo'lganda moliya shu bilan to'laydi; courier_payout_cf testlari). Faqat admin/superadmin.
 /** Сут, тухум, гуруч, гўшт, қатиқ … таъминотчи кредити (админ) — сумма аниқ. */
 exports.creditSupplier = functions.https.onCall(async (data, context) => {
   const adminUid = await requireCallerRoles(
@@ -2819,100 +2880,8 @@ exports.creditSupplier = functions.https.onCall(async (data, context) => {
   return { ok: true, credited: amount };
 });
 
-/** Буюртма / хизмат учун балансдан ечиш */
-exports.debitForOrder = functions.https.onCall(async (data, context) => {
-  if (!context.auth) {
-    throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
-  }
-  const callerUid = canonicalUid(callerPhone(context));
-  const targetUid = userUid(String(data.userPhone || ''));
-  const callerDoc = await db.collection('users').doc(callerUid).get();
-  const callerRole = (callerDoc.data() || {}).role || 'user';
-  const callerIsAdmin = ['admin', 'superadmin', 'dispatcher'].includes(callerRole);
-  if (callerUid !== targetUid && !callerIsAdmin) {
-    throw new functions.https.HttpsError(
-      'permission-denied',
-      'Cannot debit another user',
-    );
-  }
-
-  const userPhone = String(data.userPhone || '');
-  const amount = parseInt(String(data.amount ?? 0), 10);
-  const refType = String(data.refType || 'order');
-  const refId = String(data.refId || '');
-  const module = String(data.module || 'bread');
-  const idempotencyKey = String(data.idempotencyKey || '').trim();
-
-  if (!idempotencyKey) {
-    throw new functions.https.HttpsError('invalid-argument', 'idempotencyKey required');
-  }
-  if (!Number.isFinite(amount) || amount <= 0) {
-    throw new functions.https.HttpsError('invalid-argument', 'amount must be positive');
-  }
-
-  const uid = userUid(userPhone);
-  const idemRef = db.collection('wallet_idempotency').doc(idempotencyKey);
-
-  const existing = await idemRef.get();
-  if (existing.exists) {
-    return existing.data().result || { ok: true, duplicate: true };
-  }
-
-  const ledgerId = db.collection('users').doc(uid).collection('wallet_ledger').doc().id;
-
-  await db.runTransaction(async (t) => {
-    const idemSnap = await t.get(idemRef);
-    if (idemSnap.exists) return;
-
-    const userRef = db.collection('users').doc(uid);
-    const userSnap = await t.get(userRef);
-    const prev = (userSnap.data() && userSnap.data().bonusBalance) || 0;
-    if (prev < amount) {
-      throw new functions.https.HttpsError('failed-precondition', 'insufficient_balance');
-    }
-    const next = prev - amount;
-
-    // Ledger ko'zgusi (READ fazasi).
-    const bonusCtx = await settlementLedger.prepareBonusInTx(t, db, uid, {
-      idempotencyKey,
-    });
-
-    t.set(userRef, {
-      bonusBalance: next,
-      balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
-
-    t.set(userRef.collection('wallet_ledger').doc(ledgerId), {
-      type: 'purchase_debit',
-      amount: -amount,
-      module,
-      refType,
-      refId,
-      meta: {},
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      createdBy: 'client',
-    });
-
-    // Ledger ko'zgusi (WRITE fazasi) — Dr passenger_credit / Cr admin_clearing.
-    settlementLedger.commitBonusInTx(t, bonusCtx, {
-      delta: -amount,
-      kind: 'purchase_debit',
-      refType,
-      refId,
-      meta: { module },
-      postedBy: callerUid || 'client',
-      postedRole: 'client',
-    });
-
-    t.set(idemRef, {
-      type: 'debitForOrder',
-      result: { ok: true, debited: amount, ledgerId },
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-  });
-
-  return { ok: true, debited: amount };
-});
+/** @deprecated W-2 — эски «балансдан ечиш» (dispatcher бошқанинг ҳамёнидан ечарди). ENDPOINT_RETIRED. */
+exports.debitForOrder = retiredEndpoint('debitForOrder');
 
 /** Кошелёк (аниқ сумма) + омбор + order + ledger + нақд қайтим — битта транзакция. */
 function maxWalletDebit(balance, orderTotal) {
@@ -3167,12 +3136,21 @@ function resolvePaymentMethod(lines) {
 /**
  * Платформа дўкони: нарх `platform_products` дан (клиент нархи эътиборсиз).
  *
- * `pricingVersion` 2 (1.0.33+ илова) — улгуржи поғоналари
- * (`platform_pricing.js`, эга қарори 2026-10-06): базадаги нарх 10–50
- * дона, 1–9 +5%, 50+ −5%. Версиясиз (эски илова) — эски ягона `price`,
- * чунки эски илова фойдаланувчига шу нархни кўрсатади.
+ * ЯГОНА НАРХ (эга 2026-11-28: поғоналар бизнес қоида сифатида олиб ташланган) —
+ * `platformPricing.platformUnitPrice` = маҳсулот `price`, миқдордан қатъи назар.
+ * T-3 (эга 2026-11-28): нарх версиясини СЕРВЕР танлайди
+ * (`platformPricing.SERVER_PRICING_VERSION`); клиент `pricingVersion` эътиборсиз —
+ * фақат диагностика логи. Натижада `pricingVersion` қайтади (буюртмага ёзилади).
  */
-async function repricePlatformOrderFromCatalog(itemsIn, pricingVersion) {
+async function repricePlatformOrderFromCatalog(itemsIn, clientPricingVersion) {
+  const pricingVersion = platformPricing.SERVER_PRICING_VERSION;
+  if (clientPricingVersion !== undefined && clientPricingVersion !== null
+      && Number(clientPricingVersion) !== pricingVersion) {
+    console.warn(JSON.stringify({
+      action: 'repricePlatformOrder', result: 'overridden', errorCode: 'PRICING_VERSION_CLIENT_IGNORED',
+      clientPricingVersion: String(clientPricingVersion).slice(0, 8), serverPricingVersion: pricingVersion,
+    }));
+  }
   const raw = Array.isArray(itemsIn) ? itemsIn : [];
   if (raw.length < 1 || raw.length > 40) {
     throw new functions.https.HttpsError('invalid-argument', 'items 1..40');
@@ -3216,7 +3194,7 @@ async function repricePlatformOrderFromCatalog(itemsIn, pricingVersion) {
           });
     }
     // Каталогдаги барча маҳсулотлар буюртма қилиниши мумкин (active чекловсиз).
-    const unitPrice = platformPricing.unitPriceForQty(d, qty, pricingVersion);
+    const unitPrice = platformPricing.platformUnitPrice(d);
     if (!Number.isInteger(unitPrice) || unitPrice <= 0) {
       throw new functions.https.HttpsError(
           'failed-precondition', `Нарх йўқ: ${productId}`);
@@ -3257,7 +3235,7 @@ async function repricePlatformOrderFromCatalog(itemsIn, pricingVersion) {
   if (total <= 0) {
     throw new functions.https.HttpsError('invalid-argument', 'invalid order total');
   }
-  return { items, total, decrements };
+  return { items, total, decrements, pricingVersion };
 }
 
 function breadTypeNorm(raw) {
@@ -3473,26 +3451,18 @@ async function repriceBreadOrderFromCatalog(orderBase) {
  * сонлар учун аввалги `Math.round(itemsTotal × pct / 100)` билан АЙНАН тенг.
  */
 function platformDeliveryFeeFromSettings(settings, itemsTotal) {
-  const raw = (settings || {}).platformDeliveryFeePercent;
-  const pctIn = (typeof raw === 'number' || (typeof raw === 'string' && raw.trim() !== ''))
-    ? Number(raw)
-    : NaN;
-  if (!Number.isFinite(pctIn) || pctIn < 0) {
+  // T-1 (ega 2026-11-28): қоида ЯГОНА манбада — `platform_delivery_fee.js` (жонли семантика айнан).
+  const cfg = platformDeliveryFee.feeConfigFromApp(settings);
+  if (!cfg) {
     console.error(JSON.stringify({
-      action: 'placeOrderPostPaid', result: 'denied', errorCode: 'TARIFF_NOT_CONFIGURED',
+      action: 'placeOrderPostPaid', result: 'denied', errorCode: platformDeliveryFee.TARIFF_NOT_CONFIGURED,
       reason: 'platformDeliveryFeePercent missing/invalid',
     }));
-    throw new functions.https.HttpsError('failed-precondition', 'TARIFF_NOT_CONFIGURED',
-        { code: 'TARIFF_NOT_CONFIGURED' });
+    throw new functions.https.HttpsError('failed-precondition', platformDeliveryFee.TARIFF_NOT_CONFIGURED,
+        { code: platformDeliveryFee.TARIFF_NOT_CONFIGURED });
   }
-  // Аввалги хатти-ҳаракат сақланади: 100 % дан юқори — 100 %.
-  const percent = Math.min(pctIn, 100);
-  const bps = Math.round(percent * 100);
-  const total = Number(itemsTotal) || 0;
-  const fee = Math.floor((total * bps + 5000) / 10000);
-  const verRaw = Number((settings || {}).platformDeliveryFeeVersion);
-  const version = Number.isInteger(verRaw) && verRaw > 0 ? verRaw : 0;
-  return { percent, bps, fee, version };
+  const fee = platformDeliveryFee.feeOf(Number(itemsTotal) || 0, cfg.bps);
+  return { percent: cfg.percent, bps: cfg.bps, fee, version: cfg.version };
 }
 
 /** Буюртма + омбор; bread/platform нарх каталогдан; ҳамён (ixtiyoriy) ledger орқали. */
@@ -3585,6 +3555,8 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
   let platformDeliveryFee = null;
   let platformDeliveryFeePercent = null;
   let platformDeliveryFeeVersion = null;
+  // T-3: platform buyurtma narx versiyasi — SERVER tanlaydi (repricePlatformOrderFromCatalog).
+  let platformPricingVersion = null;
   if (orderType === 'bread') {
     const priced = await repriceBreadOrderFromCatalog(orderBase);
     pricedItems = priced.items;
@@ -3599,6 +3571,7 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
     pricedItems = priced.items;
     serverTotal = priced.total;
     catalogDecs = priced.decrements;
+    platformPricingVersion = priced.pricingVersion;
     const appSettings = await db.collection('settings').doc('app').get();
     const fee = platformDeliveryFeeFromSettings(appSettings.data() || {}, serverTotal);
     platformItemsTotal = serverTotal;
@@ -3831,11 +3804,9 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
       }
       // 9-қоида: буюртма қайси нарх қоидаси билан ҳисобланганини сақлайди —
       // қоида кейин ўзгарса, эски буюртма нархи «кўчиб» кетмасин.
+      // T-3 (эга 2026-11-28): версия клиентдан эмас — сервер ҳисоблаган қиймат.
       if (orderType === 'platform') {
-        orderPayload.pricingVersion =
-            Number(orderBase.pricingVersion) >= platformPricing.PRICING_VERSION_TIERED
-              ? platformPricing.PRICING_VERSION_TIERED
-              : platformPricing.PRICING_VERSION_LEGACY;
+        orderPayload.pricingVersion = platformPricingVersion;
       }
     }
     Object.assign(orderPayload, geoReportStamp(userData));
@@ -5967,100 +5938,8 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
   return tx.result;
 });
 
-exports.requestPayout = functions.https.onCall(async (data, context) => {
-  const userPhone = String(data.userPhone || '');
-  const amount = parseInt(String(data.amount ?? 0), 10);
-  const idempotencyKey = String(data.idempotencyKey || '').trim();
-
-  if (!idempotencyKey) {
-    throw new functions.https.HttpsError('invalid-argument', 'idempotencyKey required');
-  }
-  if (!Number.isFinite(amount) || amount <= 0) {
-    throw new functions.https.HttpsError('invalid-argument', 'amount must be positive');
-  }
-
-  if (!context.auth) {
-    throw new functions.https.HttpsError('unauthenticated',
-      'Login required');
-  }
-  const callerPhone = String(
-    context.auth.token.phone_number || '').replace(/\D/g, '');
-  const callerUid = String(context.auth.uid || '');
-  const targetUid = userUid(userPhone);
-  if (callerPhone !== targetUid && callerUid !== targetUid) {
-    throw new functions.https.HttpsError('permission-denied',
-      'Can only request payout for your own account');
-  }
-
-  const uid = userUid(userPhone);
-  const idemRef = db.collection('wallet_idempotency').doc(idempotencyKey);
-
-  const existing = await idemRef.get();
-  if (existing.exists) {
-    return existing.data().result || { ok: true, duplicate: true };
-  }
-
-  const userSnap = await db.collection('users').doc(uid).get();
-  if (!userSnap.exists) {
-    throw new functions.https.HttpsError('not-found', 'user not found');
-  }
-  const userData = userSnap.data() || {};
-  if (!payoutKycOk(userData)) {
-    throw new functions.https.HttpsError(
-        'failed-precondition',
-        'Payout KYC talab qilinadi — profil yoki admin tasdiqlashini yakunlang');
-  }
-  // Qurilma ko'chirilgandan keyin 24 soat pul yechish cheklangan — Telegram
-  // yechishdagi (`assertNotDeviceTrustLimited`) kabi. Avval bu yo'l
-  // tekshirmasdi (hamyon auditi O-17).
-  if (isDeviceTrustLimited(userData)) {
-    const until = (userData.security || {}).deviceTrustUntil;
-    const untilMs = until && typeof until.toDate === 'function' ? until.toDate().getTime() : 0;
-    throw new functions.https.HttpsError(
-        'failed-precondition',
-        'Yangi qurilma: pul yechish 24 soatga cheklangan. Keyinroq urinib ko\'ring.',
-        { code: 'device_trust_limited', untilMs });
-  }
-  const bal = userData.bonusBalance || 0;
-  if (bal < amount) {
-    throw new functions.https.HttpsError('failed-precondition', 'insufficient_balance');
-  }
-
-  const settings = await getAnomalySettings();
-  if (amount > settings.maxWithdrawalPerUser) {
-    throw new functions.https.HttpsError(
-        'failed-precondition',
-        `Bir martada ${settings.maxWithdrawalPerUser.toLocaleString('uz-UZ')} so'mdan ko'p`);
-  }
-  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-  const totalWithdrawn = await sumRecentWithdrawals(uid, oneHourAgo);
-  if (totalWithdrawn + amount > settings.maxWithdrawalPerHour) {
-    throw new functions.https.HttpsError(
-        'failed-precondition',
-        `1 soat ichida ${settings.maxWithdrawalPerHour.toLocaleString('uz-UZ')} so'mdan ko'p`);
-  }
-
-  const reqRef = db.collection('payout_requests').doc();
-  await db.runTransaction(async (t) => {
-    const idemSnap = await t.get(idemRef);
-    if (idemSnap.exists) return;
-
-    t.set(reqRef, {
-      userPhone: uid,
-      amount,
-      status: 'pending',
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    t.set(idemRef, {
-      type: 'requestPayout',
-      result: { ok: true, requestId: reqRef.id },
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-  });
-
-  return { ok: true, requestId: reqRef.id };
-});
+/** @deprecated W-2 — эски `payout_requests` аризаси. Мавжуд `pending` аризалар `confirmPayout`/`rejectPayout` билан ёпилади. ENDPOINT_RETIRED. */
+exports.requestPayout = retiredEndpoint('requestPayout');
 
 /** Админ: нақд чиқаришни тасдиқлаш */
 // Тўловни тасдиқлаш/рад этиш — админ панелдаги «Молия» бўлими каби фақат
@@ -6187,8 +6066,6 @@ const ANOMALY_SETTINGS_DEFAULTS = {
   anomalyNotificationEnabled: true,
 };
 
-const WITHDRAWAL_LEDGER_TYPES = new Set(['purchase_debit', 'payout_paid']);
-
 async function getAnomalySettings() {
   const doc = await db.collection('settings').doc('anomaly_settings').get();
   if (!doc.exists) {
@@ -6227,60 +6104,8 @@ async function sendAnomalyTelegramMessage(text) {
   }
 }
 
-async function sumRecentWithdrawals(userId, oneHourAgo) {
-  const snap = await db.collection('users').doc(userId)
-    .collection('wallet_ledger')
-    .where('createdAt', '>=', admin.firestore.Timestamp.fromDate(oneHourAgo))
-    .get();
-  let total = 0;
-  snap.forEach((doc) => {
-    const d = doc.data();
-    if (!WITHDRAWAL_LEDGER_TYPES.has(String(d.type || ''))) return;
-    total += Math.abs(Number(d.amount || 0));
-  });
-  return total;
-}
-
-/** Callable: бир марта / 1 соатлик чиқим лимитини текшириш. */
-exports.checkWithdrawalLimit = functions.https.onCall(async (data, context) => {
-  // Hamyon auditi O-5: avval auth UMUMAN yo'q edi — istalgan odam istalgan
-  // foydalanuvchining so'nggi soatdagi yechimlarini (summani ikkiga bo'lib
-  // qidirib) va anomaliya chegaralarini bilardi. Endi faqat o'zi uchun yoki
-  // finance/superadmin. Klient bu CF'ni hech qachon chaqirmagan.
-  if (!context.auth) {
-    throw new functions.https.HttpsError('unauthenticated', 'Login required');
-  }
-  const userId = userUid(String(data.userId || data.userPhone || ''));
-  const caller = canonicalUid(callerPhone(context));
-  if (!caller || caller !== canonicalUid(userId)) {
-    await requireCallerRoles(context, ['finance', 'superadmin'], 'Faqat o\'z hisobingiz uchun');
-  }
-  const amount = parseInt(String(data.amount ?? 0), 10);
-  if (!Number.isFinite(amount) || amount <= 0) {
-    throw new functions.https.HttpsError('invalid-argument', 'amount must be positive');
-  }
-
-  const settings = await getAnomalySettings();
-
-  if (amount > settings.maxWithdrawalPerUser) {
-    throw new functions.https.HttpsError(
-      'failed-precondition',
-      `Бир мартада ${settings.maxWithdrawalPerUser.toLocaleString('uz-UZ')} сўмдан кўп ечиб бўлмайди`,
-    );
-  }
-
-  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-  const totalWithdrawn = await sumRecentWithdrawals(userId, oneHourAgo);
-  if (totalWithdrawn + amount > settings.maxWithdrawalPerHour) {
-    throw new functions.https.HttpsError(
-      'failed-precondition',
-      `1 соат ичида ${settings.maxWithdrawalPerHour.toLocaleString('uz-UZ')} сўмдан кўп ечиб бўлмайди`,
-    );
-  }
-
-  // Anomaliya chegaralari javobda qaytarilmaydi (ichki sozlama).
-  return { allowed: true };
-});
+/** @deprecated W-2 — клиент ҳеч қачон чақирмаган лимит текшируви. ENDPOINT_RETIRED. */
+exports.checkWithdrawalLimit = retiredEndpoint('checkWithdrawalLimit');
 
 /** wallet_ledger яратилганда катта сумма — risk_events + Telegram. */
 exports.detectAnomaly = functions.firestore
@@ -9042,6 +8867,15 @@ exports.submitMarketAd = functions.https.onCall(async (data, context) => {
   const uid = canonicalUid(callerPhone(context));
   if (!uid || uid.length < 9) {
     throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
+  }
+  // F-1 (ega 2026-11-28): eski «Аралаш» e'loni YANGI yaratilmaydi — mahsulot «＋» orqali.
+  // O'qish/yozuvdan OLDIN (hech narsa yozilmaydi, limit so'rovlari ham yo'q).
+  if (marketAdRetired.MARKET_ADS_RETIRED) {
+    console.warn(JSON.stringify({
+      module: 'market', action: 'submitMarketAd', result: 'rejected',
+      errorCode: marketAdRetired.MARKET_AD_RETIRED, callerTail: uid.slice(-4),
+    }));
+    throw marketAdRetired.marketAdRetiredError(functions.https.HttpsError);
   }
 
   const title = String((data && data.title) || '').trim();

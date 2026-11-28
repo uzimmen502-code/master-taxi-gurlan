@@ -28,6 +28,13 @@ const double kHomeAdPlaceholderArtAspect = 400 / 312;
 /// эни = баландлик × нисбат, лекин тор экранда карта энининг шу улушидан ошмайди (матнга жой).
 const double kHomeAdPlaceholderArtMaxFraction = 0.4;
 
+/// Эга 2026-11-28 (3): «Реклама бериш» ўрни splash НАМУНА реклама фони билан бир хил крем ранг
+/// (креатив `house_uz_Latn` фонидан олинган: юқори #FDEEDC → паст #FAE0C2). Фон ёруғ/тўқ
+/// мавзуда ўзгармайди, шунинг учун матн ранги ҳам қатъий тўқ.
+const Color kHomeAdPlaceholderBgTop = Color(0xFFFDEEDC);
+const Color kHomeAdPlaceholderBgBottom = Color(0xFFFAE0C2);
+const Color kHomeAdPlaceholderInk = Color(0xFF141414);
+
 /// Мегафон эни (карта ўлчамидан).
 double homeAdPlaceholderArtWidth(double cardWidth, double cardHeight) {
   final natural = cardHeight * kHomeAdPlaceholderArtAspect;
@@ -183,7 +190,8 @@ class _HomeAdCarouselState extends State<HomeAdCarousel> {
     if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) {
       c.jumpToPage(page + 1);
     } else {
-      c.animateToPage(page + 1, duration: const Duration(milliseconds: 350), curve: Curves.easeInOut);
+      c.animateToPage(page + 1,
+          duration: const Duration(milliseconds: 350), curve: Curves.easeInOut);
     }
   }
 
@@ -211,7 +219,8 @@ class _HomeAdCarouselState extends State<HomeAdCarousel> {
     if (_n == 0) {
       body = _AdPlaceholder(onAdvertise: widget.onAdvertise);
     } else if (_n == 1) {
-      body = _AdSlideCard(slide: widget.slides.first, onTap: () => widget.onOpen(0));
+      body = _AdSlideCard(
+          slide: widget.slides.first, onTap: () => widget.onOpen(0));
     } else {
       body = Listener(
         onPointerDown: _onDown,
@@ -222,7 +231,8 @@ class _HomeAdCarouselState extends State<HomeAdCarousel> {
           controller: _controller,
           itemBuilder: (context, i) {
             final idx = i % _n;
-            return _AdSlideCard(slide: widget.slides[idx], onTap: () => widget.onOpen(idx));
+            return _AdSlideCard(
+                slide: widget.slides[idx], onTap: () => widget.onOpen(idx));
           },
         ),
       );
@@ -248,7 +258,8 @@ class _AdSlideCard extends StatelessWidget {
     return Material(
       key: ValueKey('home_ad_slide_${slide.id}'),
       color: c.surface,
-      shape: RoundedRectangleBorder(borderRadius: radius, side: BorderSide(color: c.line)),
+      shape: RoundedRectangleBorder(
+          borderRadius: radius, side: BorderSide(color: c.line)),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
@@ -258,7 +269,10 @@ class _AdSlideCard extends StatelessWidget {
             SizedBox(
               width: 120,
               child: slide.imageUrl.isEmpty
-                  ? ColoredBox(color: c.surface2, child: Icon(Icons.campaign_rounded, color: c.ink2, size: 32))
+                  ? ColoredBox(
+                      color: c.surface2,
+                      child:
+                          Icon(Icons.campaign_rounded, color: c.ink2, size: 32))
                   : TvClipPoster(url: slide.imageUrl),
             ),
             const SizedBox(width: 12),
@@ -290,7 +304,9 @@ class _AdSlideCard extends StatelessWidget {
             ),
             Padding(
               padding: const EdgeInsets.only(left: 4, right: 8),
-              child: Center(child: Icon(Icons.chevron_right_rounded, size: 24, color: c.ink3)),
+              child: Center(
+                  child: Icon(Icons.chevron_right_rounded,
+                      size: 24, color: c.ink3)),
             ),
           ],
         ),
@@ -308,10 +324,13 @@ class _AdChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.ava;
     return DecoratedBox(
-      decoration: BoxDecoration(color: c.brandSoft, borderRadius: BorderRadius.circular(6)),
+      decoration: BoxDecoration(
+          color: c.brandSoft, borderRadius: BorderRadius.circular(6)),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-        child: Text(text, style: AvaText.homeCardCaption.copyWith(color: c.brandText, fontSize: 11)),
+        child: Text(text,
+            style: AvaText.homeCardCaption
+                .copyWith(color: c.brandText, fontSize: 11)),
       ),
     );
   }
@@ -328,74 +347,91 @@ class _AdPlaceholder extends StatelessWidget {
     final radius = BorderRadius.circular(AvaRadius.card);
     return Material(
       key: const ValueKey('home_ad_placeholder'),
-      color: c.brandSoft,
-      shape: RoundedRectangleBorder(borderRadius: radius, side: BorderSide(color: c.line)),
+      color: kHomeAdPlaceholderBgTop,
+      shape: RoundedRectangleBorder(
+          borderRadius: radius, side: BorderSide(color: c.line)),
       clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onAdvertise,
-        child: LayoutBuilder(
-          builder: (context, box) {
-            // Эга 2026-11-28: юқори баннердаги мегафон расми ЧАПДА, кўзгули (ўнгга — матнга қараган).
-            // Эга 2026-11-28 (2): чап четга ёпишган (ички ораликсиз), бутун баландликни тўлдиради,
-            // бурчакни картанинг Clip.antiAlias и кесади. Тор экранда энни чеклаганда даста томони
-            // (кўзгудан кейин — чап чет) кесилади, оғзи ва товуш чизиқлари кўринади.
-            final artW = homeAdPlaceholderArtWidth(box.maxWidth, box.maxHeight);
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(
-                  width: artW,
-                  child: Transform.flip(
-                    key: const ValueKey('home_ad_placeholder_art'),
-                    flipX: true,
-                    child: Image.asset(
-                      kHomeBannerArtAsset,
-                      fit: BoxFit.cover,
-                      // Кўзгудан олдинги чап = кўзгудан кейинги ўнг (оғиз томони) — шу сақланади.
-                      alignment: Alignment.centerLeft,
-                      errorBuilder: (_, __, ___) => Icon(Icons.campaign_rounded, size: 36, color: c.brandText),
+      child: Ink(
+        key: const ValueKey('home_ad_placeholder_bg'),
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [kHomeAdPlaceholderBgTop, kHomeAdPlaceholderBgBottom],
+          ),
+        ),
+        child: InkWell(
+          onTap: onAdvertise,
+          child: LayoutBuilder(
+            builder: (context, box) {
+              // Эга 2026-11-28: юқори баннердаги мегафон расми ЧАПДА, кўзгули (ўнгга — матнга қараган).
+              // Эга 2026-11-28 (2): чап четга ёпишган (ички ораликсиз), бутун баландликни тўлдиради,
+              // бурчакни картанинг Clip.antiAlias и кесади. Тор экранда энни чеклаганда даста томони
+              // (кўзгудан кейин — чап чет) кесилади, оғзи ва товуш чизиқлари кўринади.
+              final artW =
+                  homeAdPlaceholderArtWidth(box.maxWidth, box.maxHeight);
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(
+                    width: artW,
+                    child: Transform.flip(
+                      key: const ValueKey('home_ad_placeholder_art'),
+                      flipX: true,
+                      child: Image.asset(
+                        kHomeBannerArtAsset,
+                        fit: BoxFit.cover,
+                        // Кўзгудан олдинги чап = кўзгудан кейинги ўнг (оғиз томони) — шу сақланади.
+                        alignment: Alignment.centerLeft,
+                        errorBuilder: (_, __, ___) => Icon(
+                            Icons.campaign_rounded,
+                            size: 36,
+                            color: c.brandText),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(0, 8, 12, 8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            context.tr('home_ad_slot_title'),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: AvaText.homeCardTitle.copyWith(color: c.ink),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: FilledButton(
-                            key: const ValueKey('home_ad_placeholder_cta'),
-                            onPressed: onAdvertise,
-                            style: FilledButton.styleFrom(
-                              backgroundColor: c.brand,
-                              foregroundColor: c.brandInk,
-                              visualDensity: VisualDensity.compact,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(0, 8, 12, 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              context.tr('home_ad_slot_title'),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: AvaText.homeCardTitle
+                                  .copyWith(color: kHomeAdPlaceholderInk),
                             ),
-                            child: Text(context.tr('home_ad_slot_cta'), maxLines: 1),
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 6),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: FilledButton(
+                              key: const ValueKey('home_ad_placeholder_cta'),
+                              onPressed: onAdvertise,
+                              style: FilledButton.styleFrom(
+                                backgroundColor: c.brand,
+                                foregroundColor: c.brandInk,
+                                visualDensity: VisualDensity.compact,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              child: Text(context.tr('home_ad_slot_cta'),
+                                  maxLines: 1),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
-            );
-          },
+                ],
+              );
+            },
+          ),
         ),
       ),
     );

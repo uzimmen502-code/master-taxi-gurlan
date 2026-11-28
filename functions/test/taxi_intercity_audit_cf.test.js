@@ -356,7 +356,7 @@ async function main() {
     const byPhone = Object.fromEntries(n.docs.map((d) => [d.data().targetPhone, d.data()]));
     assert.strictEqual(n.size, 3, `3 ta xabar kutilgan, ${n.size}`);
     assert.ok(byPhone[P1].body.includes('09.10') && byPhone[P1].body.includes('15:30'));
-    assert.ok(/ga ko'chirildi/.test(byPhone[P1].body), 'uz_Latn');
+    assert.ok(/ga köçirildi/.test(byPhone[P1].body), 'uz_Latn (yangi alifbo, 18-band)');
     assert.ok(/Отправление перенесено/.test(byPhone[P2].body), 'ru');
     assert.ok(/кўчирилди/.test(byPhone[P3].body), 'uz_Cyrl (appLang yo\'q)');
     for (const d of n.docs) {

@@ -313,7 +313,7 @@ async function main() {
     assert.ok(a[0].notification.body.startsWith('AVA Supermarket · №S4'), a[0].notification.body);
     assert.ok(pushOf(DISP_TOKEN)[0].notification.body.startsWith('AVA Супермаркет · №S4'), pushOf(DISP_TOKEN)[0].notification.body);
     await updateOrder('s5', { ...plat, ...ORDER_LOC, status: 'accepted' }, { status: 'ready' }, 'evt-s5');
-    assert.ok(pushOf(ADMIN_TOKEN).some((m) => m.notification.body.startsWith("AVA do'koni · №S5")), 'AVA do\'koni matni saqlandi');
+    assert.ok(pushOf(ADMIN_TOKEN).some((m) => m.notification.body.startsWith('AVA dökoni · №S5')), 'AVA dökoni matni saqlandi (uz_Latn yangi alifbo, 18-band)');
     assert.ok(pushOf(DISP_TOKEN).some((m) => m.notification.body.startsWith('AVA дўкони · №S5')));
   });
 

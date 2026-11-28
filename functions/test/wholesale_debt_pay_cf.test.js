@@ -312,7 +312,7 @@ async function cashDebtOrder() {
     assert.deepStrictEqual(await walletLedger(BUYER, 'wholesale_debt_payment'), [-DEBT]);
     assert.deepStrictEqual(await walletLedger(K1, 'logistics_cash_debt_payout'), [POOL - SVC]);
     const nb = (await db.collection('admin_news').doc(`wholesale_${id}_ws_debt_paid_buyer_${BUYER}`).get()).data();
-    assert.ok(nb && nb.title === 'Qarz to\'landi' && nb.body.includes(String(DEBT)), JSON.stringify(nb));
+    assert.ok(nb && nb.title === 'Qarz tölandi' && nb.body.includes(String(DEBT)), JSON.stringify(nb));
     const na = (await db.collection('admin_news').doc(`wholesale_${id}_ws_debt_paid_admin_${ADMIN}`).get()).data();
     assert.ok(na && na.title.startsWith('Оптовый рынок') && na.body.includes(id), JSON.stringify(na));
     assert.strictEqual(await DW.buyerHasOpenDebt(db, BUYER), false, 'demand kvota tekshiruvi endi to\'smaydi');

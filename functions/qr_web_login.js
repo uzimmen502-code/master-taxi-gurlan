@@ -270,6 +270,10 @@ function texts(kind, { label = '', city = '', at = '' } = {}) {
 // ── Callable'lar ─────────────────────────────────────────────────────────
 
 function attachQrWebLogin(exports, deps) {
+  // Har funksiyaga YANGI builder: firebase-functions v1 da runWith builder'ni o'zgartiradi (mutate),
+  // umumiy authFunctions esa checkDeviceBinding dan minInstances: 1 ni o'zida saqlaydi - QR
+  // funksiyalari uni meros olib, doim uyg'oq nusxa (oylik to'lov) ochmasligi uchun (2026-11-28).
+  const qrRegion = () => deps.functions.region('europe-west1');
   const {
     functions,
     authFunctions,
@@ -355,7 +359,7 @@ function attachQrWebLogin(exports, deps) {
   }
 
   /** Web uchun: brauzer QR so'raydi (auth yo'q). `probe: true` — faqat bosqich holati. */
-  exports.qrLoginStart = authFunctions
+  exports.qrLoginStart = qrRegion()
     .runWith({ timeoutSeconds: 30, memory: '256MB' })
     .https.onCall(async (data, context) => {
       const cfg = await loadConfig();
@@ -400,7 +404,7 @@ function attachQrWebLogin(exports, deps) {
     });
 
   /** Telefon: QR'ni skanerladi — ma'lumot olish va sessiyani shu raqamga «band qilish». */
-  exports.qrLoginPeek = authFunctions
+  exports.qrLoginPeek = qrRegion()
     .runWith({ timeoutSeconds: 30, memory: '256MB' })
     .https.onCall(async (data, context) => {
       const phone = requirePhone(context);
@@ -456,7 +460,7 @@ function attachQrWebLogin(exports, deps) {
     });
 
   /** Telefon: «Тасдиқлайман» / «Бекор қилиш». Bitta g'olib (tranzaksiya). */
-  exports.qrLoginApprove = authFunctions
+  exports.qrLoginApprove = qrRegion()
     .runWith({ timeoutSeconds: 30, memory: '256MB' })
     .https.onCall(async (data, context) => {
       const phone = requirePhone(context);
@@ -517,7 +521,7 @@ function attachQrWebLogin(exports, deps) {
     });
 
   /** Web: tasdiqlangan QR → bir martalik custom token + web sessiya. */
-  exports.qrLoginConsume = authFunctions
+  exports.qrLoginConsume = qrRegion()
     .runWith({ timeoutSeconds: 30, memory: '256MB' })
     .https.onCall(async (data, context) => {
       const sid = sidOf(data);
@@ -621,7 +625,7 @@ function attachQrWebLogin(exports, deps) {
    * QR_WEB_SESSION_INVALID (web darhol chiqadi). Jim qayta kirish (yangi token) BERILMAYDI.
    * Bosqich OFF — kill switch (web chiqadi).
    */
-  exports.qrWebSessionHeartbeat = authFunctions
+  exports.qrWebSessionHeartbeat = qrRegion()
     .runWith({ timeoutSeconds: 30, memory: '256MB' })
     .https.onCall(async (data, context) => {
       const phone = requirePhone(context);
@@ -656,7 +660,7 @@ function attachQrWebLogin(exports, deps) {
     });
 
   /** Telefon (yoki web o'zi): faol web sessiyalar ro'yxati. OFF bosqichda ham (chiqish uchun). */
-  exports.qrWebSessionsList = authFunctions
+  exports.qrWebSessionsList = qrRegion()
     .runWith({ timeoutSeconds: 30, memory: '256MB' })
     .https.onCall(async (data, context) => {
       const phone = requirePhone(context);
@@ -684,7 +688,7 @@ function attachQrWebLogin(exports, deps) {
    *    revoked (token bekor qilinmaydi, web o'zi signOut qiladi).
    * Takroriy chaqiruv xavfsiz (revoked: 0).
    */
-  exports.qrWebSessionRevoke = authFunctions
+  exports.qrWebSessionRevoke = qrRegion()
     .runWith({ timeoutSeconds: 30, memory: '256MB' })
     .https.onCall(async (data, context) => {
       const wsidRaw = String((data && data.webSessionId) || '').trim().toLowerCase();

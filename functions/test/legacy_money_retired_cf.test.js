@@ -1,7 +1,10 @@
 /**
- * W-2 (takrorlanishlar auditi 2026-11-28, ega 2026-11-28): eski pul endpointlari —
- * debitForOrder, requestPayout, checkWithdrawalLimit — ENDPOINT_RETIRED stub.
- * Export'lar qoladi; hech qanday pul/ledger/ariza yozuvi yo'q (dispatcher ham, egasi ham).
+ * W-2 + 17-band (takrorlanishlar auditi 2026-11-28, ega 2026-11-28): ishlatilmaydigan eski endpointlar
+ * manbadan OLIB TASHLANDI (export yo'q). Jonli nusxalarni egasi `firebase functions:delete` bilan o'chiradi.
+ *   - pul: debitForOrder, requestPayout, checkWithdrawalLimit, placeOrderWithWallet, floatTopUp, floatReturn,
+ *     driverFloatStatus;
+ *   - admin/kirish: adminWebSignInWithCode, promoteToAdminWithPin, appendAdminSystemChat (= sendSupportChatReply);
+ *   - bir martalik migratsiya: migrateCheapProductTitleLower, migratePhoneFormats.
  * creditSupplier (admin) — QOLDI: courier_payout.js qo'lda to'lov yo'li (courier_payout_cf).
  *
  *   firebase emulators:exec --only firestore --project demo-legacy-money "node test/legacy_money_retired_cf.test.js"
@@ -23,6 +26,17 @@ const DISPATCHER = '998917200002';
 const ADMIN = '998917200003';
 const ctxOf = (p) => ({ auth: { uid: `uid_${p}`, token: { phone_number: `+${p}` } } });
 
+const REMOVED = [
+  'debitForOrder', 'requestPayout', 'checkWithdrawalLimit', 'placeOrderWithWallet', 'floatTopUp', 'floatReturn',
+  'driverFloatStatus', 'adminWebSignInWithCode', 'promoteToAdminWithPin', 'appendAdminSystemChat',
+  'migrateCheapProductTitleLower', 'migratePhoneFormats',
+];
+// O'rnini bosuvchi (jonli) yo'llar — tasodifan o'chib ketmasin.
+const REPLACEMENTS = [
+  'placeOrderPostPaid', 'requestWalletWithdraw', 'walletToCash', 'cashExchange', 'confirmPayout', 'rejectPayout',
+  'sendSupportChatReply', 'adminWebSignIn', 'creditSupplier',
+];
+
 const results = [];
 const check = async (name, fn) => {
   try { await fn(); results.push(true); console.log(`PASS - ${name}`); } catch (e) {
@@ -33,14 +47,6 @@ async function clearEmulator() {
   const res = await fetch(`http://${process.env.FIRESTORE_EMULATOR_HOST}/emulator/v1/projects/${process.env.GCLOUD_PROJECT}/databases/(default)/documents`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`emulator clear: HTTP ${res.status}`);
 }
-const isRetired = (name) => (e) => {
-  assert.strictEqual(e.code, 'failed-precondition');
-  assert.strictEqual(e.details.code, 'ENDPOINT_RETIRED');
-  assert.strictEqual(e.details.endpoint, name);
-  for (const l of ['uz_Cyrl', 'uz_Latn', 'ru']) assert.ok(e.details.messages[l], l);
-  return true;
-};
-const size = async (col) => (await db.collection(col).get()).size;
 
 async function main() {
   await clearEmulator();
@@ -48,40 +54,25 @@ async function main() {
   await db.doc(`users/${DISPATCHER}`).set({ role: 'dispatcher', phone: DISPATCHER, bonusBalance: 0 });
   await db.doc(`users/${ADMIN}`).set({ role: 'superadmin', phone: ADMIN, bonusBalance: 0 });
 
-  await check('E1 dispatcher boshqaning hamyonidan debitForOrder → ENDPOINT_RETIRED, balans o\'zgarmaydi', async () => {
-    await assert.rejects(fns.debitForOrder.run({
-      userPhone: VICTIM, amount: 150000, idempotencyKey: 'w2-e1', refType: 'order', refId: 'x',
-    }, ctxOf(DISPATCHER)), isRetired('debitForOrder'));
-    assert.strictEqual((await db.doc(`users/${VICTIM}`).get()).data().bonusBalance, 200000);
+  await check(`R1 ${REMOVED.length} ta eski endpoint export qilinmaydi (deploy ularni qayta yaratmaydi)`, async () => {
+    const still = REMOVED.filter((n) => Object.prototype.hasOwnProperty.call(fns, n));
+    assert.deepStrictEqual(still, []);
   });
 
-  await check('E2 egasi o\'z hamyonidan debitForOrder ham → ENDPOINT_RETIRED', async () => {
-    await assert.rejects(fns.debitForOrder.run({ userPhone: VICTIM, amount: 1, idempotencyKey: 'w2-e2' }, ctxOf(VICTIM)),
-      isRetired('debitForOrder'));
+  await check('R2 o\'rnini bosuvchi jonli yo\'llar joyida (chegara: ortiqcha o\'chirilmadi)', async () => {
+    const missing = REPLACEMENTS.filter((n) => typeof (fns[n] && fns[n].run) !== 'function');
+    assert.deepStrictEqual(missing, []);
   });
 
-  await check('E3 creditSupplier QOLDI (courier_payout qo\'lda yo\'li): dispatcher → permission-denied; stub EMAS', async () => {
+  await check('E3 creditSupplier QOLDI (courier_payout qo\'lda yo\'li): dispatcher → permission-denied', async () => {
     await assert.rejects(fns.creditSupplier.run({ userPhone: VICTIM, amount: 5000, dateKey: '2026-11-28' }, ctxOf(DISPATCHER)),
       (e) => e.code === 'permission-denied');
     assert.strictEqual((await db.doc(`users/${VICTIM}`).get()).data().bonusBalance, 200000);
   });
 
-  await check('E4 requestPayout → ENDPOINT_RETIRED, payout_requests yozilmaydi', async () => {
-    await assert.rejects(fns.requestPayout.run({ userPhone: VICTIM, amount: 1000, idempotencyKey: 'w2-e4' }, ctxOf(VICTIM)),
-      isRetired('requestPayout'));
-  });
-
-  await check('E5 checkWithdrawalLimit → ENDPOINT_RETIRED (limit ma\'lumoti chiqmaydi)', async () => {
-    await assert.rejects(fns.checkWithdrawalLimit.run({ userId: VICTIM, amount: 1000 }, ctxOf(VICTIM)),
-      isRetired('checkWithdrawalLimit'));
-  });
-
-  await check('E6 autentifikatsiyasiz ham bir xil stub (chegara), hech qanday yozuv yo\'q', async () => {
-    for (const n of ['debitForOrder', 'requestPayout', 'checkWithdrawalLimit']) {
-      await assert.rejects(fns[n].run({ userPhone: VICTIM, amount: 1, idempotencyKey: `w2-e6-${n}` }, {}), isRetired(n));
-    }
+  await check('E6 hech qanday pul/ariza yozuvi paydo bo\'lmadi', async () => {
     for (const c of ['payout_requests', 'wallet_idempotency', 'journal_entries', 'ledger_accounts']) {
-      assert.strictEqual(await size(c), 0, c);
+      assert.strictEqual((await db.collection(c).get()).size, 0, c);
     }
     assert.strictEqual((await db.collection(`users/${VICTIM}/wallet_ledger`).get()).size, 0);
   });

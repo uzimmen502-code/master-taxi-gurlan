@@ -1204,6 +1204,27 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // Компьютерда QR орқали кириш (эга 2026-11-28). `qr_login_sessions` — ATAYLAB match YO'Q
+    // (sir hash'i, telefon — faqat server). Web kirishdan OLDIN (auth yo'q) faqat o'z kuzatuv
+    // hujjatini o'qiydi: ID = 256 bit tasodifiy (`qrLoginStart` faqat shu brauzerga beradi, QR'da
+    // YO'Q) — «sirni bilgan o'qiydi». `list` yo'q (sanab bo'lmaydi). Hujjatda faqat {status,
+    // expiresAt}; token hech qachon Firestore'ga yozilmaydi (`qrLoginConsume` javobida).
+    // Test: functions/test/qr_web_login_rules.test.js
+    match /qr_login_watch/{watchId} {
+      allow get: if watchId.matches('^[a-f0-9]{64}$');
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+
+    // Web sessiyalar: egasi (token telefoni) o'z sessiyasi holatini tinglaydi («Чиқиш» → web
+    // darhol chiqadi). `list` yo'q — ro'yxat `qrWebSessionsList` callable orqali. Yozish — faqat CF.
+    match /qr_web_sessions/{sessionId} {
+      allow get: if isAuth() && phoneFromToken() != ''
+          && resource.data.phone == phoneFromToken();
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+
     // Risk ҳодисалари.
     //
     // Аввал `create`, `read`, `update` — `if true` эди: ҳар ким (ҳатто

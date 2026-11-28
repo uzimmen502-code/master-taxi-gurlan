@@ -91,7 +91,7 @@ class _MerchantReportTabState extends State<MerchantReportTab> {
         return ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: [
-            Text(context.tr('restaurants_m_today'), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: c.ink)),
+            Text(context.tr('restaurants_preorder_today'), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: c.ink)),
             const SizedBox(height: 8),
             Row(
               children: [

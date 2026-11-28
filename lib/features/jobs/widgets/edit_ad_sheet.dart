@@ -106,7 +106,7 @@ class _EditAdViewState extends State<_EditAdView> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text(ctx.tr('jobs_dialog_no')),
+            child: Text(ctx.tr('no')),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),

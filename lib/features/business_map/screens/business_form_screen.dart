@@ -257,7 +257,7 @@ class _BusinessFormScreenState extends State<BusinessFormScreen> {
       final id = await _repo.upsertMine(draft, businessId: widget.existing?.id, clientRequestId: _requestId);
       if (!mounted) return;
       ScaffoldMessenger.maybeOf(context)
-          ?.showSnackBar(SnackBar(content: Text(context.tr('bizmap_saved'))));
+          ?.showSnackBar(SnackBar(content: Text(context.tr('saved'))));
       // Янги объект (филиал эмас) — чақирувчи унинг ID'си билан маҳсулотлар экранини очиши мумкин (эга, 2026-10-26:
       // «янги дўкон қўшгандан кейин шу ернинг ўзида маҳсулот қўшиш»). Таҳрир ва филиал — аввалгидек `true`.
       final isNewMain = widget.existing == null && draft.branchOf.isEmpty && id.isNotEmpty;

@@ -433,7 +433,7 @@ class _DeliveryQuoteStatusScreenState extends State<DeliveryQuoteStatusScreen> {
         return [
           BizOrderMoneyLine(
             key: const ValueKey('dq_price'),
-            label: context.tr('dq_status_offered'),
+            label: context.tr('dq_status_title'),
             amount: q.priceUzs ?? 0,
             bold: true,
           ),

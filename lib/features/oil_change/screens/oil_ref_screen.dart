@@ -496,7 +496,7 @@ class _SaeAccordion extends StatelessWidget {
             _param(context.tr('oil_sae_param_hot'), entry.hotProtect.t(lang)),
             _param(context.tr('oil_sae_param_main'), entry.main.t(lang)),
             _param(context.tr('oil_sae_param_engines'), entry.engines.t(lang)),
-            _param(context.tr('oil_sae_param_chevy'), entry.chevy.t(lang)),
+            _param(context.tr('oil_ref_chev_label'), entry.chevy.t(lang)),
             _param(context.tr('oil_sae_param_pros'), entry.pros.t(lang)),
             _param(context.tr('oil_sae_param_cons'), entry.cons.t(lang)),
             const SizedBox(height: 8),

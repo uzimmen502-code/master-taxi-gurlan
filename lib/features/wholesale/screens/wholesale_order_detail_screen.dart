@@ -434,10 +434,10 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
             children: [
               _line(context, context.tr('wholesale_quote_goods'), formatMoney(o.goodsTotal)),
               // S4: ўз етказишида етказиш нархи товар нархи ичида (сервер deliveryFee 0).
-              _line(context, context.tr('wholesale_quote_delivery'),
+              _line(context, context.tr('delivery'),
                   o.isSelf ? context.tr('wholesale_self_fee_included') : formatMoney(o.deliveryFee)),
               Divider(height: 10, color: c.line),
-              _line(context, context.tr('wholesale_quote_total'), formatMoney(o.total), bold: true),
+              _line(context, context.tr('total'), formatMoney(o.total), bold: true),
               // S6 янги карта: етказиш ҳақи ҳамёндан тўланган, эшик олдида — фақат товар.
               if (o.isNewCard && o.deliveryFee > 0)
                 _line(context, context.tr('wholesale_order_card_paid_wallet'), formatMoney(o.deliveryFee)),

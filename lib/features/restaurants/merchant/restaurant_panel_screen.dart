@@ -214,7 +214,7 @@ class _RestaurantPanelScreenState extends State<RestaurantPanelScreen> {
             selectedIndex: _tab < (_bookingsOn ? 5 : 4) ? _tab : 0,
             onDestinationSelected: (i) => setState(() => _tab = i),
             destinations: [
-              NavigationDestination(icon: const Icon(Icons.receipt_long_outlined), label: context.tr('restaurants_m_tab_orders')),
+              NavigationDestination(icon: const Icon(Icons.receipt_long_outlined), label: context.tr('restaurants_m_r_orders')),
               NavigationDestination(icon: const Icon(Icons.restaurant_menu_rounded), label: context.tr('restaurants_m_tab_menu')),
               NavigationDestination(icon: const Icon(Icons.storefront_outlined), label: context.tr('restaurants_m_tab_shop')),
               NavigationDestination(icon: const Icon(Icons.bar_chart_rounded), label: context.tr('restaurants_m_tab_report')),

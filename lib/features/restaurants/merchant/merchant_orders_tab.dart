@@ -425,7 +425,7 @@ class _MerchantOrderCard extends StatelessWidget {
   String _label(BuildContext context, MerchantAction a) => switch (a) {
         MerchantAction.accept => context.tr('restaurants_m_accept'),
         MerchantAction.reject => context.tr('restaurants_m_reject'),
-        MerchantAction.ready => context.tr('restaurants_m_ready'),
+        MerchantAction.ready => context.tr('restaurants_status_ready'),
         MerchantAction.markDelivered => context.tr('restaurants_m_delivered'),
         MerchantAction.confirmPayment => context.tr('restaurants_m_payment_received'),
       };
@@ -534,7 +534,7 @@ class _MerchantOrderCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             '${context.tr('restaurants_items_total')}: ${formatPrice(o.foodAmount)}'
-            '${o.deliveryFee > 0 ? ' · ${context.tr('restaurants_delivery_fee')}: ${formatPrice(o.deliveryFee)}' : ''}',
+            '${o.deliveryFee > 0 ? ' · ${context.tr('delivery')}: ${formatPrice(o.deliveryFee)}' : ''}',
             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: c.ink),
           ),
           if (o.note.isNotEmpty) ...[
@@ -548,7 +548,7 @@ class _MerchantOrderCard extends StatelessWidget {
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
-                  '${o.userName.isEmpty ? context.tr('restaurants_m_customer') : o.userName}'
+                  '${o.userName.isEmpty ? context.tr('restaurants_courier_call_customer') : o.userName}'
                   '${o.deliveryMode != 'pickup' && o.address.isNotEmpty ? ' · ${o.address}' : ''}',
                   style: TextStyle(fontSize: 12, color: c.ink2),
                 ),

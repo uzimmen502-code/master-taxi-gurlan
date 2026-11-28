@@ -260,7 +260,7 @@ class _DeviceTransferApproveScreenState
                         color: AppColors.onPrimary,
                       ),
                     )
-                  : Text(context.tr('ob_dev_isyou_yes')),
+                  : Text(context.tr('yes')),
             ),
             const SizedBox(height: 10),
             OutlinedButton(
@@ -271,7 +271,7 @@ class _DeviceTransferApproveScreenState
                 side: BorderSide(color: Colors.red.shade300),
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
-              child: Text(context.tr('ob_dev_isyou_no')),
+              child: Text(context.tr('no')),
             ),
           ],
         ),

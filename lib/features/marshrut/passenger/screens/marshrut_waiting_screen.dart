@@ -71,7 +71,7 @@ class _MarshrutWaitingViewState extends State<_MarshrutWaitingView> {
           backgroundColor: Colors.orange,
           duration: const Duration(seconds: 6),
           action: SnackBarAction(
-            label: context.tr('understood'),
+            label: context.tr('understand'),
             textColor: Colors.white,
             onPressed: () {},
           ),

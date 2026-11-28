@@ -136,7 +136,7 @@ class AssistantDrawer extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.delete_outline, color: Color(0xFFE53935)),
-              title: Text(ctx.tr('assistant_delete'),
+              title: Text(ctx.tr('delete'),
                   style: GoogleFonts.inter(color: const Color(0xFFE53935))),
               onTap: () => Navigator.pop(ctx, 'delete'),
             ),
@@ -182,7 +182,7 @@ class AssistantDrawer extends StatelessWidget {
       final ok = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: Text(ctx.tr('assistant_delete')),
+          title: Text(ctx.tr('delete')),
           content: Text(ctx.tr('assistant_delete_confirm')),
           actions: [
             TextButton(
@@ -193,7 +193,7 @@ class AssistantDrawer extends StatelessWidget {
               style: FilledButton.styleFrom(
                   backgroundColor: const Color(0xFFE53935)),
               onPressed: () => Navigator.pop(ctx, true),
-              child: Text(ctx.tr('assistant_delete')),
+              child: Text(ctx.tr('delete')),
             ),
           ],
         ),

@@ -634,7 +634,7 @@ class _CircleScreenState extends State<CircleScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.add_a_photo_outlined),
               label: Text(_uploading
-                  ? context.tr('circ_uploading')
+                  ? context.tr('loading')
                   : context.tr('circ_add_photo')),
             ),
           ),

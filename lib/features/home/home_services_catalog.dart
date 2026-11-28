@@ -291,7 +291,7 @@ List<ServiceSpotlightItem> buildHomeServices(
     // бўлса — INTERNAL синовчи (сервер `testerIds`) барибир киради (42-банд).
     ServiceSpotlightItem(
       moduleId: 'logistics',
-      label: context.tr('home_module_logistics'),
+      label: context.tr('parcel'),
       imagePath: 'assets/images/home/card_post_v1.webp',
       icon: Icons.local_post_office_rounded,
       iconColor: Colors.white,

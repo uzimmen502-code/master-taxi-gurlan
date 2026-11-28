@@ -277,7 +277,7 @@ class _AddressLine extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                '${context.tr('sm_delivery_to')}: ${label.isEmpty ? context.tr('sm_address_choose') : label}',
+                '${context.tr('delivery')}: ${label.isEmpty ? context.tr('sm_address_choose') : label}',
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontSize: 15, color: c.ink),
@@ -489,7 +489,7 @@ class _ErrorView extends StatelessWidget {
           children: [
             Text(context.tr(textKey), textAlign: TextAlign.center, style: const TextStyle(fontSize: 16)),
             const SizedBox(height: 12),
-            FilledButton(onPressed: onRetry, child: Text(context.tr('sm_retry'))),
+            FilledButton(onPressed: onRetry, child: Text(context.tr('err_retry'))),
           ],
         ),
       ),

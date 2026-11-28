@@ -534,7 +534,7 @@ class SectionDishCard extends StatelessWidget {
                             ),
                           if (section == RestaurantSection.fast)
                             Text(
-                              context.tr('restaurants_dish_prep').replaceAll('{min}', '${d.prepTimeMin}'),
+                              context.tr('restaurants_eta').replaceAll('{min}', '${d.prepTimeMin}'),
                               key: ValueKey('prep-${d.key}'),
                               style: AvaText.dishNote.copyWith(color: c.ink2),
                             ),

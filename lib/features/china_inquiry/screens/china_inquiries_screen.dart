@@ -99,7 +99,7 @@ class _ChinaInquiryDetailScreenState extends State<ChinaInquiryDetailScreen> {
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: Text(context.tr('china_inq_no'))),
+              child: Text(context.tr('no'))),
           FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
               child: Text(context.tr('china_inq_yes'))),

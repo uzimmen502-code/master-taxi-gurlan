@@ -357,7 +357,7 @@ class _OilVehicleEditScreenState extends State<OilVehicleEditScreen> {
                       color: AppColors.onPrimary,
                     ),
                   )
-                : Text(context.tr('oil_save')),
+                : Text(context.tr('save')),
           ),
         ],
       ),

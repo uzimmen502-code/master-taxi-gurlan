@@ -71,7 +71,7 @@ class _MerchantBookingsTabState extends State<MerchantBookingsTab> {
       builder: (ctx) => AlertDialog(
         content: Text(ctx.tr('restaurants_m_bk_cancel_warn')),
         actions: [
-          TextButton(key: const ValueKey('bk-cancel-no'), onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.tr('restaurants_booking_cancel_no'))),
+          TextButton(key: const ValueKey('bk-cancel-no'), onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.tr('no'))),
           FilledButton(key: const ValueKey('bk-cancel-yes'), onPressed: () => Navigator.pop(ctx, true), child: Text(ctx.tr('restaurants_booking_cancel_yes'))),
         ],
       ),
@@ -249,7 +249,7 @@ class _Card extends StatelessWidget {
                     child: OutlinedButton(
                       key: ValueKey('bk-reject-${b.id}'),
                       onPressed: busy ? null : onReject,
-                      child: Text(context.tr('restaurants_m_bk_reject')),
+                      child: Text(context.tr('restaurants_m_reject')),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -257,7 +257,7 @@ class _Card extends StatelessWidget {
                     child: FilledButton(
                       key: ValueKey('bk-accept-${b.id}'),
                       onPressed: busy ? null : onAccept,
-                      child: Text(context.tr('restaurants_m_bk_accept')),
+                      child: Text(context.tr('restaurants_handover_accept_btn')),
                     ),
                   ),
                 ],
@@ -269,7 +269,7 @@ class _Card extends StatelessWidget {
               child: TextButton(
                 key: ValueKey('bk-cancel-${b.id}'),
                 onPressed: busy ? null : onCancel,
-                child: Text(context.tr('restaurants_m_bk_cancel')),
+                child: Text(context.tr('restaurants_booking_cancel')),
               ),
             ),
         ],

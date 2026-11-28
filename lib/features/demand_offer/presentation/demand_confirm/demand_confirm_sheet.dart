@@ -161,7 +161,7 @@ class DemandConfirmSheet extends StatelessWidget {
                               color: c.brandInk,
                             ),
                           )
-                        : Text(context.tr('request_send')),
+                        : Text(context.tr('submit')),
                   ),
                 ),
               ],

@@ -36,7 +36,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
       builder: (ctx) => AlertDialog(
         title: Text(ctx.tr('restaurants_booking_cancel_confirm')),
         actions: [
-          TextButton(key: const ValueKey('cancel-no'), onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.tr('restaurants_booking_cancel_no'))),
+          TextButton(key: const ValueKey('cancel-no'), onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.tr('no'))),
           FilledButton(key: const ValueKey('cancel-yes'), onPressed: () => Navigator.pop(ctx, true), child: Text(ctx.tr('restaurants_booking_cancel_yes'))),
         ],
       ),

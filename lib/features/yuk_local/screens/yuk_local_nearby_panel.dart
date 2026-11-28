@@ -718,7 +718,7 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
                     children: [
                       Expanded(
                         child: _MiniBtn(
-                          label: context.tr('yuk_edit'),
+                          label: context.tr('edit'),
                           fg: Colors.white,
                           border: _accent,
                           fill: AvaLight.ink2,
@@ -1336,7 +1336,7 @@ class _LocalTruckCard extends StatelessWidget {
                       PopupMenuItem(
                         value: 'edit',
                         child: Text(
-                          context.tr('yuk_edit'),
+                          context.tr('edit'),
                           style: const TextStyle(color: Colors.white),
                         ),
                       ),

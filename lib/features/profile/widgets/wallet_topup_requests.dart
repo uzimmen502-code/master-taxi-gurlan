@@ -133,7 +133,7 @@ class _Row extends StatelessWidget {
       case 'credited':
         return context.tr('wlt_tu_credited');
       case 'rejected':
-        return context.tr('wlt_tu_rejected');
+        return context.tr('wlt_st_rejected');
       case 'expired':
         return context.tr('wlt_tu_expired');
       case 'cancelled':

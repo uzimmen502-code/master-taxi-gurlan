@@ -181,7 +181,7 @@ class _LanguageSelectScreenState extends State<LanguageSelectScreen> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Text(
-                            context.tr('ob_pre_language'),
+                            context.tr('language'),
                             style: const TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w800,

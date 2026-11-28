@@ -259,7 +259,7 @@ class WalletWithdrawPanel extends StatelessWidget {
                         height: 16,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : Text(ctx.tr('wlt_wd_send')),
+                    : Text(ctx.tr('submit')),
               ),
             ],
           ),

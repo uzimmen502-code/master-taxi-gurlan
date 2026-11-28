@@ -661,7 +661,7 @@ class _YukLocalDriverSheetState extends State<_YukLocalDriverSheet> {
                             width: 20,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : Text(context.tr('yuk_local_save')),
+                        : Text(context.tr('save')),
                   ),
                 ),
               ),

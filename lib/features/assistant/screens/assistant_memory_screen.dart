@@ -82,7 +82,7 @@ class AssistantMemoryScreen extends StatelessWidget {
                       ),
                       IconButton(
                         icon: Icon(Icons.close, size: 18, color: c.subtle),
-                        tooltip: context.tr('assistant_delete'),
+                        tooltip: context.tr('delete'),
                         onPressed: () => _delete(context, m.id),
                       ),
                     ],
@@ -121,7 +121,7 @@ class AssistantMemoryScreen extends StatelessWidget {
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: const Color(0xFFE53935)),
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(ctx.tr('assistant_delete')),
+            child: Text(ctx.tr('delete')),
           ),
         ],
       ),

@@ -171,7 +171,7 @@ class _CartSheet extends StatelessWidget {
                 _TotalLine(label: context.tr('restaurants_items_total'), value: cart.itemsTotal),
                 if (cart.qtyDiscountTotal > 0)
                   _TotalLine(label: context.tr('restaurants_qty_discount'), value: -cart.qtyDiscountTotal),
-                _TotalLine(label: context.tr('restaurants_total'), value: cart.itemsTotal, bold: true),
+                _TotalLine(label: context.tr('total'), value: cart.itemsTotal, bold: true),
                 if (missing > 0)
                   Padding(
                     padding: const EdgeInsets.only(top: 6),

@@ -86,7 +86,7 @@ class _SmOtherListsScreenState extends State<SmOtherListsScreen> {
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
                   Text(context.tr('sm_err_load'), textAlign: TextAlign.center, style: const TextStyle(fontSize: 16)),
                   const SizedBox(height: 12),
-                  FilledButton(onPressed: _load, child: Text(context.tr('sm_retry'))),
+                  FilledButton(onPressed: _load, child: Text(context.tr('err_retry'))),
                 ]),
               ),
             )
@@ -193,7 +193,7 @@ class _SmSavedListScreenState extends State<SmSavedListScreen> {
         ..showSnackBar(SnackBar(
           key: const ValueKey('sm_list_added_snack'),
           content: Text(context.tr('sm_list_added').replaceAll('{n}', '$n')),
-          action: SnackBarAction(label: context.tr('sm_tab_cart'), onPressed: () => smOpenCart(context, _c)),
+          action: SnackBarAction(label: context.tr('cart'), onPressed: () => smOpenCart(context, _c)),
         ));
     } finally {
       if (mounted) setState(() => _busy = false);

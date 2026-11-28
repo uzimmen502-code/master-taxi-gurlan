@@ -231,7 +231,7 @@ class _RestaurantVideoCardState extends State<RestaurantVideoCard> {
           else if (_failed)
             Row(children: [
               Expanded(child: Text(context.tr('restaurants_m_video_load_failed'), style: TextStyle(fontSize: 12, color: c.danger))),
-              TextButton(key: const ValueKey('video-retry'), onPressed: _load, child: Text(context.tr('restaurants_m_video_retry'))),
+              TextButton(key: const ValueKey('video-retry'), onPressed: _load, child: Text(context.tr('err_retry'))),
             ])
           else ...[
             for (final clip in _clips)

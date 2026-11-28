@@ -152,7 +152,7 @@ class _AvaBookScreenState extends State<AvaBookScreen> {
                   ? context.tr('book_finish')
                   : u.kind == _UnitKind.cover
                       ? context.tr('book_start_reading')
-                      : context.tr('book_next'),
+                      : context.tr('next'),
               onPrev: () => _goTo(_idx - 1),
               onNext: () => _goTo(_idx + 1),
             ),

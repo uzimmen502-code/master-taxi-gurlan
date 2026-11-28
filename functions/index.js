@@ -11,6 +11,8 @@ const { attachIncentives } = incentivesCore;
 
 const settlementLedger = require('./settlement_ledger');
 const adminPin = require('./admin_pin');
+// «Хабарлар»да фақат охирги эслатма (детерминистик admin_news ID, тўлиқ алмаштириш; эга 2026-11-28).
+const adminNewsLatest = require('./admin_news_latest');
 
 // Yuk birjasi — shaharlararo (yuk_listings) va tuman ichi (yuk_local_drivers).
 // `digits` — hoisted function declaration (pastda), shu yerda ishlatish xavfsiz.
@@ -1067,6 +1069,8 @@ async function notifyUserInApp({
   extraNews = {},
   extraData = {},
   channelId = '',
+  // Детерминистик ID берилса — ҳужжат ТЎЛИҚ алмаштирилади («Хабарлар»да фақат охирги эслатма; эга 2026-11-28).
+  newsDocId = '',
 }) {
   const uid = canonicalUid(userId);
   if (uid.length < 9) return;
@@ -1074,7 +1078,7 @@ async function notifyUserInApp({
   const b = String(body || '').trim();
   if (!t) return;
 
-  await db.collection('admin_news').add({
+  const newsData = {
     title: t,
     body: b || t,
     category,
@@ -1089,7 +1093,18 @@ async function notifyUserInApp({
     // хабарлар (курьер етиб келди, тўлов чеки, ресторан, ҳамён…) мижозга
     // ИККИ марта борарди, иккинчиси нотўғри экранга (`news`) очиларди.
     pushDirect: true,
-  });
+  };
+  if (newsDocId) {
+    // Алмаштиришда `onAdminNewsCreate` ишламайди (фақат onCreate) — badge'ни шу ерда оширамиз.
+    const { existed } = await adminNewsLatest.replaceLatestNews(db, newsDocId, newsData);
+    if (existed) {
+      await bumpHomeNewsBadge(newsData).catch((err) => {
+        console.error('notifyUserInApp bumpHomeNewsBadge:', err.message || err);
+      });
+    }
+  } else {
+    await db.collection('admin_news').add(newsData);
+  }
 
   const userDoc = await db.collection('users').doc(uid).get();
   const token = userDoc.data()?.fcmToken;

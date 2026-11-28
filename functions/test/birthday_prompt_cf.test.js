@@ -134,6 +134,7 @@ async function main() {
     assert.deepStrictEqual([m.source, m.dataType, m.screen], ['birthday_prompt', 'birthday_prompt', 'user_info']);
     assert.deepStrictEqual(m.extraData, { promptDay: '2026-11-30', promptPhase: 'daily' });
     assert.strictEqual(m.extraNews.promptSend, 1);
+    assert.strictEqual(m.newsDocId, `birthday_prompt_${T1}`); // эга 2026-11-28: фақат охирги эслатма
     assert.strictEqual(r.HAS_BIRTHDATE, 1);
     assert.strictEqual(r.NO_TOKEN, 1);
     const st = await get(`birthday_prompt_state/${T1}`);
@@ -290,6 +291,40 @@ async function main() {
     const g = await call('adminGetBirthdayPromptSettings', {}, ADMIN);
     assert.ok(g.runs.length >= 3);
     assert.ok(g.runs.every((x) => typeof x.day === 'string'));
+  });
+
+  await check('C18 ҳар юбориш ўша ID ли ягона ҳужжат (newsDocId) — ҳамма юборишлар бир хил ID', async () => {
+    // C4…C15 давомида T1 га бир неча марта юборилди — ҳар сафар ID бир хил.
+    sent.length = 0;
+    await setSettings({ ...S0, internalPhones: [U4] });
+    await runOn('2027-01-13');
+    assert.deepStrictEqual(sent.map((m) => m.newsDocId), [`birthday_prompt_${U4}`]);
+    assert.strictEqual(b.newsDocIdOf(T1), `birthday_prompt_${T1}`);
+  });
+
+  await check('C19 replaceLatestNews: 1-марта яратади (existed=false), кейин ТЎЛИҚ алмаштиради (existed=true): эски майдонлар йўқ, createdAt янги, ҳужжат битта', async () => {
+    const { replaceLatestNews, validNewsId } = require('../admin_news_latest');
+    const FV = admin.firestore.FieldValue;
+    const id = b.newsDocIdOf(U4);
+    const base = { title: 'A', body: 'B', category: 'info', audience: 'user', targetUserId: U4, source: 'birthday_prompt', priority: 7, pushDirect: true };
+    const r1 = await replaceLatestNews(db, id, { ...base, createdAt: FV.serverTimestamp(), promptDay: '2027-01-13' });
+    assert.strictEqual(r1.existed, false);
+    const c1 = (await get(`admin_news/${id}`)).createdAt.toMillis();
+    // админ қайтариб олган / push қайта юборилган ҳолатни тақлид қиламиз
+    await db.doc(`admin_news/${id}`).update({ retractedAt: FV.serverTimestamp(), pushResendAt: FV.serverTimestamp(), promptSend: 9 });
+    await new Promise((res) => setTimeout(res, 20));
+    const r2 = await replaceLatestNews(db, id, { ...base, title: 'A2', createdAt: FV.serverTimestamp(), promptDay: '2027-01-14' });
+    assert.strictEqual(r2.existed, true);
+    const d = await get(`admin_news/${id}`);
+    assert.strictEqual(d.title, 'A2');
+    assert.strictEqual(d.promptDay, '2027-01-14');
+    for (const k of ['retractedAt', 'pushResendAt', 'promptSend']) assert.strictEqual(d[k], undefined, k);
+    assert.ok(d.createdAt.toMillis() > c1, 'createdAt янгиланди (ўқилмаган + тепада)');
+    const all = await db.collection('admin_news').where('targetUserId', '==', U4).where('source', '==', 'birthday_prompt').get();
+    assert.strictEqual(all.size, 1);
+    assert.strictEqual(validNewsId('a/b'), false);
+    assert.strictEqual(validNewsId(''), false);
+    await assert.rejects(replaceLatestNews(db, 'bad/id', base), /ADMIN_NEWS_ID_INVALID/);
   });
 
   const failed = results.filter((x) => !x).length;

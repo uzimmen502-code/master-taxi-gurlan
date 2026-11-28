@@ -15,6 +15,9 @@
  *   - манба — `users/{uid}.birthDate` (сатр; клиент `setBirthDateIfEmpty`, бош саҳифа карточкаси
  *     `birthDatePromptVisibleFor` билан АЙНАН бир хил қоида: бўш/йўқ = киритилмаган);
  *   - хабар — `notifyUserInApp` (admin_news + FCM); тил — notif_i18n.normalizeLang;
+ *     ҳар фойдаланувчига ЯГОНА `admin_news/birthday_prompt_{998…}` — ҳар юборишда тўлиқ алмаштирилади, createdAt
+ *     янги (ўқилмаган, тепада); push — notifyUserInApp'нинг ўзида; badge — алмаштиришда ҳам +1 (эга 2026-11-28:
+ *     «Хабарлар»да фақат охирги эслатма қолсин, эскилари ўрнига ёзилсин»);
  *   - рад этиш — мавжуд `users.holidayRemindersOptIn === false` (байрам эслатмалари учун) — юборилмайди;
  *   - босқич — off · internal · pilot · public (supermarket.STAGES; оила/рағбат дастурлари каби
  *     `internalPhones` + `pilotDistrictIds`).
@@ -230,6 +233,13 @@ function normalizeSettings(raw) {
   };
 }
 
+/**
+ * Фойдаланувчининг ЯГОНА эслатма ҳужжати `admin_news/birthday_prompt_{998…}` (эга 2026-11-28: «Хабарлар»да
+ * фақат охирги эслатма қолсин, эскилари ўрнига ёзилсин). Ҳар юборишда тўлиқ алмаштирилади, createdAt янги.
+ */
+const NEWS_ID_PREFIX = 'birthday_prompt_';
+const newsDocIdOf = (uid) => `${NEWS_ID_PREFIX}${uid}`;
+
 /** Тил бўйича матн (номаълум тил — uz_Cyrl, notif_i18n қоидаси). */
 const promptTextFor = (lang) => PROMPT_TEXT[normalizeLang(lang)] || PROMPT_TEXT.uz_Cyrl;
 
@@ -288,6 +298,8 @@ function attachBirthdayPrompt(exportsObj, deps) {
     try {
       await notifyUserInApp({
         userId: uid, title: m.title, body: m.body, category: 'info', source: SOURCE, dataType: SOURCE, screen: SCREEN,
+        // Эга 2026-11-28: «Хабарлар»да фақат охирги эслатма қолсин, эскилари ўрнига ёзилсин.
+        newsDocId: newsDocIdOf(uid),
         extraNews: { promptDay: ctx.day, promptPhase: claim.kind, promptSend: claim.send },
         extraData: { promptDay: ctx.day, promptPhase: claim.kind },
       });
@@ -456,6 +468,6 @@ module.exports = {
   attachBirthdayPrompt,
   // тоза (тестлар)
   isoWeekKey, weekKeyOfMs, dayKeyOfMs, isSundayKey, inSendWindow, hasBirthDate, skipReasonOf, normalizeState, claimDecision,
-  validateSettings, normalizeSettings, promptTextFor, mapPool, messagesOf,
+  validateSettings, normalizeSettings, promptTextFor, mapPool, messagesOf, newsDocIdOf, NEWS_ID_PREFIX,
   PROMPT_TEXT, DEFAULT_DAILY_COUNT, DEFAULT_WEEKLY_SUNDAY, PAUSE_DAYS, LIMITS, WINDOW, SCHEDULE, SETTINGS_DOC, STATE, RUNS, SOURCE, SCREEN,
 };

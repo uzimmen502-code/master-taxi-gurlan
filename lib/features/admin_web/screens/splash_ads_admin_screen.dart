@@ -374,6 +374,7 @@ class _AdTile extends StatelessWidget {
     final districts = data['districts'] is List ? (data['districts'] as List).join(', ') : '';
     final regions = data['regionIds'] is List ? (data['regionIds'] as List).join(', ') : '';
     final paid = data['source'] == 'paid';
+    final house = data['house'] == true;
     final img = '${data['imageUrl'] ?? ''}';
     final now = DateTime.now();
     final running = active && s != null && e != null && !now.isBefore(s) && now.isBefore(e);
@@ -392,7 +393,7 @@ class _AdTile extends StatelessWidget {
           builder: (context, st) => Text(
             '${running ? 'Ҳозир кўринмоқда' : active ? 'Ёқилган (муддатдан ташқари)' : 'Ўчирилган'} · '
             '${s == null ? '—' : _fmtDate(s)} → ${e == null ? '—' : _fmtDate(e)} · '
-            '${paid ? 'ПУЛЛИК · ' : ''}ҳудуд: ${districts.isEmpty && regions.isEmpty ? 'барчаси' : [districts, regions].where((x) => x.isNotEmpty).join(' / ')} · оғирлик ${data['weight'] ?? 1} · '
+            '${paid ? 'ПУЛЛИК · ' : ''}${house ? 'НАМУНА · ' : ''}ҳудуд: ${districts.isEmpty && regions.isEmpty ? 'барчаси' : [districts, regions].where((x) => x.isNotEmpty).join(' / ')} · оғирлик ${data['weight'] ?? 1} · '
             '7 кун: ${st.data ?? '…'} марта',
           ),
         ),
@@ -470,6 +471,7 @@ class _SplashAdEditorState extends State<_SplashAdEditor> {
       ? (_d['endAt'] as Timestamp).toDate()
       : _today().add(const Duration(days: 7));
   late bool _active = _d['active'] == true;
+  late bool _house = _d['house'] == true;
   bool _busy = false;
 
   static DateTime _today() {
@@ -550,6 +552,7 @@ class _SplashAdEditorState extends State<_SplashAdEditor> {
       'priority': _d['priority'] is int ? _d['priority'] as int : 0,
       'weight': int.tryParse(_weight.text.trim()) ?? 0,
       'active': _active,
+      'house': _house,
     };
     setState(() => _busy = true);
     try {
@@ -627,6 +630,14 @@ class _SplashAdEditorState extends State<_SplashAdEditor> {
               value: _active,
               onChanged: (v) => setState(() => _active = v),
               title: const Text('Ёқилган'),
+            ),
+            SwitchListTile(
+              key: const ValueKey('splash-admin-house'),
+              contentPadding: EdgeInsets.zero,
+              value: _house,
+              onChanged: (v) => setState(() => _house = v),
+              title: const Text('Намуна реклама (AVA чорлови)'),
+              subtitle: const Text('Фақат ҳудудда бошқа реклама бўлмаганда кўрсатилади; босилса — «Реклама бериш».'),
             ),
           ]),
         ),

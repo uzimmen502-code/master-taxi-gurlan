@@ -21,9 +21,18 @@ class SplashAd {
     this.regionIds = const [],
     this.priority = 0,
     this.weight = 1,
+    this.house = false,
+    this.imageUrls = const {},
   });
 
   final String id;
+
+  /// НАМУНА (уй) реклама — AVA'нинг «Реклама бериш»га чорловчи креативи (эга 2026-11-28). Фақат ҳудудда
+  /// бошқа реклама бўлмаганда кўрсатилади ([SplashAdCache.loadForLaunch]); босилса — «Реклама бериш».
+  final bool house;
+
+  /// Тил бўйича расм `{uz_Cyrl, uz_Latn, ru}` (ихтиёрий). Йўқ тилда — [imageUrl].
+  final Map<String, String> imageUrls;
 
   /// Сервер версияси — кешдаги расм эскирганини билиш учун.
   final int version;
@@ -51,6 +60,29 @@ class SplashAd {
   bool get hasText => (text['uz_Cyrl'] ?? '').isNotEmpty;
   bool get hasContent => hasImage || hasText;
 
+  /// Илова тилидаги расм ҳаволаси: `imageUrls[lang]`, бўлмаса [imageUrl].
+  String imageUrlFor(String lang) {
+    final u = imageUrls[lang] ?? '';
+    return u.isNotEmpty ? u : imageUrl;
+  }
+
+  /// Кеш учун: расм тилга аниқланган нусха ([imageUrl] = шу тил расми, [imageUrls] бўш) — кешдаги расм
+  /// қайси ҳаволадан юклангани аниқ бўлади (тил ўзгарса ҳавола фарқ қилади → қайта юкланади).
+  SplashAd forLang(String lang) => SplashAd(
+        id: id,
+        version: version,
+        text: text,
+        imageUrl: imageUrlFor(lang),
+        linkUrl: linkUrl,
+        startAt: startAt,
+        endAt: endAt,
+        districts: districts,
+        regionIds: regionIds,
+        priority: priority,
+        weight: weight,
+        house: house,
+      );
+
   static int _weightOf(Object? v) {
     final w = v is num ? v.toInt() : 1;
     return w < 1 ? 1 : w;
@@ -74,6 +106,8 @@ class SplashAd {
       regionIds: _list(d['regionIds']),
       priority: (d['priority'] as num?)?.toInt() ?? 0,
       weight: _weightOf(d['weight']),
+      house: d['house'] == true,
+      imageUrls: _texts(d['imageUrls']),
     );
   }
 
@@ -90,6 +124,8 @@ class SplashAd {
         'regionIds': regionIds,
         'priority': priority,
         'weight': weight,
+        if (house) 'house': true,
+        if (imageUrls.isNotEmpty) 'imageUrls': imageUrls,
       };
 
   static SplashAd? fromCacheMap(Object? raw) {
@@ -109,6 +145,8 @@ class SplashAd {
       regionIds: _list(raw['regionIds']),
       priority: raw['priority'] is int ? raw['priority'] as int : 0,
       weight: _weightOf(raw['weight']),
+      house: raw['house'] == true,
+      imageUrls: _texts(raw['imageUrls']),
     );
   }
 
@@ -146,7 +184,8 @@ class SplashAd {
       ];
 
   /// Кешга олинадиганлар: ҳудудга мос, тугамаган ва [horizon] ичида бошланадиган, мазмуни бор;
-  /// оғирлиги каттаси олдин, кўпи билан [max] та.
+  /// оғирлиги каттаси олдин, кўпи билан [max] та. Намуна ([house]) реклама [max] га КИРМАЙДИ — алоҳида
+  /// энг кўпи [maxHouse] та (пуллик рекламанинг жойини олмайди, улар тугаса ҳам кешда тайёр туради).
   static List<SplashAd> selectForCache(
     Iterable<SplashAd> ads,
     DateTime now,
@@ -154,7 +193,9 @@ class SplashAd {
     String regionId, {
     Duration horizon = const Duration(days: 2),
     int max = 8,
+    int maxHouse = 1,
   }) {
+    int byWeight(SplashAd a, SplashAd b) => b.weight != a.weight ? b.weight.compareTo(a.weight) : a.id.compareTo(b.id);
     final out = [
       for (final a in ads)
         if (a.hasContent &&
@@ -164,8 +205,18 @@ class SplashAd {
             now.isBefore(a.endAt!) &&
             a.startAt!.isBefore(now.add(horizon)))
           a,
-    ]..sort((a, b) => b.weight != a.weight ? b.weight.compareTo(a.weight) : a.id.compareTo(b.id));
-    return out.take(max).toList();
+    ];
+    return [
+      ...(out.where((a) => !a.house).toList()..sort(byWeight)).take(max),
+      ...(out.where((a) => a.house).toList()..sort(byWeight)).take(maxHouse),
+    ];
+  }
+
+  /// Очилишда кўрсатиш мумкин бўлганлар ичидан: оддий/пуллик реклама бор бўлса — фақат улар (намуна
+  /// чиқмайди); бўлмаса — намуна(лар).
+  static List<T> preferPaid<T>(List<T> candidates, SplashAd Function(T) adOf) {
+    final regular = [for (final c in candidates) if (!adOf(c).house) c];
+    return regular.isNotEmpty ? regular : candidates;
   }
 
   /// Илова тилидаги матн; `uz_Latn` бўлмаса — кириллдан автоматик (янги лотин), `ru` бўлмаса — кирилл.

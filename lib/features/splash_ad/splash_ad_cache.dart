@@ -106,7 +106,8 @@ class SplashAdCached {
 /// Splash реклама кеши: кейинги очилишлар учун БИР НЕЧТА креатив (ҳудудга мос, оғирлиги бўйича),
 /// айланиш ҳолати ва серверга юбориладиган кунлик кўрсатишлар (йиғма).
 ///
-/// Эга 2026-11-28: ҲАР очилишда реклама (аввалги 3/кун чегараси йўқ), навбатдагиси оғирлик бўйича.
+/// Эга 2026-11-28: ҲАР очилишда реклама (аввалги 3/кун чегараси йўқ), навбатдагиси оғирлик бўйича;
+/// намуна (уй) реклама — фақат мос пуллик/оддий реклама йўқ бўлганда.
 class SplashAdCache {
   SplashAdCache({SplashAdStore? store}) : _store = store ?? PrefsSplashAdStore();
 
@@ -160,10 +161,11 @@ class SplashAdCache {
     String regionId = '',
   }) async {
     try {
-      final candidates = [
+      // Намуна (уй) реклама фақат бошқа мос реклама йўқ бўлганда (эга 2026-11-28; пуллик улушга тегмайди).
+      final candidates = SplashAd.preferPaid([
         for (final c in await cached())
           if (c.showable && c.ad.isEligible(now, districtId, regionId)) c,
-      ];
+      ], (SplashAdCached c) => c.ad);
       if (candidates.isEmpty) return null;
       final state = {
         for (final e in (await _json(rotationKey)).entries)

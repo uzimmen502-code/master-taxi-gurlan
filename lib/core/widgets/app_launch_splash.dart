@@ -13,6 +13,7 @@ import '../theme/ava_tokens.dart';
 ///  * «Реклама бериш» тугмаси — [onAdvertise] (splash дарров ёпилади, кейин мавжуд йўл очилади).
 ///  * Креатив ФАҚАТ кешдан ([launch], `main()` да олдиндан ўқилган) — тармоқ кутилмайди; йўқ бўлса
 ///    сукут матни «Бу ерда сизнинг рекламангиз бўлиши мумкин».
+///  * Намуна (уй) реклама ([SplashAd.house]): босилса — «Реклама бериш» оқими; «Реклама» белгиси кўрсатилмайди.
 ///  * OS native launch screen ўзгармайди.
 ///
 /// Тил/биринчи кадр: [child] (`MaterialApp`) оверлей остида шаффоф ҳолда қурилади — таржималар шу 3 с
@@ -161,7 +162,9 @@ class _SplashAdOverlay extends StatelessWidget {
     } else {
       content = _Message(key: AppLaunchSplash.placeholderKey, text: SplashAdTexts.placeholder(lang));
     }
-    final tappable = ad != null && ad.linkUrl.startsWith('https://');
+    // Намуна (уй) реклама — AVA'нинг ўз чорлови: босилса «Реклама бериш» (ҳавола эмас), «Реклама» белгиси йўқ.
+    final house = ad != null && ad.house;
+    final tappable = ad != null && (house || ad.linkUrl.startsWith('https://'));
 
     return Material(
       color: AvaLight.brand,
@@ -182,7 +185,7 @@ class _SplashAdOverlay extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  if (ad != null)
+                  if (ad != null && !house)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
@@ -202,7 +205,7 @@ class _SplashAdOverlay extends StatelessWidget {
                 child: tappable
                     ? GestureDetector(
                         behavior: HitTestBehavior.opaque,
-                        onTap: () => onOpenAd(ad),
+                        onTap: house ? onAdvertise : () => onOpenAd(ad),
                         child: Center(child: content),
                       )
                     : Center(child: content),

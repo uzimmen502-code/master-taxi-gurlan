@@ -41,6 +41,9 @@ class SplashAdPrefetcher {
 
   static const Duration refreshEvery = Duration(hours: 3);
   static const String _fetchedAtKey = 'splash_ad_fetched_at_v1';
+
+  /// Охирги тайёрлаш қайси тил учун (тил бўйича расм — [SplashAd.imageUrls]; тил ўзгарса дарров қайта).
+  static const String _fetchedLangKey = 'splash_ad_fetched_lang_v1';
   static const int maxImageBytes = 1500 * 1024;
 
   static Future<List<SplashAd>> _firestoreAds(String districtId, String regionId) async {
@@ -71,26 +74,31 @@ class SplashAdPrefetcher {
   }
 
   /// Splash тугагач чақирилади (ҳеч қачон очилишни кутдирмайди). Хато — жим (кейинги сафар қайта).
-  Future<void> run({required String districtId, String regionId = '', bool force = false}) async {
+  Future<void> run({required String districtId, String regionId = '', String lang = 'uz_Cyrl', bool force = false}) async {
     await _flushStats();
-    await refresh(districtId: districtId, regionId: regionId, force: force);
+    await refresh(districtId: districtId, regionId: regionId, lang: lang, force: force);
   }
 
-  Future<void> refresh({required String districtId, String regionId = '', bool force = false}) async {
+  Future<void> refresh({required String districtId, String regionId = '', String lang = 'uz_Cyrl', bool force = false}) async {
     try {
       final now = _now();
       final prefs = await SharedPreferences.getInstance();
       final last = prefs.getInt(_fetchedAtKey) ?? 0;
-      if (!force && now.millisecondsSinceEpoch - last < refreshEvery.inMilliseconds && last <= now.millisecondsSinceEpoch) {
+      final sameLang = (prefs.getString(_fetchedLangKey) ?? 'uz_Cyrl') == lang;
+      if (!force && sameLang && now.millisecondsSinceEpoch - last < refreshEvery.inMilliseconds && last <= now.millisecondsSinceEpoch) {
         return;
       }
-      final chosen = SplashAd.selectForCache(
-        await _fetchAds(districtId, regionId),
-        now,
-        districtId,
-        regionId,
-        max: SplashAdCache.maxAds,
-      );
+      // Расм ҳаволаси шу тилга аниқланади ([SplashAd.forLang]) — кешдаги расм қайси ҳаволадан экани аниқ.
+      final chosen = [
+        for (final a in SplashAd.selectForCache(
+          await _fetchAds(districtId, regionId),
+          now,
+          districtId,
+          regionId,
+          max: SplashAdCache.maxAds,
+        ))
+          a.forLang(lang),
+      ];
       final old = {for (final c in await _cache.cached()) c.ad.id: c};
       final items = <SplashAdCached>[];
       final fresh = <String, Uint8List>{};
@@ -121,7 +129,10 @@ class SplashAdPrefetcher {
       }
       await _cache.saveAll(items, images: fresh);
       // Расм юкланмаган бўлса — вақт белгиси ёзилмайди (кейинги очилишда қайта уринади).
-      if (!failed) await prefs.setInt(_fetchedAtKey, now.millisecondsSinceEpoch);
+      if (!failed) {
+        await prefs.setInt(_fetchedAtKey, now.millisecondsSinceEpoch);
+        await prefs.setString(_fetchedLangKey, lang);
+      }
     } catch (e) {
       debugPrint('SplashAdPrefetcher.refresh: $e');
     }

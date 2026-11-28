@@ -213,32 +213,10 @@ function holdExtraOf(lineTotal, pct) {
   return Math.floor((lineTotal * pct + 99) / 100);
 }
 /**
- * ЕТКАЗИШ ҲАҚИ — ЖОНЛИ `platformDeliveryFeeFromSettings` (placeOrderPostPaid, live = fix/courier-3bugs-srv
- * index.js e9e9d1e8, gcf zip билан CONFIRMED 2026-11-20) билан АЙНАН бир хил қоида:
- *   - манба: settings/app.platformDeliveryFeePercent (admin `adminSetPlatformDeliveryFeePercent`, версия +1, тарих);
- *   - hardcode fallback ЙЎҚ — йўқ/бузуқ → TARIFF_NOT_CONFIGURED (fail closed); >100 → 100;
- *   - bps = round(pct × 100); fee = floor((goods × bps + 5000) / 10000); version = platformDeliveryFeeVersion (йўқ → 0).
- * ОЧИҚ: иккала нусха битта модулга (platform_delivery_fee.js) кўчирилиши керак — fix/courier-3bugs-srv шу
- * линияга қўшилганда (7-банд). Ҳозир index.js'даги жонли функцияга тегилмади.
+ * ЕТКАЗИШ ҲАҚИ — ягона манба unctions/platform_delivery_fee.js (T-1, жонли placeOrderPostPaid билан бир хил қоида;
+ * номлар ва натижалар ўзгармади). Эквивалентлик: test/platform_delivery_fee.test.js.
  */
-function feeConfigFromApp(appData) {
-  const raw = (appData || {}).platformDeliveryFeePercent;
-  const pctIn = (typeof raw === 'number' || (typeof raw === 'string' && raw.trim() !== '')) ? Number(raw) : NaN;
-  if (!Number.isFinite(pctIn) || pctIn < 0) return null;
-  const percent = Math.min(pctIn, 100);
-  const verRaw = Number((appData || {}).platformDeliveryFeeVersion);
-  return { percent, bps: Math.round(percent * 100), version: Number.isInteger(verRaw) && verRaw > 0 ? verRaw : 0 };
-}
-/** Буюртмадаги сақланган % дан bps (тортиш/олишда — буюртма пайтидаги % ишлатилади, 9-банд). */
-function feeBpOf(pct) {
-  const n = Number(pct);
-  if (!Number.isFinite(n) || n < 0) return 0;
-  return Math.round(Math.min(n, 100) * 100);
-}
-function feeOf(goods, bp) {
-  if (!(goods > 0) || !(bp > 0)) return 0;
-  return Math.floor((goods * bp + 5000) / 10000);
-}
+const { feeConfigFromApp, feeBpOf, feeOf } = require('./platform_delivery_fee');
 /**
  * Буюртма қаторларидан жорий «мақсад» ечим.
  * Олинган қатор — ҳисобга кирмайди; тортилмаган тортиладиган қатор — total + holdExtra;

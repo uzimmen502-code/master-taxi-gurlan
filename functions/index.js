@@ -7347,16 +7347,16 @@ exports.registerDeviceBinding = authFunctions.https.onCall(async (data, context)
  * ya'ni raqamni bilgan har kim kira olardi. Eksportlar qoladi (deploy o'chirishni so'ramasin),
  * hammasi `ENDPOINT_RETIRED` bilan rad etadi; triggerlar hech narsa yozmaydi.
  */
-function retiredEndpoint(name) {
+function retiredAuthEndpoint(name) {
   return authFunctions.https.onCall(async () => {
     console.warn(JSON.stringify({ action: 'retired_endpoint_called', name }));
     throw deviceSecurity.secError(functions, 'unimplemented', 'ENDPOINT_RETIRED');
   });
 }
 
-exports.requestPendingCode = retiredEndpoint('requestPendingCode');
-exports.getPendingCodeStatus = retiredEndpoint('getPendingCodeStatus');
-exports.verifyPendingCodeAndRegister = retiredEndpoint('verifyPendingCodeAndRegister');
+exports.requestPendingCode = retiredAuthEndpoint('requestPendingCode');
+exports.getPendingCodeStatus = retiredAuthEndpoint('getPendingCodeStatus');
+exports.verifyPendingCodeAndRegister = retiredAuthEndpoint('verifyPendingCodeAndRegister');
 
 exports.autoApprovePendingCode = functions.firestore
   .document('pending_codes/{phone}')

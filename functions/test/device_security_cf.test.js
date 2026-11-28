@@ -409,7 +409,9 @@ async function main() {
       assert.strictEqual(e.details.code, 'device_trust_limited');
       return true;
     };
-    await assert.rejects(fns.requestPayout.run({ userPhone: L, amount: 10000, idempotencyKey: 'k13_payout' }, ctxOf(L)), limited);
+    // requestPayout W-2 (fix/dup-audit-p1) bilan ENDPOINT_RETIRED — baribir rad (pul chiqmaydi).
+    await assert.rejects(fns.requestPayout.run({ userPhone: L, amount: 10000, idempotencyKey: 'k13_payout' }, ctxOf(L)),
+      (e) => e.details && e.details.code === 'ENDPOINT_RETIRED');
     await db.doc('payout_requests/k13_pr').set({ userPhone: L, amount: 10000, status: 'pending' });
     await assert.rejects(fns.confirmPayout.run({ requestId: 'k13_pr' }, ctxOf(FIN)), limited);
     assert.strictEqual((await get('payout_requests/k13_pr')).status, 'pending');

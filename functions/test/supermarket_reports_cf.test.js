@@ -205,7 +205,7 @@ async function main() {
   await check('K7 курьер тўлови: созлама (версия+audit old/new), нусха percent/fixed, созлама ўзгариши эски буюртмага таъсир қилмайди, созланмаган → null', async () => {
     await db.doc(`users/${SUPER}`).set({ role: 'superadmin' });
     await db.doc(`users/${COURIER}`).set({ role: 'courier', name: 'Курьер Бек' });
-    assert.deepStrictEqual(await cpOf(ids.o2), { mode: null, amount: null, settingsVersion: 1 });
+    assert.deepStrictEqual(await cpOf(ids.o2), { mode: null, amount: null, reason: 'not_configured', settingsVersion: 1 });
     for (const id of [ids.o1, ids.o2, ids.o3]) assert.strictEqual((await get(`orders/${id}`)).smCourierPayout, undefined, 'mijoz öqiydigan buyurtmada yöq (14-band)');
     const cur = await get('settings/supermarket');
     const { version, updatedAt, updatedBy, ...base } = cur;
@@ -218,7 +218,9 @@ async function main() {
     ids.o5 = (await place([{ productId: 'milk_1l_01', qty: 1 }], OTHER)).orderId;
     const o5 = { ...(await get(`orders/${ids.o5}`)), smCourierPayout: await cpOf(ids.o5) };
     assert.strictEqual((await get(`orders/${ids.o5}`)).smCourierPayout, undefined);
-    assert.deepStrictEqual(o5.smCourierPayout, { mode: 'percent', percent: 13, amount: Math.floor(o5.deliveryFee * 13 / 100), settingsVersion: 2 });
+    assert.deepStrictEqual(o5.smCourierPayout, { mode: 'percent', percentBps: 1300, percent: 13, rounding: 'half_up', amount: Math.floor((o5.deliveryFee * 1300 + 5000) / 10000), settingsVersion: 2 });
+    // 0.01 % аниқлик (эга 2026-11-28): percentBps қабул қилинади, эски percent билан бирга — рад.
+    await expectCode(call('adminSetSupermarketSettings', { settings: { ...base, courierPayout: { mode: 'percent', percent: 13, percentBps: 1300 } }, expectedVersion: 2, reason: 'x' }, ADMIN), 'SETTINGS_INVALID');
     await call('adminSetSupermarketSettings', { settings: { ...base, courierPayout: { mode: 'fixed', fixedAmount: 6000 } }, expectedVersion: 2, reason: 'fixed' }, ADMIN);
     ids.o6 = (await place([{ productId: 'milk_1l_01', qty: 1 }], OTHER)).orderId;
     assert.deepStrictEqual(await cpOf(ids.o6), { mode: 'fixed', fixedAmount: 6000, amount: 6000, settingsVersion: 3 });

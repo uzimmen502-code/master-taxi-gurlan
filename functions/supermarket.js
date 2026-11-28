@@ -14,7 +14,7 @@
  *
  * ПУЛ — фақат бутун сўм (8-банд). Миқдор (кг/л) — каср; ҳисоб «милли-бирлик» бутун сонида:
  *   qMilli = qty × 1000; қатор = round_half_up(price × qMilli / 1000).
- * Тортиладиган товар: ушлаб туриш (hold) = goods + Σ ceil(weighed_line × weighHoldPercent / 100) + fee(goods).
+ * Тортиладиган товар: ушлаб туриш (hold) = goods + Σ half_up(weighed_line × weighHoldBps / 10000) + fee(goods) (эски буюртма — ceil).
  * Тортилгандан кейин: target = goods' + fee(goods'); янги ечим = min(жорий ечим, target) — ҳеч қачон
  * ушлангандан ортиқ эмас; фарқ ҳамёнга қайтади. `balanceApplied` доим ҲОЗИР ечилган суммани кўрсатади —
  * мавжуд бекор қилиш (рад/мижоз бекори) айнан қолганини қайтаради.
@@ -207,16 +207,51 @@ const fromMilli = (m) => m / 1000;
 function lineTotalOf(price, qMilli) {
   return Math.floor((price * qMilli + 500) / 1000);
 }
-/** Тортиш ушлаб туриши: ceil(line × pct / 100), бутун. */
-function holdExtraOf(lineTotal, pct) {
-  if (!(pct > 0) || !(lineTotal > 0)) return 0;
-  return Math.floor((lineTotal * pct + 99) / 100);
+/**
+ * ТОРТИШ УШЛАБ ТУРИШИ (эга 2026-11-28): ставка bps (0.01 % аниқлик, «ҳамма жойда 0,01%»), яхлитлаш
+ * ярмидан юқорига («ҳа бир хил бўлсин»; аввал ceil эди). Эски буюртма (holdRounding муҳри йўқ) — эски ceil,
+ * қайта ҳисобда ўзгармайди (9-банд). Манба: settings/supermarket.weighHoldBps → weighHoldPercent×100 → 10 %.
+ */
+const HOLD_DEFAULT_BPS = 1000;
+const HOLD_MAX_BPS = 5000;
+const HOLD_ROUNDING = 'half_up';
+const HOLD_LEGACY_ROUNDING = 'ceil';
+/** Созлама ёки буюртмадан ушлаб туриш bps: weighHoldBps (янги) → weighHoldPercent×100 (эски) → 1000. */
+function holdBpsOf(src) {
+  const s = src || {};
+  if (Number.isInteger(s.weighHoldBps)) return s.weighHoldBps;
+  if (Number.isInteger(s.weighHoldPercent)) return s.weighHoldPercent * 100;
+  return HOLD_DEFAULT_BPS;
+}
+/** Янги буюртма учун (созламадан): {bps, rounding:'half_up'}. */
+function holdSpecOfSettings(settings) {
+  return { bps: holdBpsOf(settings), rounding: HOLD_ROUNDING };
+}
+/** Мавжуд буюртма учун: муҳр бўлмаса — эски ceil. */
+function holdSpecOfOrder(od) {
+  const o = od || {};
+  return { bps: holdBpsOf(o), rounding: o.holdRounding === HOLD_ROUNDING ? HOLD_ROUNDING : HOLD_LEGACY_ROUNDING };
+}
+/** hold: {bps, rounding} ёки сон (фоиз, ярмидан юқорига — эски чақирувлар/тестлар). */
+function holdSpecNorm(hold) {
+  if (hold && typeof hold === 'object') return { bps: Number(hold.bps), rounding: hold.rounding === HOLD_LEGACY_ROUNDING ? HOLD_LEGACY_ROUNDING : HOLD_ROUNDING };
+  return { bps: Number(hold) * 100, rounding: HOLD_ROUNDING };
+}
+/** Тортиш ушлаб туриши: round(line × bps / 10000), бутун. Яхлитлаш — ягона манба money_math (T-4). */
+function holdExtraOf(lineTotal, hold) {
+  const { bps, rounding } = holdSpecNorm(hold);
+  if (!(bps > 0) || !(lineTotal > 0)) return 0;
+  if (Number.isInteger(bps) && Number.isInteger(lineTotal)) return moneyMath.bpsOf(lineTotal, bps, rounding, { unsafe: 'unchecked' });
+  // Каср кириш амалда йўқ (lineTotalOf бутун, ставка бутун bps).
+  return Math.floor((lineTotal * bps + (rounding === HOLD_LEGACY_ROUNDING ? 9999 : 5000)) / 10000);
 }
 /**
  * ЕТКАЗИШ ҲАҚИ — ягона манба unctions/platform_delivery_fee.js (T-1, жонли placeOrderPostPaid билан бир хил қоида;
  * номлар ва натижалар ўзгармади). Эквивалентлик: test/platform_delivery_fee.test.js.
  */
 const { feeConfigFromApp, feeBpOf, feeOf } = require('./platform_delivery_fee');
+const moneyMath = require('./money_math');
+const courierPayoutCalc = require('./courier_payout_calc');
 /**
  * Буюртма қаторларидан жорий «мақсад» ечим.
  * Олинган қатор — ҳисобга кирмайди; тортилмаган тортиладиган қатор — total + holdExtra;
@@ -428,41 +463,60 @@ function findGroup(taxonomy, groupId) {
   return null;
 }
 
-const SETTINGS_KEYS = ['stage', 'testerIds', 'districtIds', 'slots', 'cutoffMin', 'weighHoldPercent', 'courierPayout'];
+const SETTINGS_KEYS = ['stage', 'testerIds', 'districtIds', 'slots', 'cutoffMin', 'weighHoldPercent', 'weighHoldBps', 'courierPayout'];
 const COURIER_PAYOUT_MODES = Object.freeze(['percent', 'fixed']);
 
+const COURIER_PAYOUT_BPS_MAX = 10000;
+
 /**
- * Курьер тўлови созламаси (эга 2026-11-26): {mode:'percent', percent:0..100 (буюртма deliveryFee'дан)} ёки
- * {mode:'fixed', fixedAmount:≥0 сўм}. undefined/null — созланмаган. Хатолар рўйхати қайтади.
+ * Курьер тўлови созламаси (эга 2026-11-26; 0.01 % аниқлик — эга 2026-11-28):
+ *   {mode:'percent', percentBps:0..10000} (янги, буюртма deliveryFee'дан) ёки эски {mode:'percent', percent:0..100 бутун}
+ *   (ўқилади = percent×100; иккаласи бирга — хато), ёки {mode:'fixed', fixedAmount:≥0 сўм}.
+ * undefined/null — созланмаган. Хатолар рўйхати қайтади.
  */
 function courierPayoutProblems(cp, p = 'courierPayout') {
   if (cp === undefined || cp === null) return [];
   const out = [];
   if (!isPlainObject(cp)) return [`COURIER_PAYOUT_INVALID ${p}`];
-  for (const k of Object.keys(cp)) if (!['mode', 'percent', 'fixedAmount'].includes(k)) out.push(`UNKNOWN_KEY ${p}.${k}`);
+  for (const k of Object.keys(cp)) if (!['mode', 'percent', 'percentBps', 'fixedAmount'].includes(k)) out.push(`UNKNOWN_KEY ${p}.${k}`);
   if (!COURIER_PAYOUT_MODES.includes(cp.mode)) out.push(`COURIER_PAYOUT_MODE_INVALID ${p}.mode`);
   if (cp.mode === 'percent') {
-    if (!Number.isInteger(cp.percent) || cp.percent < 0 || cp.percent > 100) out.push(`COURIER_PAYOUT_PERCENT_INVALID ${p}.percent`);
+    const hasPct = cp.percent !== undefined;
+    const hasBps = cp.percentBps !== undefined;
+    if (hasPct && hasBps) out.push(`COURIER_PAYOUT_PERCENT_AMBIGUOUS ${p}.percentBps`);
+    else if (hasBps) {
+      if (!Number.isInteger(cp.percentBps) || cp.percentBps < 0 || cp.percentBps > COURIER_PAYOUT_BPS_MAX) out.push(`COURIER_PAYOUT_PERCENT_BPS_INVALID ${p}.percentBps`);
+    } else if (!Number.isInteger(cp.percent) || cp.percent < 0 || cp.percent > 100) out.push(`COURIER_PAYOUT_PERCENT_INVALID ${p}.percent`);
     if (cp.fixedAmount !== undefined) out.push(`UNKNOWN_KEY ${p}.fixedAmount`);
   } else if (cp.mode === 'fixed') {
     if (!Number.isInteger(cp.fixedAmount) || cp.fixedAmount < 0 || cp.fixedAmount > LIMITS.priceMax) out.push(`COURIER_PAYOUT_FIXED_INVALID ${p}.fixedAmount`);
     if (cp.percent !== undefined) out.push(`UNKNOWN_KEY ${p}.percent`);
+    if (cp.percentBps !== undefined) out.push(`UNKNOWN_KEY ${p}.percentBps`);
   }
   return out;
 }
 
+/** Текширилган созлама → {mode:'percent', percentBps} | {mode:'fixed', fixedAmount} (эски percent = ×100). */
+function normalizeCourierPayout(cp) {
+  if (cp.mode === 'percent') return { mode: 'percent', percentBps: cp.percentBps !== undefined ? cp.percentBps : cp.percent * 100 };
+  return { mode: 'fixed', fixedAmount: cp.fixedAmount };
+}
+
 /**
  * Буюртма яратилганда курьер тўлови нусхаси (кейинги созлама ўзгариши эски буюртмага таъсир қилмайди, 9-банд).
- * percent → floor(deliveryFee × percent / 100); fixed → fixedAmount; созланмаган/бузуқ → amount null.
+ * Ҳисоб — ягона манба courier_payout_calc: percent → half_up(deliveryFee × bps / 10000) (эга 2026-11-28; аввал
+ * floor), fixed → fixedAmount. amount null + reason: созланмаган/бузуқ → 'not_configured'; deliveryFee ≤ 0 ёки
+ * бутун эмас → 'fee_unknown' («ҳисобланмади», эга 2026-11-28 «ҳа» — аввал 0 эди).
  */
 function courierPayoutSnapshot(cp, deliveryFee, settingsVersion) {
   const version = Number.isInteger(settingsVersion) ? settingsVersion : 0;
-  if (cp == null || courierPayoutProblems(cp).length) return { mode: null, amount: null, settingsVersion: version };
-  if (cp.mode === 'percent') {
-    const fee = Number.isInteger(deliveryFee) && deliveryFee > 0 ? deliveryFee : 0;
-    return { mode: 'percent', percent: cp.percent, amount: Math.floor((fee * cp.percent) / 100), settingsVersion: version };
-  }
-  return { mode: 'fixed', fixedAmount: cp.fixedAmount, amount: cp.fixedAmount, settingsVersion: version };
+  if (cp == null || courierPayoutProblems(cp).length) return { mode: null, amount: null, reason: 'not_configured', settingsVersion: version };
+  const n = normalizeCourierPayout(cp);
+  const r = courierPayoutCalc.supermarketPayout(n, deliveryFee);
+  const head = n.mode === 'percent'
+    ? { mode: 'percent', percentBps: n.percentBps, percent: n.percentBps / 100, rounding: courierPayoutCalc.ROUNDING }
+    : { mode: 'fixed', fixedAmount: n.fixedAmount };
+  return { ...head, amount: r.amount, ...(r.reason ? { reason: r.reason } : {}), settingsVersion: version };
 }
 const SLOT_KEYS = ['id', 'names', 'startMin', 'endMin'];
 
@@ -508,8 +562,15 @@ function validateSupermarketSettings(obj) {
     });
   }
   if (obj.cutoffMin !== undefined && (!Number.isInteger(obj.cutoffMin) || obj.cutoffMin < 0 || obj.cutoffMin > 720)) err('CUTOFF_INVALID', 'cutoffMin');
-  if (!Number.isInteger(obj.weighHoldPercent) || obj.weighHoldPercent < 0 || obj.weighHoldPercent > 50) {
-    err('WEIGH_HOLD_PERCENT_INVALID', 'weighHoldPercent');
+  // Тортиш ушлаши: янги weighHoldBps (0..5000, 0.01 %) ёки эски weighHoldPercent (0..50 бутун); камида биттаси.
+  const hasHoldPct = obj.weighHoldPercent !== undefined;
+  const hasHoldBps = obj.weighHoldBps !== undefined;
+  const holdPctOk = Number.isInteger(obj.weighHoldPercent) && obj.weighHoldPercent >= 0 && obj.weighHoldPercent <= 50;
+  const holdBpsOk = Number.isInteger(obj.weighHoldBps) && obj.weighHoldBps >= 0 && obj.weighHoldBps <= HOLD_MAX_BPS;
+  if (hasHoldBps && !holdBpsOk) err('WEIGH_HOLD_BPS_INVALID', 'weighHoldBps');
+  if ((hasHoldPct || !hasHoldBps) && !holdPctOk) err('WEIGH_HOLD_PERCENT_INVALID', 'weighHoldPercent');
+  if (hasHoldPct && hasHoldBps && holdPctOk && holdBpsOk && obj.weighHoldBps !== obj.weighHoldPercent * 100) {
+    err('WEIGH_HOLD_MISMATCH', 'weighHoldBps');
   }
   for (const e of courierPayoutProblems(obj.courierPayout)) {
     const i = e.indexOf(' ');
@@ -591,7 +652,8 @@ function offerSearchTokens({ name, variety, quality, packLabel, group, category 
  * Каталогдан қайта нархлаш. products: { [productId]: data|null }.
  * @returns {{ok:true, lines, goods, extras, fee, hold, stockOps} | {ok:false, code, details}}
  */
-function priceSupermarketOrder({ items, products, feeBp, weighHoldPercent }) {
+function priceSupermarketOrder({ items, products, feeBp, weighHoldPercent, hold }) {
+  const holdArg = hold !== undefined ? hold : weighHoldPercent;
   const lines = [];
   const partnerLines = [];
   const stockOps = [];
@@ -627,7 +689,7 @@ function priceSupermarketOrder({ items, products, feeBp, weighHoldPercent }) {
       qtyStep: fromMilli(stepMilli),
       total,
       weighed,
-      holdExtra: weighed ? holdExtraOf(total, weighHoldPercent) : 0,
+      holdExtra: weighed ? holdExtraOf(total, holdArg) : 0,
       groupId: String(d.smGroupId),
     };
     if (d.smVariety && typeof d.smVariety.id === 'string') line.varietyId = d.smVariety.id;
@@ -645,7 +707,9 @@ function priceSupermarketOrder({ items, products, feeBp, weighHoldPercent }) {
  * Тортиш натижасини қўллаш (тоза). lines — буюртмадаги қаторлар нусхаси.
  * @returns {{ok:true, lines, changed:boolean, stockDeltas:{[productId]:milli}} | {ok:false, code, details}}
  */
-function applyWeights(lines, input, weighHoldPercent) {
+/** hold: {bps, rounding} ёки сон (фоиз). Чегара (миқдор, пул эмас): floor(q × (10000 + bps) / 10000). */
+function applyWeights(lines, input, hold) {
+  const holdBps = holdSpecNorm(hold).bps;
   const out = lines.map((l) => ({ ...l }));
   const stockDeltas = {};
   let changed = false;
@@ -662,7 +726,7 @@ function applyWeights(lines, input, weighHoldPercent) {
     const aMilli = toMilli(row.actualQty);
     if (aMilli == null || aMilli <= 0) return { ok: false, code: 'ACTUAL_QTY_INVALID', details: { productId: pid } };
     const qMilli = toMilli(l.qty);
-    const limitMilli = Math.floor(qMilli * (100 + weighHoldPercent) / 100);
+    const limitMilli = Math.floor(qMilli * (10000 + holdBps) / 10000);
     if (aMilli > limitMilli) return { ok: false, code: 'ACTUAL_QTY_OVER_LIMIT', details: { productId: pid, maxQty: fromMilli(limitMilli) } };
     if (l.actualQty != null) {
       if (toMilli(l.actualQty) === aMilli) continue; // қайта юбориш — идемпотент
@@ -745,7 +809,8 @@ function applyShortageReport(lines, { productId, availableQty, subs, actor, nowM
  * stockDeltas: милли-бирлик, мусбат — омборга қайтади, манфий — ечилади.
  * pricing: 'delta' — алмаштириш (фарқ ечилади ёки қайтади), 'cap' — камайтириш/олиш (adminRemove математикаси).
  */
-function applyShortageChoice(lines, { productId, choice, offerId, qty, offerData, feeBp, weighHoldPercent, actor, nowMs }) {
+function applyShortageChoice(lines, { productId, choice, offerId, qty, offerData, feeBp, weighHoldPercent, hold, actor, nowMs }) {
+  const holdArg = hold !== undefined ? hold : weighHoldPercent;
   const idx = lines.findIndex((l) => l.productId === productId);
   if (idx < 0) {
     // Аллақачон алмаштирилган (қатор энди бошқа productId) — «жавоб берилган».
@@ -766,7 +831,7 @@ function applyShortageChoice(lines, { productId, choice, offerId, qty, offerData
     if (!offerSellable(offerData)) return bad('SUBSTITUTE_INVALID', { offerId });
     const qMilli = qty == null ? oldQ : toMilli(qty);
     if (qMilli == null || qMilli <= 0 || qMilli > LIMITS.qtyMilliMax) return bad('QTY_STEP_INVALID', { productId: offerId });
-    const priced = priceSupermarketOrder({ items: [{ productId: offerId, qMilli }], products: { [offerId]: offerData }, feeBp, weighHoldPercent });
+    const priced = priceSupermarketOrder({ items: [{ productId: offerId, qMilli }], products: { [offerId]: offerData }, feeBp, hold: holdArg });
     if (!priced.ok) return bad(priced.code, priced.details);
     const nl = {
       ...priced.lines[0],
@@ -783,7 +848,7 @@ function applyShortageChoice(lines, { productId, choice, offerId, qty, offerData
     }
     const total = lineTotalOf(l.price, qMilli);
     const nl = {
-      ...l, qty: fromMilli(qMilli), total, holdExtra: l.weighed ? holdExtraOf(total, weighHoldPercent) : 0,
+      ...l, qty: fromMilli(qMilli), total, holdExtra: l.weighed ? holdExtraOf(total, holdArg) : 0,
       reducedFrom: { qty: l.qty, total: l.total }, shortage: resolved,
     };
     return { ok: true, changed: true, lines: replace(nl), stockDeltas: { [productId]: oldQ - qMilli }, pricing: 'cap' };
@@ -1028,7 +1093,9 @@ function attachSupermarket(exportsObj, deps) {
       slots,
       feePercent: feeConfig ? feeConfig.percent : null,
       ...(g.allowed && !feeConfig ? { allowed: false, reason: 'TARIFF_NOT_CONFIGURED', messages: messagesOf('TARIFF_NOT_CONFIGURED') } : {}),
-      weighHoldPercent: settings && Number.isInteger(settings.weighHoldPercent) ? settings.weighHoldPercent : 10,
+      // 0.01 % аниқлик (эга 2026-11-28): эски APK weighHoldPercent'ни toInt қилади; янгиси weighHoldBps'ни ўқийди.
+      weighHoldPercent: holdBpsOf(settings) / 100,
+      weighHoldBps: holdBpsOf(settings),
       tariffVersion: TARIFF_VERSION,
       // Байрам/совға (эга 2026-11-26): withDates=true бўлса — бугундан +14 кунгача санага оралиқлар.
       ...(data && data.withDates === true && g.allowed ? {
@@ -1275,7 +1342,7 @@ function attachSupermarket(exportsObj, deps) {
     }
     const aheadDays = hol().daysBetween(todayKey, slot.date);
     const slotDay = DAYS[aheadDays] || 'scheduled';
-    const weighHoldPercent = Number.isInteger((settings || {}).weighHoldPercent) ? settings.weighHoldPercent : 10;
+    const hold = holdSpecOfSettings(settings);
     if (!feeConfig) {
       console.error(JSON.stringify({ module: MODULE, action: 'placeSupermarketOrder', result: 'denied', errorCode: 'TARIFF_NOT_CONFIGURED' }));
       throw fail('failed-precondition', 'TARIFF_NOT_CONFIGURED');
@@ -1304,7 +1371,7 @@ function attachSupermarket(exportsObj, deps) {
           if (x.partnerKey && x.sellerId) partnerSellers[x.partnerKey] = x.sellerId;
         }
         const userSnap = await t.get(userRef);
-        const priced = priceSupermarketOrder({ items: parsed.items, products, feeBp, weighHoldPercent });
+        const priced = priceSupermarketOrder({ items: parsed.items, products, feeBp, hold });
         if (!priced.ok) throw fail('failed-precondition', priced.code, priced.details);
         // Рағбат (қариндошлар бонуси, эга 2026-11-26): фақат `supermarket` туркумли грантлар, minOrderAmount ≤ goods,
         // фақат маҳсулот суммасидан (етказиш ҳақи — ҳамёндан). Мавжуд рағбат тизимининг computeIncentivePlan'и.
@@ -1360,7 +1427,10 @@ function attachSupermarket(exportsObj, deps) {
           deliveryFee: priced.fee,
           deliveryFeePercent: feePercent,
           deliveryFeeVersion: feeConfig.version,
-          weighHoldPercent,
+          // Муҳр (9-банд): ставка bps + яхлитлаш — кейинги қайта ҳисоб (тортиш/алмаштириш) шу билан.
+          weighHoldPercent: hold.bps / 100,
+          weighHoldBps: hold.bps,
+          holdRounding: hold.rounding,
           weighHold: priced.extras,
           smHold: priced.hold,
           tariffVersion: TARIFF_VERSION,
@@ -1611,7 +1681,7 @@ function attachSupermarket(exportsObj, deps) {
     try {
       out = await adjustOrder({
         orderId, actor, actorRole, action: 'weigh',
-        mutate: (lines, od) => applyWeights(lines, input, Number.isInteger(od.weighHoldPercent) ? od.weighHoldPercent : 10),
+        mutate: (lines, od) => applyWeights(lines, input, holdSpecOfOrder(od)),
         auditExtra: { lines: input.map((r) => ({ productId: r.productId, actualQty: r.actualQty })) },
       });
     } catch (e) {
@@ -1737,7 +1807,7 @@ function attachSupermarket(exportsObj, deps) {
         },
         mutate: (lines, od, offerData) => applyShortageChoice(lines, {
           productId, choice, offerId, qty, offerData, feeBp: feeBpOf(od.deliveryFeePercent),
-          weighHoldPercent: Number.isInteger(od.weighHoldPercent) ? od.weighHoldPercent : 10, actor: uid, nowMs: now(),
+          hold: holdSpecOfOrder(od), actor: uid, nowMs: now(),
         }),
         auditExtra: { productId, choice, ...(offerId ? { offerId } : {}), ...(qty != null ? { qty } : {}) },
       });
@@ -2037,7 +2107,7 @@ function buildTaxonomyVersionDocs({ categories, version, previousVersion, actor,
 module.exports = {
   attachSupermarket,
   // тоза (тестлар)
-  toMilli, fromMilli, lineTotalOf, holdExtraOf, feeBpOf, feeOf, feeConfigFromApp, computeCharge,
+  toMilli, fromMilli, lineTotalOf, holdExtraOf, holdBpsOf, holdSpecOfSettings, holdSpecOfOrder, HOLD_ROUNDING, HOLD_LEGACY_ROUNDING, feeBpOf, feeOf, feeConfigFromApp, computeCharge,
   tashkentParts, availableSlots, gateFromModuleStatus, supermarketGate, removedGroupIds,
   partnerKeyOf, partnerProductId, effectiveSmStatus, nextModeration, PARTNER_PREFIX, MODERATION, validateSupermarketTaxonomy, validateSupermarketSettings,
   validateOffer, validateCost, findGroup, offerSearchTokens, priceSupermarketOrder, applyWeights, adjustment,
@@ -2049,5 +2119,5 @@ module.exports = {
   MSG, UNITS, PACK_UNITS, OPERATOR_ROLES, REFUND_NOTES, STAGES, SM_STATUSES, LANGS, TAXONOMY_DOC, SETTINGS_DOC, HISTORY_COLLECTION, HISTORY_PREFIX,
   TARIFF_VERSION, UNIT_LABELS, ORDER_ORIGINS,
   // 3-босқич: курьер тўлови
-  courierPayoutProblems, courierPayoutSnapshot, COURIER_PAYOUT_MODES,
+  courierPayoutProblems, courierPayoutSnapshot, normalizeCourierPayout, COURIER_PAYOUT_MODES,
 };

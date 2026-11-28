@@ -30,9 +30,10 @@ ok('stavka parametri: 300 bps → 42000; 150 → 21000; 0 → 0; 10000 → 100 %
   assert.deepStrictEqual([f.rateBps, f.rate, f.grossBasis], [300, 0.03, 1400000]);
 });
 
-ok('ceil chegara: 333333 × 4 × 175 / 10000 = 23333.31 → 23334 (butun son)', () => {
+ok('half_up chegara (ega 2026-11-28): 333333 × 4 × 175 / 10000 = 23333.31 → 23333; eski reys (ceil) → 23334', () => {
   const f = tb.calculateTaxiFee(333333, 175);
-  assert.strictEqual(f.feeAmount, 23334);
+  assert.strictEqual(f.feeAmount, 23333);
+  assert.strictEqual(tb.calculateTaxiFee(333333, 175, 'ceil').feeAmount, 23334);
   assert.ok(Number.isInteger(f.feeAmount));
 });
 

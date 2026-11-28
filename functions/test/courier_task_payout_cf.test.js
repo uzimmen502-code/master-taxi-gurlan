@@ -157,10 +157,11 @@ async function main() {
     await assert.rejects(call('courierMarkCarpetDelivered', { courierPhone: A, orderId: 'c1' }, A), (e) => e.code === 'failed-precondition');
     assert.strictEqual((await payoutDoc('carpet', 'c1')).payout, 6000);
   });
-  await check('C3 floor: 33 333 x 15 % = 4 999', async () => {
+  await check('C3 half_up (ega 2026-11-28; avval floor 4 999): 33 333 x 15 % = 5 000', async () => {
     await carpet('c3', { finalPrice: 33333 });
     await call('courierMarkCarpetDelivered', { courierPhone: A, orderId: 'c3' }, A);
-    assert.strictEqual((await payoutDoc('carpet', 'c3')).payout, 4999);
+    assert.strictEqual((await payoutDoc('carpet', 'c3')).payout, 5000);
+    assert.strictEqual((await payoutDoc('carpet', 'c3')).rounding, 'half_up');
   });
   await check('C4 narx noma\'lum (finalPrice 0): yakun o\'tadi, courierPayout null, sabab price_unknown, foiz saqlanadi', async () => {
     await carpet('c4', { finalPrice: 0 });

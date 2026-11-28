@@ -21,6 +21,7 @@
 'use strict';
 
 const localTaxi = require('./local_taxi');
+const moneyMath = require('./money_math');
 
 /** 2 % = 200 bps. Butun son arifmetikasi uchun. */
 const AVA_FEE_RATE_BPS = 200;
@@ -79,10 +80,10 @@ function resolveAvaFeeSettings(tariffDoc) {
 
 /**
  * AVA ulushi — SOF, DETERMINISTIK, BUTUN SO'M (D-REST-2, 8-qoida).
- *   amount = ceil(itemsTotal × rateBps / 10000)
+ *   amount = half_up(itemsTotal × rateBps / 10000)
  * `settings` — `resolveAvaFeeSettings` natijasi; berilmasa standart 200 bps
- * (eski chaqiruvlar o'zgarmaydi). `ceil`: AVA o'ziga zarar qilmaydi, farq
- * eng ko'pi 1 so'm (taxi T-4 bilan bir xil). Faqat HAQIQIY musbat butun son
+ * (eski chaqiruvlar o'zgarmaydi). Yaxlitlash — yarmidan yuqoriga (ega 2026-11-28,
+ * barcha platforma foizlari bir xil; avval ceil edi). Faqat HAQIQIY musbat butun son
  * qabul qilinadi (18-qoida). `version` — hisob-kitob (ledger kalit) versiyasi,
  * O'ZGARMAYDI; sozlama versiyasi `settingsVersion`da (buyurtmaga muhrlanadi).
  */
@@ -96,11 +97,12 @@ function computeAvaFee(itemsTotal, settings) {
   const s = settings && typeof settings === 'object' ? settings : null;
   const rateBps = s && Number.isInteger(s.rateBps) && s.rateBps >= AVA_FEE_BPS_MIN && s.rateBps <= AVA_FEE_BPS_MAX
     ? s.rateBps : AVA_FEE_RATE_BPS;
-  const product = basis * rateBps;
   const out = {
     rateBps,
     basis,
-    amount: Math.floor(product / 10000) + (product % 10000 === 0 ? 0 : 1),
+    // Yagona yaxlitlash manbai money_math (T-4). Ega 2026-11-28 «ҳа бир хил бўлсин»: half_up
+    // (avval ceil). Summa buyurtmaga joylashtirishda muhrlanadi — eski buyurtmalar o'zgarmaydi.
+    amount: moneyMath.bpsOf(basis, rateBps, 'half_up', { unsafe: 'unchecked' }),
     version: AVA_FEE_VERSION,
   };
   // Muhr FAQAT admin sozlamasi ishlaganda: standart (sozlamasiz) buyurtma

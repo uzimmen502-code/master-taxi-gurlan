@@ -20,7 +20,7 @@
  *           Cr passenger_credit:{walletUid}          gross − fee   (hamyon)
  *           Cr earnings:ava_courier_service_fee      fee
  *
- *   fee = ceil(gross × feeBps / 10000) — butun so'm (8-band); ceil: platforma
+ *   fee = half_up(gross × feeBps / 10000) — butun so'm (8-band); ega 2026-11-28: barcha foizlar yarmidan yuqoriga (avval ceil: platforma
  *   ulushi yuqoriga, ijrochi ulushi pastga (`tariff.splitInternal` bilan bir xil).
  *
  * Kalit: `journal_entries/courierPayout:{shipmentId}:{legId}` — trigger qayta
@@ -44,7 +44,9 @@
  * yozuvlaridan to'lovi yo'qlari → qayta urinish.
  */
 
-const EARNED_KIND = 'logistics_leg_earned';
+const courierPayoutCalc = require('./courier_payout_calc');
+
+const EARNED_KIND ='logistics_leg_earned';
 const EARNED_PREFIX = 'relayEarned:';
 const PAYOUT_KIND = 'logistics_courier_payout';
 const PAYOUT_PREFIX = 'courierPayout:';
@@ -69,14 +71,12 @@ const GET_ROLES = Object.freeze(['admin', 'superadmin', 'finance', 'auditor']);
 const isInt = (n) => typeof n === 'number' && Number.isInteger(n);
 const isFeeBps = (n) => isInt(n) && n >= FEE_BPS_MIN && n <= FEE_BPS_MAX;
 
-/** ceil(amount × feeBps / 10000) — faqat butun sonlar bilan (float yo'q). */
+/**
+ * half_up(amount × feeBps / 10000) — faqat butun sonlar bilan (float yo'q; ega 2026-11-28, avval ceil).
+ * Yagona manba: courier_payout_calc.serviceFee (T-2, ega 2026-11-28).
+ */
 function computeFee(amount, feeBps) {
-  if (!isInt(amount) || amount <= 0) throw new Error('courierPayout: amount must be a positive integer');
-  if (!isFeeBps(feeBps)) throw new Error('courierPayout: feeBps out of range');
-  const product = amount * feeBps;
-  if (!Number.isSafeInteger(product)) throw new Error('courierPayout: amount too large');
-  const rem = product % 10000;
-  return (product - rem) / 10000 + (rem > 0 ? 1 : 0);
+  return courierPayoutCalc.serviceFee(amount, feeBps, { feeBpsMax: FEE_BPS_MAX });
 }
 
 /**
@@ -253,7 +253,7 @@ function attachCourierPayout(exportsObj, deps) {
       if (fee > 0) legs.push({ account: FEE_ACCOUNT, cr: fee });
       const meta = {
         shipmentId: p.shipmentId, legId: p.legId, providerId: p.providerId, walletUid,
-        gross, fee, net, feeBps: st.feeBps, feeVersion: st.feeVersion, earnedEntryId,
+        gross, fee, net, feeBps: st.feeBps, feeVersion: st.feeVersion, feeRounding: courierPayoutCalc.ROUNDING, earnedEntryId,
       };
       const userRef = db.collection('users').doc(walletUid);
       const aRef = anomalyRef(p.key);
@@ -288,7 +288,7 @@ function attachCourierPayout(exportsObj, deps) {
             tx.set(db.collection(PAYOUTS).doc(p.key), {
               key: p.key, earnedEntryId, shipmentId: p.shipmentId, legId: p.legId,
               providerId: p.providerId, walletUid, gross, fee, net,
-              feeBps: st.feeBps, feeVersion: st.feeVersion, source, createdAt: ts(),
+              feeBps: st.feeBps, feeVersion: st.feeVersion, feeRounding: courierPayoutCalc.ROUNDING, source, createdAt: ts(),
             });
             if (pre && pre.anomalyExists) {
               tx.set(aRef, {

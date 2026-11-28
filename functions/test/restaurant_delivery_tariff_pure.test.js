@@ -28,7 +28,11 @@ check('2 %: 60 000 → 1 200', () => {
 check('2 %: ceil — 33 333 → 667 (666.66 emas)', () => {
   assert.strictEqual(t.computeAvaFee(33333).amount, 667);
 });
-check('2 %: 1 so\'m → 1 (nol emas)', () => assert.strictEqual(t.computeAvaFee(1).amount, 1));
+check('2 %: 1 so\'m → 0 (0.02, half_up — ega 2026-11-28; avval ceil → 1); 25 so\'m → 1 (0.5)', () => {
+  assert.strictEqual(t.computeAvaFee(1).amount, 0);
+  assert.strictEqual(t.computeAvaFee(25).amount, 1);
+  assert.strictEqual(t.computeAvaFee(24).amount, 0);
+});
 check('2 %: satr / manfiy / 0 / float rad etiladi', () => {
   for (const bad of ['60000', -1, 0, 60000.5, null, undefined]) {
     assert.throws(() => t.computeAvaFee(bad), /butun/);

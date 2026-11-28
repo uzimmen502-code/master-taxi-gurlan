@@ -42,6 +42,7 @@
  */
 
 const caps = require('./capabilities_model');
+const moneyMath = require('./money_math');
 const fraud = require('./taxi_fraud');
 const { render, langOfPhoneTx } = require('./notif_i18n');
 
@@ -78,18 +79,23 @@ const COMMISSION_HISTORY = 'taxi_commission_history';
 const COMMISSION_ADMIN_ROLES = Object.freeze(['admin', 'superadmin']);
 const ADMIN_AUDIT = 'admin_audit';
 const BILLING_VERSION = 1;
+/** Komissiya yaxlitlashi (ega 2026-11-28): yangi — half_up; eski reys (muhrsiz) — ceil. */
+const FEE_ROUNDING = 'half_up';
+const LEGACY_FEE_ROUNDING = 'ceil';
 /** Pasaytirishda refund — reys davomida nechta marta (D-TAXI-12 abuse). */
 const MAX_DOWNWARD_REFUNDS = 1;
 
 /**
  * Komissiya — SOF, DETERMINISTIK, BUTUN SO'M (T-4, 8-qoida).
  *
- *   fee = ceil(farePerSeat × 4 × rateBps / 10000)    (rateBps standart 200)
+ *   fee = half_up(farePerSeat × 4 × rateBps / 10000)    (rateBps standart 200)
  *
- * `ceil`: AVA o'ziga zarar qilmaydi, farq eng ko'pi 1 so'm.
+ * Ega 2026-11-28 («ҳа бир хил бўлсин»): barcha platforma foiz hisoblari — yarmidan yuqoriga
+ * (`half_up`). Avval `ceil` edi: shu sababli reysga `feeRounding` muhrlanadi — eski reys
+ * (maydon yo'q) reprice'da ESKI `ceil` bilan qoladi (9-qoida: faqat yangi reyslarga ta'sir).
  * `rateBps` — SERVER beradi (sozlama yoki reys snapshot'i), klientdan EMAS.
  */
-function calculateTaxiFee(farePerSeat, rateBps = DEFAULT_RATE_BPS) {
+function calculateTaxiFee(farePerSeat, rateBps = DEFAULT_RATE_BPS, feeRounding = FEE_ROUNDING) {
   // Faqat HAQIQIY son: `'350000'` satri ham rad etiladi — pul maydoni
   // tipi klientdan kelganda aniq bo'lishi kerak (18-qoida).
   const fare = typeof farePerSeat === 'number' ? farePerSeat : Number.NaN;
@@ -104,11 +110,18 @@ function calculateTaxiFee(farePerSeat, rateBps = DEFAULT_RATE_BPS) {
     throw e;
   }
   const grossBasis = fare * SEAT_BASIS;
-  const feeAmount = Math.ceil((grossBasis * rateBps) / 10000);
+  const mode = feeRounding === LEGACY_FEE_ROUNDING ? LEGACY_FEE_ROUNDING : FEE_ROUNDING;
+  // Yagona yaxlitlash manbai money_math (T-4, ega 2026-11-28), eski kabi chegarasiz.
+  const feeAmount = moneyMath.bpsOf(grossBasis, rateBps, mode, { unsafe: 'unchecked' });
   return {
     farePerSeat: fare, seatBasis: SEAT_BASIS, rateBps,
-    rate: rateBps / 10000, grossBasis, feeAmount,
+    rate: rateBps / 10000, grossBasis, feeAmount, feeRounding: mode,
   };
+}
+
+/** Reys muhri: `feeRounding` yo'q (2026-11-28 gacha e'lon qilingan) → eski `ceil`. */
+function tripFeeRounding(trip) {
+  return (trip || {}).feeRounding === FEE_ROUNDING ? FEE_ROUNDING : LEGACY_FEE_ROUNDING;
 }
 
 function isValidRateBps(v) {
@@ -575,6 +588,7 @@ function attachTaxiBilling(exports, deps) {
       // 9-qoida: qo'llangan stavka va sozlama versiyasi reysda (keyin reprice ham shu stavkada).
       rateBps: q.rateBps,
       taxiCommissionVersion: q.taxiCommissionVersion,
+      feeRounding: q.feeRounding,
       grossBasis: q.grossBasis,
       feeAmount: q.feeAmount,
       quotedFee: q.quotedFee,
@@ -880,7 +894,7 @@ function attachTaxiBilling(exports, deps) {
     if (trip.status !== 'published') throw err('failed-precondition', 'Reys e\'lon holatida emas', { reason: 'not_published' });
 
     // 9-qoida: reys e'lon qilingan stavkada (snapshot `rateBps`; eski reys — 200), joriy sozlamada EMAS.
-    const fee = calculateTaxiFee(data.farePerSeat, tripRateBps(trip));
+    const fee = calculateTaxiFee(data.farePerSeat, tripRateBps(trip), tripFeeRounding(trip));
     const when = now();
     const oldFare = trip.farePerSeat;
     const oldFee = Number(trip.feeAmount) || 0;
@@ -1326,7 +1340,7 @@ function numOrNull(v) {
 module.exports = {
   TRIPS, PRICE_CHANGES, RESCHEDULES, FRAUD_CASES, AGREEMENTS, EARNINGS_ACCOUNT, PUBLISH_REQUESTS,
   rescheduleWrites,
-  SEAT_BASIS, RATE_BPS, BILLING_VERSION, MAX_DOWNWARD_REFUNDS, STARTER_NOTICE_DAYS,
+  SEAT_BASIS, RATE_BPS, BILLING_VERSION, FEE_ROUNDING, LEGACY_FEE_ROUNDING, tripFeeRounding, MAX_DOWNWARD_REFUNDS, STARTER_NOTICE_DAYS,
   DEFAULT_RATE_BPS, RATE_BPS_MIN, RATE_BPS_MAX, COMMISSION_COLLECTION, COMMISSION_DOC_ID, COMMISSION_HISTORY,
   calculateTaxiFee, starterNoticeOf, attachTaxiBilling,
   isValidRateBps, resolveCommission, tripRateBps, validateCommissionInput,

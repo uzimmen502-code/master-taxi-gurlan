@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:cloud_functions/cloud_functions.dart';
 
 import '../../admin_web/services/admin_supermarket_service.dart' show SmImportPreview, SmImportResult;
+import 'sm_partner_payouts.dart' show SmPartnerPayouts;
 
 /// «AVA Супермаркет» ҳамкори (эга 2026-11-28, а-вариант): тасдиқланган Улгуржи сотувчиси ўз таклифларини супермаркетга
 /// чиқаради. Ҳаммаси серверда (`supermarket.js` partner* callable'лари): эгалик, модерация, нарх бутун сўм.
@@ -143,6 +144,9 @@ class SmPartnerService {
         if (o is Map) SmPartnerOffer.fromMap(o),
     ];
   }
+
+  /// Ҳамкорнинг ўз тўлов баланси ва ёзувлари (сервер `partnerGetSmPayouts`; босқич public бўлмаса — enabled:false).
+  Future<SmPartnerPayouts> myPayouts() async => SmPartnerPayouts.fromMap(await _call('partnerGetSmPayouts', const {}));
 
   Future<String> upsert(String sku, Map<String, dynamic> offer) async =>
       _s((await _call('partnerUpsertSupermarketOffer', {'sku': sku, 'offer': offer}))['productId']);

@@ -11,6 +11,7 @@ import '../../../core/utils/formatters.dart';
 import '../../admin_web/services/admin_supermarket_service.dart' show SmImportPreview, SmImportResult;
 import '../data/supermarket_repository.dart';
 import '../domain/sm_taxonomy.dart';
+import 'sm_partner_payouts.dart';
 import 'sm_partner_service.dart';
 
 /// «Супермаркетга чиқариш» (эга 2026-11-28, а-вариант) — тасдиқланган Улгуржи сотувчиси ЎЗ таклифларини AVA
@@ -170,6 +171,8 @@ class _SmPartnerScreenState extends State<SmPartnerScreen> {
                       child: Text(_error!, key: const ValueKey('smp_error'), style: const TextStyle(color: Colors.red)),
                     ),
                   const SizedBox(height: 8),
+                  // Тўловлар (эга 2026-11-28): сервер босқичи public бўлсагина кўринади.
+                  SmPartnerPayoutsCard(load: _svc.myPayouts),
                   Card(
                     child: Padding(
                       padding: const EdgeInsets.all(12),

@@ -90,7 +90,7 @@ class _SmPartnersAdminTabState extends State<SmPartnersAdminTab> {
       children: [
         const Text(
           'AVA\'нинг ўз маҳсулоти йўқ: ҳар таклиф ҳамкорники (тасдиқланган Улгуржи сотувчиси). Харидор «AVA Супермаркет»ни кўради. '
-          'Ҳамкорга тўлов КЕЙИНГА қолдирилган — буюртмада фақат ёзув (private/partner_lines).',
+          'Ҳамкорга тўлов ҳисоби — «Ҳамкорларга тўлов» табида (сукут ўчиқ; пул тизимдан ташқарида, қўлда белгиланади).',
           style: TextStyle(color: Colors.black54),
         ),
         SwitchListTile(

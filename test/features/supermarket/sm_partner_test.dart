@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:ava_gurlan/features/admin_web/services/admin_supermarket_service.dart' show SmImportPreview, SmImportResult;
 import 'package:ava_gurlan/features/supermarket/domain/sm_offer.dart';
 import 'package:ava_gurlan/features/supermarket/domain/sm_taxonomy.dart';
+import 'package:ava_gurlan/features/supermarket/partner/sm_partner_payouts.dart';
 import 'package:ava_gurlan/features/supermarket/partner/sm_partner_screen.dart';
 import 'package:ava_gurlan/features/supermarket/partner/sm_partner_service.dart';
 import 'package:flutter/material.dart';
@@ -35,6 +36,9 @@ class _FakePartner extends SmPartnerService {
 
   @override
   Future<List<SmPartnerOffer>> myOffers() async => offers;
+
+  @override
+  Future<SmPartnerPayouts> myPayouts() async => SmPartnerPayouts.disabled;
 
   @override
   Future<String> upsert(String sku, Map<String, dynamic> offer) async {

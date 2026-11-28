@@ -482,7 +482,7 @@ function attachRestaurantOrders(exportsObj, deps) {
   /** WRITE fazasi. Yechishda qoldiq yetmasa — `RESTAURANT_WALLET_INSUFFICIENT`. */
   function commitFeeInTx(t, prep, { orderId, actorId }) {
     if (!prep) return { applied: false, amount: 0 };
-    const { ctx, fee, walletUid, charge } = prep;
+    const { ctx, fee, charge } = prep;
     if (ctx.jExists) return { applied: false, amount: fee.amount, idempotent: true };
     if (charge && ctx.pcPrev < fee.amount) {
       throw fail('failed-precondition', 'RESTAURANT_WALLET_INSUFFICIENT', {
@@ -491,17 +491,15 @@ function attachRestaurantOrders(exportsObj, deps) {
     }
     const delta = charge ? -fee.amount : fee.amount;
     const kind = charge ? 'restaurant_fee' : 'restaurant_fee_refund';
-    settlementLedger.commitBonusInTx(t, ctx, {
+    // Ягона ёзиш йўли (W-1): журнал + bonusBalance (increment) + wallet_ledger — битта чақирув.
+    settlementLedger.walletPost(t, ctx, {
       delta, kind, refType: 'order', refId: orderId,
       meta: { module: MODULE_ID, basis: fee.basis, rateBps: fee.rateBps, version: fee.version },
       postedBy: actorId || 'system', postedRole: charge ? 'restaurant' : 'system',
-    });
-    const userRef = db.collection('users').doc(walletUid);
-    // Ko'zgu — `postEntry(mirrorBonus)` bilan bir xil: increment + wallet_ledger.
-    t.set(userRef, { bonusBalance: inc(delta), balanceUpdatedAt: ts() }, { merge: true });
-    t.set(userRef.collection('wallet_ledger').doc(), {
-      type: kind, amount: delta, module: MODULE_ID, refType: 'order', refId: orderId,
-      meta: { basis: fee.basis, rateBps: fee.rateBps }, createdAt: ts(), createdBy: 'server',
+      walletLedgerType: kind,
+      walletLedger: {
+        module: MODULE_ID, refType: 'order', refId: orderId, meta: { basis: fee.basis, rateBps: fee.rateBps }, createdBy: 'server',
+      },
     });
     return { applied: true, amount: fee.amount };
   }
@@ -1898,16 +1896,14 @@ function attachRestaurantOrders(exportsObj, deps) {
         if (walletPrep.jExists) {
           walletPaid = fee;
         } else if (walletPrep.pcPrev >= fee) {
-          settlementLedger.commitBonusInTx(t, walletPrep, {
+          // Ягона ёзиш йўли (W-1): мижоз → курьер (counterparty), учала омбор битта чақирувда.
+          const row = { module: MODULE_ID, refType: 'order', refId: orderId, meta: {}, createdBy: 'server' };
+          settlementLedger.walletPost(t, walletPrep, {
             delta: -fee, kind: 'restaurant_delivery_fee', refType: 'order', refId: orderId,
             meta: { module: MODULE_ID, courierId: courierId.slice(-4) }, postedBy: customerUid, postedRole: 'client',
+            walletLedgerType: 'restaurant_delivery_debit', walletLedger: row,
+            counterparty: { walletLedgerType: 'restaurant_delivery_credit', walletLedger: row },
           });
-          const cRef = db.collection('users').doc(customerUid);
-          const kRef = db.collection('users').doc(courierId);
-          t.set(cRef, { bonusBalance: inc(-fee), balanceUpdatedAt: ts() }, { merge: true });
-          t.set(cRef.collection('wallet_ledger').doc(), { type: 'restaurant_delivery_debit', amount: -fee, module: MODULE_ID, refType: 'order', refId: orderId, meta: {}, createdAt: ts(), createdBy: 'server' });
-          t.set(kRef, { bonusBalance: inc(fee), balanceUpdatedAt: ts() }, { merge: true });
-          t.set(kRef.collection('wallet_ledger').doc(), { type: 'restaurant_delivery_credit', amount: fee, module: MODULE_ID, refType: 'order', refId: orderId, meta: {}, createdAt: ts(), createdBy: 'server' });
           walletPaid = fee;
         } else {
           deliveryPaymentMethod = 'cash';
@@ -1923,23 +1919,29 @@ function attachRestaurantOrders(exportsObj, deps) {
           walletPaid = fee;
         } else if (splitPreps[0].pcPrev >= pending) {
           let pc = splitPreps[0].pcPrev;
-          const cRef = db.collection('users').doc(customerUid);
+          // Ягона ёзиш йўли (W-1): ҳар улуш — журнал + курьер проекцияси (walletPost, selfMirror:false);
+          // мижоз проекцияси — битта йиғма қатор (аввалгидек), айни транзакцияда.
           split.forEach((s, i) => {
             const prep = splitPreps[i];
             if (prep.jExists) return;
             prep.pcPrev = pc;
-            settlementLedger.commitBonusInTx(t, prep, {
+            settlementLedger.walletPost(t, prep, {
               delta: -s.amount, kind: 'restaurant_delivery_fee', refType: 'order', refId: orderId,
               meta: { module: MODULE_ID, courierId: s.courierId.slice(-4), share: true, meters: s.meters },
               postedBy: customerUid, postedRole: 'client',
+              selfMirror: false,
+              counterparty: {
+                walletLedgerType: 'restaurant_delivery_credit',
+                walletLedger: { module: MODULE_ID, refType: 'order', refId: orderId, meta: { share: true }, createdBy: 'server' },
+              },
             });
             pc -= s.amount;
-            const kRef = db.collection('users').doc(s.courierId);
-            t.set(kRef, { bonusBalance: inc(s.amount), balanceUpdatedAt: ts() }, { merge: true });
-            t.set(kRef.collection('wallet_ledger').doc(), { type: 'restaurant_delivery_credit', amount: s.amount, module: MODULE_ID, refType: 'order', refId: orderId, meta: { share: true }, createdAt: ts(), createdBy: 'server' });
           });
-          t.set(cRef, { bonusBalance: inc(-pending), balanceUpdatedAt: ts() }, { merge: true });
-          t.set(cRef.collection('wallet_ledger').doc(), { type: 'restaurant_delivery_debit', amount: -pending, module: MODULE_ID, refType: 'order', refId: orderId, meta: { split: split.length }, createdAt: ts(), createdBy: 'server' });
+          settlementLedger.mirrorWalletInTx(t, db, {
+            uid: customerUid, delta: -pending, walletLedgerType: 'restaurant_delivery_debit',
+            walletLedgerId: settlementLedger.walletLedgerIdFor(`restDeliverySplit_${orderId}`),
+            walletLedger: { module: MODULE_ID, refType: 'order', refId: orderId, meta: { split: split.length }, createdBy: 'server' },
+          });
           walletPaid = fee;
         } else {
           deliveryPaymentMethod = 'cash';

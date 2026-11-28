@@ -207,16 +207,20 @@ const fromMilli = (m) => m / 1000;
 function lineTotalOf(price, qMilli) {
   return Math.floor((price * qMilli + 500) / 1000);
 }
-/** Тортиш ушлаб туриши: ceil(line × pct / 100), бутун. */
+/** Тортиш ушлаб туриши: ceil(line × pct / 100), бутун. Яхлитлаш — ягона манба money_math (T-4, эга 2026-11-28). */
 function holdExtraOf(lineTotal, pct) {
   if (!(pct > 0) || !(lineTotal > 0)) return 0;
-  return Math.floor((lineTotal * pct + 99) / 100);
+  // Каср кириш амалда йўқ (lineTotalOf бутун, weighHoldPercent валидатори бутун) — эски формула сақланди (натижа айнан).
+  if (!Number.isInteger(pct) || !Number.isInteger(lineTotal)) return Math.floor((lineTotal * pct + 99) / 100);
+  return moneyMath.pctOf(lineTotal, pct, 'ceil', { unsafe: 'unchecked' });
 }
 /**
  * ЕТКАЗИШ ҲАҚИ — ягона манба unctions/platform_delivery_fee.js (T-1, жонли placeOrderPostPaid билан бир хил қоида;
  * номлар ва натижалар ўзгармади). Эквивалентлик: test/platform_delivery_fee.test.js.
  */
 const { feeConfigFromApp, feeBpOf, feeOf } = require('./platform_delivery_fee');
+const moneyMath = require('./money_math');
+const courierPayoutCalc = require('./courier_payout_calc');
 /**
  * Буюртма қаторларидан жорий «мақсад» ечим.
  * Олинган қатор — ҳисобга кирмайди; тортилмаган тортиладиган қатор — total + holdExtra;
@@ -458,11 +462,10 @@ function courierPayoutProblems(cp, p = 'courierPayout') {
 function courierPayoutSnapshot(cp, deliveryFee, settingsVersion) {
   const version = Number.isInteger(settingsVersion) ? settingsVersion : 0;
   if (cp == null || courierPayoutProblems(cp).length) return { mode: null, amount: null, settingsVersion: version };
-  if (cp.mode === 'percent') {
-    const fee = Number.isInteger(deliveryFee) && deliveryFee > 0 ? deliveryFee : 0;
-    return { mode: 'percent', percent: cp.percent, amount: Math.floor((fee * cp.percent) / 100), settingsVersion: version };
-  }
-  return { mode: 'fixed', fixedAmount: cp.fixedAmount, amount: cp.fixedAmount, settingsVersion: version };
+  // Summa — yagona manba courier_payout_calc (T-2, ega 2026-11-28); natija o'zgarmadi.
+  const amount = courierPayoutCalc.supermarketPayoutAmount(cp, deliveryFee);
+  if (cp.mode === 'percent') return { mode: 'percent', percent: cp.percent, amount, settingsVersion: version };
+  return { mode: 'fixed', fixedAmount: cp.fixedAmount, amount, settingsVersion: version };
 }
 const SLOT_KEYS = ['id', 'names', 'startMin', 'endMin'];
 

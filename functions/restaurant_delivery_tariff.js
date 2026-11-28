@@ -21,6 +21,7 @@
 'use strict';
 
 const localTaxi = require('./local_taxi');
+const moneyMath = require('./money_math');
 
 /** 2 % = 200 bps. Butun son arifmetikasi uchun. */
 const AVA_FEE_RATE_BPS = 200;
@@ -96,11 +97,11 @@ function computeAvaFee(itemsTotal, settings) {
   const s = settings && typeof settings === 'object' ? settings : null;
   const rateBps = s && Number.isInteger(s.rateBps) && s.rateBps >= AVA_FEE_BPS_MIN && s.rateBps <= AVA_FEE_BPS_MAX
     ? s.rateBps : AVA_FEE_RATE_BPS;
-  const product = basis * rateBps;
   const out = {
     rateBps,
     basis,
-    amount: Math.floor(product / 10000) + (product % 10000 === 0 ? 0 : 1),
+    // Yagona yaxlitlash manbai money_math (T-4, ega 2026-11-28): ceil, eski kabi chegarasiz.
+    amount: moneyMath.bpsOf(basis, rateBps, 'ceil', { unsafe: 'unchecked' }),
     version: AVA_FEE_VERSION,
   };
   // Muhr FAQAT admin sozlamasi ishlaganda: standart (sozlamasiz) buyurtma

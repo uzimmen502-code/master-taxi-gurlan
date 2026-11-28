@@ -35,6 +35,8 @@
  */
 'use strict';
 
+const courierPayoutCalc = require('./courier_payout_calc');
+
 const MODULE_KEYS = Object.freeze(['carpet', 'agro', 'collection']);
 const SETTINGS_DOC = Object.freeze(['settings', 'courier_task_payout']);
 const HISTORY_COLLECTION = 'courier_task_payout_history';
@@ -54,11 +56,12 @@ function codeError(code, status, details) {
   return e;
 }
 
-/** floor(base * bps / 10000); noto'g'ri kirish -> null. Faqat HAQIQIY butun sonlar. */
+/**
+ * floor(base * bps / 10000); noto'g'ri kirish -> null. Faqat HAQIQIY butun sonlar.
+ * Yagona manba: courier_payout_calc.taskPayout (T-2, ega 2026-11-28).
+ */
 function computePayout(base, bps) {
-  if (!isInt(base) || base <= 0 || !isBps(bps)) return null;
-  const product = base * bps;
-  return (product - (product % 10000)) / 10000;
+  return courierPayoutCalc.taskPayout(base, bps);
 }
 
 /** Sozlangan foiz va hujjat versiyasi; sozlanmagan / noto'g'ri -> null (standart YO'Q). */

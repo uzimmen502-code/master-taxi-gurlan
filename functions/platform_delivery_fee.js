@@ -19,6 +19,8 @@
  * Ekvivalentlik testi: functions/test/platform_delivery_fee.test.js.
  */
 
+const moneyMath = require('./money_math');
+
 const TARIFF_NOT_CONFIGURED = 'TARIFF_NOT_CONFIGURED';
 const BPS_PER_PERCENT = 100;
 const BPS_DENOMINATOR = 10000;
@@ -51,6 +53,9 @@ function feeBpOf(pct) {
 /** fee = floor((goods × bps + 5000) / 10000); goods yoki bps ≤ 0 / son emas → 0. */
 function feeOf(goods, bps) {
   if (!(goods > 0) || !(bps > 0)) return 0;
+  // Butun kirish — yagona yaxlitlash manbai money_math (T-4, ega 2026-11-28), natija aynan.
+  if (Number.isInteger(goods) && Number.isInteger(bps)) return moneyMath.bpsOf(goods, bps, 'half_up', { unsafe: 'unchecked' });
+  // Kasr / satr kirish (eski xatti-harakat; amalda itemsTotal butun) — formula o'zgarmadi.
   return Math.floor((goods * bps + BPS_DENOMINATOR / 2) / BPS_DENOMINATOR);
 }
 

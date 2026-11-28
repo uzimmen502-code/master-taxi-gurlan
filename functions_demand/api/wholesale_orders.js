@@ -39,6 +39,7 @@ const { callerIdFrom, sameUser } = require('../core/ids');
 const { getGlobalConfig } = require('../core/config');
 const L = require('../core/logistics');
 const WO = require('../core/wholesale_orders');
+const moneyMath = require('../core/money_math');
 const { packIdsOf, STOCK, MAX_QTY, DEFAULT_PACK } = require('./wholesale_stock');
 const { marketOf } = require('./wholesale_admin');
 const {
@@ -169,7 +170,11 @@ function avaFeeOf(goodsTotal, bps) {
   if (!bps) return 0;
   const x = goodsTotal * bps;
   if (!Number.isSafeInteger(x)) throw fail('failed-precondition', 'Summa juda katta', 'amount_too_large');
-  return Math.floor(x / BPS_DENOM) + (x % BPS_DENOM === 0 ? 0 : 1);
+  // Yagona yaxlitlash manbai money_math (T-4, ega 2026-11-28; nusxa core/money_math.js), natija aynan.
+  if (Number.isInteger(goodsTotal) && goodsTotal >= 0 && Number.isInteger(bps) && bps > 0) {
+    return moneyMath.bpsOf(goodsTotal, bps, 'ceil');
+  }
+  return Math.floor(x / BPS_DENOM) + (x % BPS_DENOM === 0 ? 0 : 1); // eski yo'l (amalda yo'q: bps tekshirilgan butun)
 }
 
 function parseQuoteRequest(data) {

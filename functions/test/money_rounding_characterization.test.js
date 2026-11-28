@@ -244,7 +244,7 @@ check('Ulgurji AVA ulushi: !bps → 0, xavfsiz chegaradan oshsa → amount_too_l
 
 // ═════ 9. Xavfsiz butun son chegarasidan TASHQARI — eski kodda o'lchangan (2026-11-28) ═════
 // Bu hududda eski chaqiruvchilar bir xil emas: xizmat haqi va Ulgurji XATO beradi, qolganlari
-// float aniqligida son qaytaradi. Refaktor ularni o'zgartirmasligi kerak.
+// float aniqligida son qaytaradi. Refaktor ularni o'zgartirmaydi (`unsafe: 'unchecked'`).
 const LEGACY_UNSAFE = [
   // [amount, task(9999), sm13%, hold7%, fee1250, rest333, taxi333]
   [2251799813685249, 2251574633703880, 292733975779082, 157625986957968, 281474976710656, 74984933795719, 299939735182876],
@@ -253,15 +253,27 @@ const LEGACY_UNSAFE = [
   [9000000000000000, 8999100000000000, 1170000000000000, 630000000000001, 1125000000000000, 299700000000000, 1198800000000000],
   [123456789012345, 123444443333443, 16049382571604, 8641975230865, 15432098626543, 4111111074112, 16444444296445],
 ];
+// Refaktordan keyin ATAYLAB o'zgargan (eski float natija noto'g'ri edi, yangisi BigInt orakul bilan
+// AYNAN teng). Real summalarda (mahsulot < 9 007 199 254 740 991) farq yo'q — yuqoridagi jadvallar.
+const UNSAFE_CHANGED = {
+  'hold 9000000000000000': 630000000000000, // eski 630000000000001 (+99 float yo'qotdi)
+  'taxi 9007199254740991': 1199758940731501, // eski 1199758940731500 (Math.ceil float)
+};
 check('xavfsiz chegaradan tashqari: eski natijalar (vazifa, supermarket, ushlab turish, yetkazish, restoran, taksi)', () => {
+  const diffs = {};
+  const cmp = (key, actual, legacy) => { if (actual !== legacy) diffs[key] = actual; };
   for (const [a, task, smv, hold, fee, rest, taxi] of LEGACY_UNSAFE) {
-    assert.strictEqual(ctp.computePayout(a, 9999), task, `task ${a}`);
-    assert.strictEqual(sm.courierPayoutSnapshot({ mode: 'percent', percent: 13 }, a, 1).amount, smv, `sm ${a}`);
-    assert.strictEqual(sm.holdExtraOf(a, 7), hold, `hold ${a}`);
-    assert.strictEqual(pdf.feeOf(a, 1250), fee, `fee ${a}`);
-    assert.strictEqual(rt.computeAvaFee(a, { rateBps: 333 }).amount, rest, `rest ${a}`);
-    assert.strictEqual(tb.calculateTaxiFee(a, 333).feeAmount, taxi, `taxi ${a}`);
+    cmp(`task ${a}`, ctp.computePayout(a, 9999), task);
+    cmp(`sm ${a}`, sm.courierPayoutSnapshot({ mode: 'percent', percent: 13 }, a, 1).amount, smv);
+    cmp(`hold ${a}`, sm.holdExtraOf(a, 7), hold);
+    cmp(`fee ${a}`, pdf.feeOf(a, 1250), fee);
+    cmp(`rest ${a}`, rt.computeAvaFee(a, { rateBps: 333 }).amount, rest);
+    cmp(`taxi ${a}`, tb.calculateTaxiFee(a, 333).feeAmount, taxi);
   }
+  assert.deepStrictEqual(diffs, UNSAFE_CHANGED);
+  assert.strictEqual(UNSAFE_CHANGED['hold 9000000000000000'], oracle(9e15, 7, 100, 'ceil'));
+  assert.strictEqual(UNSAFE_CHANGED['taxi 9007199254740991'], oracle(9007199254740991 * 4, 333, 10000, 'ceil'));
 });
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exitCode = 1;

@@ -42,6 +42,7 @@
  */
 
 const caps = require('./capabilities_model');
+const moneyMath = require('./money_math');
 const fraud = require('./taxi_fraud');
 const { render, langOfPhoneTx } = require('./notif_i18n');
 
@@ -104,7 +105,8 @@ function calculateTaxiFee(farePerSeat, rateBps = DEFAULT_RATE_BPS) {
     throw e;
   }
   const grossBasis = fare * SEAT_BASIS;
-  const feeAmount = Math.ceil((grossBasis * rateBps) / 10000);
+  // Yagona yaxlitlash manbai money_math (T-4, ega 2026-11-28): ceil, eski kabi chegarasiz.
+  const feeAmount = moneyMath.bpsOf(grossBasis, rateBps, 'ceil', { unsafe: 'unchecked' });
   return {
     farePerSeat: fare, seatBasis: SEAT_BASIS, rateBps,
     rate: rateBps / 10000, grossBasis, feeAmount,

@@ -200,7 +200,6 @@ function attachRestaurantBookings(exportsObj, deps) {
   const now = nowFn || (() => new Date());
   const HttpsError = functions.https.HttpsError;
   const ts = () => admin.firestore.FieldValue.serverTimestamp();
-  const inc = (n) => admin.firestore.FieldValue.increment(n);
   const tsOf = (ms) => admin.firestore.Timestamp.fromMillis(ms);
   const fail = (status, code, extra = {}) => new HttpsError(status, code, { code, ...extra });
 
@@ -449,16 +448,15 @@ function attachRestaurantBookings(exportsObj, deps) {
     }
     const delta = charge ? -fee.amount : fee.amount;
     const kind = charge ? 'restaurant_booking_fee' : 'restaurant_booking_fee_refund';
-    settlementLedger.commitBonusInTx(t, ctx, {
+    // Ягона ёзиш йўли (W-1): журнал + bonusBalance (increment) + wallet_ledger — битта чақирув.
+    settlementLedger.walletPost(t, ctx, {
       delta, kind, refType: 'restaurant_booking', refId: bookingId,
       meta: { module: MODULE_ID, upTo: fee.upTo, version: fee.version },
       postedBy: actorId || 'system', postedRole: postedRole || 'restaurant',
-    });
-    const userRef = db.collection('users').doc(walletUid);
-    t.set(userRef, { bonusBalance: inc(delta), balanceUpdatedAt: ts() }, { merge: true });
-    t.set(userRef.collection('wallet_ledger').doc(), {
-      type: kind, amount: delta, module: MODULE_ID, refType: 'restaurant_booking', refId: bookingId,
-      meta: { upTo: fee.upTo }, createdAt: ts(), createdBy: 'server',
+      walletLedgerType: kind,
+      walletLedger: {
+        module: MODULE_ID, refType: 'restaurant_booking', refId: bookingId, meta: { upTo: fee.upTo }, createdBy: 'server',
+      },
     });
     return { applied: true, amount: fee.amount };
   }

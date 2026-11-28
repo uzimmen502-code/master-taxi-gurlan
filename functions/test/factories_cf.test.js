@@ -162,7 +162,8 @@ async function main() {
     assert.strictEqual((await db.doc('settings/app').get()).data().producerVerifyAutoApprove, true);
     assert.strictEqual((await call('adminSetProducerAutoApprove', { enabled: true }, ADMIN)).changed, false);
     await call('adminSetProducerAutoApprove', { enabled: false }, ADMIN);
-    const a = await audits('producer_auto_approve_set');
+    // 2026-11-28 (audit C-1): yagona yozuvchi — kind `moderation_mode_set`, mode `producerVerify`.
+    const a = (await audits('moderation_mode_set')).filter((x) => x.mode === 'producerVerify');
     assert.strictEqual(a.length, 2);
     await assert.rejects(call('adminSetProducerAutoApprove', { enabled: true }, OWNER), (e) => e.code === 'permission-denied');
   });

@@ -257,6 +257,9 @@ const { attachFactories } = require('./factories');
 attachFactories(exports, {
   functions, db, admin, callerPhone, canonicalUid, requireCallerRoles,
 });
+// Moderatsiya rejimlari (AVTO/QO'LDA) — yagona registr + o'quvchi + yozuvchi (audit) (ega 2026-11-28, audit C-1).
+const moderationModes = require('./moderation_modes');
+moderationModes.attachModerationModes(exports, { functions, db, admin, requireCallerRoles });
 // «Вакансиялар» (эга 2026-11-28): `submitJobAd` type 'work' нинг `vacancy` шакли.
 const jobVacancy = require('./job_vacancy');
 // Ҳисобни автоматик ўчириш (2026-10-24, ega; docs/hisobni_ochirish_2026-10-24_uz.md). Дарвоза: `settings/account_deletion`
@@ -810,19 +813,17 @@ async function isDeviceBindingAutoApproveEnabled(privileged) {
   });
 }
 
+// Moderatsiya rejimlari — yagona o'quvchi `moderation_modes.js` (standart qiymat registrda).
 async function isDatingAutoApproveEnabled() {
-  const snap = await db.collection('settings').doc('app').get();
-  return (snap.data() || {}).datingAutoApprove === true;
+  return moderationModes.readModeAuto(db, 'dating');
 }
 
 async function isMarketAutoApproveEnabled() {
-  const snap = await db.collection('settings').doc('app').get();
-  return (snap.data() || {}).marketAutoApprove === true;
+  return moderationModes.readModeAuto(db, 'market');
 }
 
 async function isJobsAutoApproveEnabled() {
-  const snap = await db.collection('settings').doc('app').get();
-  return (snap.data() || {}).jobsAutoApprove === true;
+  return moderationModes.readModeAuto(db, 'jobs');
 }
 
 /**
@@ -14991,8 +14992,7 @@ exports.onTvClipVideoReplacedV2 = onDocumentUpdated(
       // (пастдаги `video_replaced` шохининг айни нусхаси; transcode керак эмас).
       if (tvClipContentEdited(before, after)) {
         try {
-          const s = await db.collection('settings').doc('app').get();
-          if ((s.data() || {}).tvAutoApprove !== true) {
+          if (!(await moderationModes.readModeAuto(db, 'tv'))) {
             await event.data.after.ref.update({
               status: 'pending',
               moderationReason: 'content_edited',
@@ -15013,8 +15013,7 @@ exports.onTvClipVideoReplacedV2 = onDocumentUpdated(
       // Пуллик реклама (`ad`) — `publishTvAd` оқими, тегилмайди.
       if (after.status === 'active' && after.category !== 'ad') {
         try {
-          const s = await db.collection('settings').doc('app').get();
-          if ((s.data() || {}).tvAutoApprove !== true) {
+          if (!(await moderationModes.readModeAuto(db, 'tv'))) {
             await event.data.after.ref.update({
               status: 'pending',
               moderationReason: 'video_replaced',
@@ -17730,35 +17729,35 @@ exports.adminModerateDatingProfile =
 
 /** Admin: tanishuv profillarini avtomatik tasdiqlash rejimi. */
 exports.adminSetDatingAutoApprove = functions.https.onCall(async (data, context) => {
-  await assertAdmin(String(data.adminPhone || ''), context);
+  const actor = await assertAdmin(String(data.adminPhone || ''), context);
   const enabled = data.enabled === true;
-  await db.collection('settings').doc('app').set({
-    datingAutoApprove: enabled,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  }, { merge: true });
-  return { ok: true, enabled };
+  // Yagona yozuvchi (moderation_modes.js): `settings/app.datingAutoApprove` + admin_audit; bir xil qiymat — noop.
+  const out = await moderationModes.setModerationModeTx(db, admin, {
+    mode: 'dating', enabled, actor, source: 'adminSetDatingAutoApprove',
+  });
+  return { ok: true, enabled, changed: out.changed };
 });
 
 /** Admin: Onlayn BOZOR эълонларини авто фаоллаштириш. */
 exports.adminSetMarketAutoApprove = functions.https.onCall(async (data, context) => {
-  await assertAdmin(String(data.adminPhone || ''), context);
+  const actor = await assertAdmin(String(data.adminPhone || ''), context);
   const enabled = data.enabled === true;
-  await db.collection('settings').doc('app').set({
-    marketAutoApprove: enabled,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  }, { merge: true });
-  return { ok: true, enabled };
+  // Yagona yozuvchi (moderation_modes.js): `settings/app.marketAutoApprove` + admin_audit; bir xil qiymat — noop.
+  const out = await moderationModes.setModerationModeTx(db, admin, {
+    mode: 'market', enabled, actor, source: 'adminSetMarketAutoApprove',
+  });
+  return { ok: true, enabled, changed: out.changed };
 });
 
 /** Admin: ИШ ЭЪЛОН — авто / қўлда тасдиқлаш. */
 exports.adminSetJobsAutoApprove = functions.https.onCall(async (data, context) => {
-  await assertAdmin(String(data.adminPhone || ''), context);
+  const actor = await assertAdmin(String(data.adminPhone || ''), context);
   const enabled = data.enabled === true;
-  await db.collection('settings').doc('app').set({
-    jobsAutoApprove: enabled,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  }, { merge: true });
-  return { ok: true, enabled };
+  // Yagona yozuvchi (moderation_modes.js): `settings/app.jobsAutoApprove` + admin_audit; bir xil qiymat — noop.
+  const out = await moderationModes.setModerationModeTx(db, admin, {
+    mode: 'jobs', enabled, actor, source: 'adminSetJobsAutoApprove',
+  });
+  return { ok: true, enabled, changed: out.changed };
 });
 
 /** Admin: «Тавсия этамиз» витринаси — АВТО (барча фаол) / ҚЎЛДА (featuredOnHome). */

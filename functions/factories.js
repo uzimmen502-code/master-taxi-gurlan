@@ -27,10 +27,11 @@
  */
 'use strict';
 
+const moderationModes = require('./moderation_modes');
+
 const COLLECTION = 'businesses';
 const ADMIN_AUDIT = 'admin_audit';
-const SETTINGS_DOC = 'settings/app';
-const AUTO_KEY = 'producerVerifyAutoApprove';
+const AUTO_KEY = moderationModes.MODERATION_MODES.producerVerify.field; // 'producerVerifyAutoApprove'
 const ADMIN_ROLES = Object.freeze(['admin', 'superadmin']);
 const FACTORY_CATEGORY = 'manufacturing';
 const OPTION_KEYS = Object.freeze(['sellWholesale', 'showVideos', 'publishVacancies', 'avaSupplierReady']);
@@ -87,9 +88,9 @@ function attachFactories(exportsObj, deps) {
     return db.collection(COLLECTION).doc(id);
   }
 
+  // Yagona o'quvchi (moderation_modes.js, rejim `producerVerify` = `settings/app.producerVerifyAutoApprove`).
   async function autoMode() {
-    const s = await db.doc(SETTINGS_DOC).get();
-    return (s.data() || {})[AUTO_KEY] === true;
+    return moderationModes.readModeAuto(db, 'producerVerify');
   }
 
   /**
@@ -201,18 +202,11 @@ function attachFactories(exportsObj, deps) {
   exportsObj.adminSetProducerAutoApprove = functions.https.onCall(async (data, context) => {
     const actor = await requireCallerRoles(context, ADMIN_ROLES, 'Admin role required');
     const enabled = !!(data && data.enabled === true);
-    const ref = db.doc(SETTINGS_DOC);
-    const out = await db.runTransaction(async (t) => {
-      const s = await t.get(ref);
-      const raw = (s.data() || {})[AUTO_KEY];
-      const was = raw === true;
-      if (raw === enabled) return { changed: false };
-      t.set(ref, { [AUTO_KEY]: enabled, updatedAt: ts() }, { merge: true });
-      t.set(db.collection(ADMIN_AUDIT).doc(), {
-        kind: 'producer_auto_approve_set', actor, target: SETTINGS_DOC, from: was, to: enabled, at: ts(),
-      });
-      return { changed: true };
+    // Yagona yozuvchi: settings/app maydoni + admin_audit (kind `moderation_mode_set`, mode `producerVerify`).
+    const res = await moderationModes.setModerationModeTx(db, admin, {
+      mode: 'producerVerify', enabled, actor, source: 'adminSetProducerAutoApprove',
     });
+    const out = { changed: res.changed };
     log({ action: 'adminSetProducerAutoApprove', userId: actor, enabled, result: out.changed ? 'updated' : 'noop' });
     return { ok: true, enabled, ...out };
   });

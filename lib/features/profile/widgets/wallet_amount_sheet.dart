@@ -154,7 +154,7 @@ class _WalletAmountSheetState extends State<WalletAmountSheet> {
               inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9 ]'))],
               decoration: InputDecoration(
                 labelText: context.tr('wlt_amt_custom'),
-                suffixText: context.tr('wlt_amt_currency'),
+                suffixText: context.tr('wlt_currency'),
                 errorText: customInvalid ? context.tr('wlt_amt_invalid') : null,
                 helperText: widget.max > 0
                     ? context.trMsg('wlt_amt_max', params: {'max': formatMoney(widget.max)})

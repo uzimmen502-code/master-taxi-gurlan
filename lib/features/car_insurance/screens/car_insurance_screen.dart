@@ -273,7 +273,7 @@ class _CarInsuranceScreenState extends State<CarInsuranceScreen> {
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(context.tr('ins_cancel'))),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(context.tr('ins_save'))),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(context.tr('save'))),
           ],
         ),
       ),

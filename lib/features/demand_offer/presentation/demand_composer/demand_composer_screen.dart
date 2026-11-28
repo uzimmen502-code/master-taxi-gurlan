@@ -291,7 +291,7 @@ class _DemandComposerScreenState extends State<DemandComposerScreen> {
               child: Text(
                 _sending
                     ? context.tr('request_sending')
-                    : context.tr('request_send'),
+                    : context.tr('submit'),
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,

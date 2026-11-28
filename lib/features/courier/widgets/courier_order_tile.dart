@@ -77,7 +77,7 @@ class CourierOrderTile extends StatelessWidget {
       order.effectiveFulfillment == 'completed';
 
   String _statusLabel(BuildContext context) {
-    if (order.isOrderDeliveryFailedFinal) return context.tr('delivery_failed_status_final');
+    if (order.isOrderDeliveryFailedFinal) return context.tr('delivery_failed_btn_failed');
     if (order.isOrderDeliveryFailedPending) return context.tr('delivery_failed_status_pending');
     if (_isFinalized) return context.tr('courier_status_done');
     switch (order.effectiveFulfillment) {

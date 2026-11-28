@@ -572,7 +572,7 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
                     ),
                     const SizedBox(width: 6),
                     FilterChip(
-                      label: Text(context.tr('restaurants_filter_pickup')),
+                      label: Text(context.tr('restaurants_chip_pickup')),
                       selected: _pickupOnly,
                       onSelected: (v) => setState(() => _pickupOnly = v),
                     ),

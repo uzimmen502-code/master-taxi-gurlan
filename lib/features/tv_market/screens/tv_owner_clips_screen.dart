@@ -74,7 +74,7 @@ class _TvOwnerClipsScreenState extends State<TvOwnerClipsScreen> {
   @override
   Widget build(BuildContext context) {
     final title = widget.ownerName.trim().isEmpty
-        ? context.tr('tv_market_owner_clips')
+        ? context.tr('tv_channel_clips')
         : widget.ownerName;
     return Scaffold(
       backgroundColor: Colors.white,

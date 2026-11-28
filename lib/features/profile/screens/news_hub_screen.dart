@@ -440,7 +440,7 @@ class _NewsHubScreenState extends State<NewsHubScreen> {
         if (!_searching && _uid.length >= 9) ...[
           IconButton(
             key: const ValueKey('inbox-search'),
-            tooltip: context.tr('inbox_search'),
+            tooltip: context.tr('search'),
             icon: const Icon(Icons.search),
             onPressed: () => setState(() => _searching = true),
           ),

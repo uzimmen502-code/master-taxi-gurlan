@@ -583,7 +583,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
                     child: ElevatedButton(
                       onPressed: () => Navigator.pop(sheetContext),
                       child: Text(
-                          sheetContext.tr('tv_publish_local_preview_close')),
+                          sheetContext.tr('understand')),
                     ),
                   ),
                 ),
@@ -742,7 +742,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
     }
     if (_videoFile == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.tr('tv_publish_video_required'))),
+        SnackBar(content: Text(context.tr('tv_publish_pick_video'))),
       );
       return;
     }
@@ -1259,7 +1259,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
           if (!_isEdit && !widget.organicOnly)
             ButtonSegment(
               value: 'ad',
-              label: Text(context.tr('tv_publish_ad')),
+              label: Text(context.tr('tv_ad_label')),
             ),
           if (!_isEdit && !widget.organicOnly)
             ButtonSegment(

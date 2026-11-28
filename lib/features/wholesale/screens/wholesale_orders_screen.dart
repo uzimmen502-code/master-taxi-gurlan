@@ -87,7 +87,7 @@ class _WholesaleOrdersScreenState extends State<WholesaleOrdersScreen> {
                   // Firestore оқими хатодан кейин ёпилади — қайта уланамиз.
                   TextButton(
                     onPressed: () => setState(() => _stream = _open()),
-                    child: Text(context.tr('wholesale_quote_retry')),
+                    child: Text(context.tr('err_retry')),
                   ),
                 ],
               ),

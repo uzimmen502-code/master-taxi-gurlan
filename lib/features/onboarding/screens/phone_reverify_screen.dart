@@ -540,7 +540,7 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
           const SizedBox(height: 24),
           _readOnlyCard(
             icon: Icons.wc_outlined,
-            label: context.tr('reverify_profile_gender'),
+            label: context.tr('gender'),
             value: _genderLabel(context),
           ),
           const SizedBox(height: 12),

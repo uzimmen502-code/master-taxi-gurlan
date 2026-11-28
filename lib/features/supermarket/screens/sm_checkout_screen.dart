@@ -231,7 +231,7 @@ class _SmCheckoutScreenState extends State<SmCheckoutScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               SmSumRow(label: ctx.tr('sm_goods_total'), amount: res.goodsTotal),
-              SmSumRow(label: ctx.tr('sm_fee'), amount: res.fee),
+              SmSumRow(label: ctx.tr('delivery'), amount: res.fee),
               if (res.incentiveApplied > 0)
                 SmSumRow(
                     label: ctx.tr('sm_incentive_applied'),

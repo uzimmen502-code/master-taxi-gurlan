@@ -774,7 +774,7 @@ class _WholesaleCheckoutSheetState extends State<WholesaleCheckoutSheet> {
             if (!_closed)
               TextButton(
                 onPressed: () => _scheduleQuote(immediate: true),
-                child: Text(context.tr('wholesale_quote_retry')),
+                child: Text(context.tr('err_retry')),
               ),
           ],
         ),
@@ -797,11 +797,11 @@ class _WholesaleCheckoutSheetState extends State<WholesaleCheckoutSheet> {
           _MoneyLine(label: context.tr('wholesale_quote_goods'), value: money(q.goodsTotal)),
           // S4: ўз етказишида нарх товар ичида (сервер deliveryFee 0).
           _MoneyLine(
-            label: context.tr('wholesale_quote_delivery'),
+            label: context.tr('delivery'),
             value: q.isSelf ? context.tr('wholesale_self_fee_included') : money(q.deliveryFee),
           ),
           const Divider(height: 10, color: PdDark.line),
-          _MoneyLine(label: context.tr('wholesale_quote_total'), value: money(q.total), bold: true),
+          _MoneyLine(label: context.tr('total'), value: money(q.total), bold: true),
           // S57: нақд — етказиш ҳақи эшик олдида курьерга (сервер `cashToCourier`); ҳамён усулида
           // ҳозир ҳамёндан фақат товар суммаси (`payPlan.walletNow`).
           if (q.isCashDelivery) ...[
@@ -832,7 +832,7 @@ class _WholesaleCheckoutSheetState extends State<WholesaleCheckoutSheet> {
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  context.trMsg('wholesale_quote_card_wallet_now', params: {'amount': money(q.payPlan!.walletNow)}),
+                  context.trMsg('wholesale_quote_bank_hold', params: {'amount': money(q.payPlan!.walletNow)}),
                   key: const ValueKey('wholesale-card-wallet-now'),
                   style: const TextStyle(fontSize: 12, color: PdDark.brand, fontWeight: FontWeight.w600),
                 ),

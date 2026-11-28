@@ -321,7 +321,7 @@ class _DishFactsEditorState extends State<DishFactsEditor> {
   String _portionSummary(BuildContext context, DishFacts f) {
     final parts = <String>[
       if (f.servings != null) context.tr('restaurants_m_dish_servings_short').replaceAll('{n}', '${f.servings}'),
-      if (f.weightG != null) context.tr('restaurants_m_dish_grams').replaceAll('{n}', '${f.weightG}'),
+      if (f.weightG != null) context.tr('restaurants_dish_grams').replaceAll('{n}', '${f.weightG}'),
     ];
     return parts.isEmpty ? context.tr('restaurants_m_dish_empty') : parts.join(' · ');
   }
@@ -529,7 +529,7 @@ class _DishFactsEditorState extends State<DishFactsEditor> {
               Icon(Icons.error_outline_rounded, size: 18, color: c.danger),
               const SizedBox(width: 6),
               Expanded(child: Text(context.tr('restaurants_m_dish_cuisine_error'), style: AvaText.caption.copyWith(color: c.danger))),
-              TextButton(onPressed: () => _ensureCuisines(force: true), child: Text(context.tr('restaurants_m_dish_retry'))),
+              TextButton(onPressed: () => _ensureCuisines(force: true), child: Text(context.tr('err_retry'))),
             ],
           )
         else
@@ -764,7 +764,7 @@ class _MacroBar extends StatelessWidget {
     final kc = 4 * carbs;
     final total = kp + kf + kc;
 
-    String grams(int v) => context.tr('restaurants_m_dish_grams').replaceAll('{n}', '$v');
+    String grams(int v) => context.tr('restaurants_dish_grams').replaceAll('{n}', '$v');
     final legend = [
       (m.protein, '${context.tr('restaurants_m_dish_protein_short')} ${grams(protein)}'),
       (m.fat, '${context.tr('restaurants_m_dish_fat_short')} ${grams(fat)}'),
@@ -874,7 +874,7 @@ class _CuisineNameDialogState extends State<_CuisineNameDialog> {
         TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(context.tr('cancel'))),
         FilledButton(
           onPressed: _name.text.trim().length >= 2 ? _submit : null,
-          child: Text(context.tr('restaurants_m_dish_cuisine_add_ok')),
+          child: Text(context.tr('add')),
         ),
       ],
     );

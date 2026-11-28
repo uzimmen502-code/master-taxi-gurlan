@@ -42,7 +42,7 @@ class GeoTierBar extends StatelessWidget {
             .trim();
         return r.isEmpty ? context.tr('geo_level_region') : r;
       case GeoLevel.nation:
-        return context.tr('geo_level_nation');
+        return context.tr('geo_show_nation');
     }
   }
 

@@ -613,7 +613,7 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
           borderRadius: BorderRadius.circular(6),
           border: Border.all(color: Colors.orange.shade300),
         ),
-        child: Text(context.tr('addr_gps_none'),
+        child: Text(context.tr('no'),
             style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.bold,
@@ -633,7 +633,7 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
       GpsQuality.unknown =>
         ('OK', AppColors.tickerShell, AppColors.primaryText),
       GpsQuality.none =>
-        (context.tr('addr_gps_none'), Colors.grey.shade100, Colors.grey),
+        (context.tr('no'), Colors.grey.shade100, Colors.grey),
     };
 
     return Container(

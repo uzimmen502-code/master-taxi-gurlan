@@ -120,7 +120,7 @@ class _TvShopItemPhotosScreenState extends State<TvShopItemPhotosScreen> {
             style: TextButton.styleFrom(
               foregroundColor: Colors.red,
             ),
-            child: Text(context.tr('tv_shop_delete_item')),
+            child: Text(context.tr('delete')),
           ),
         ],
       ),
@@ -155,7 +155,7 @@ class _TvShopItemPhotosScreenState extends State<TvShopItemPhotosScreen> {
         elevation: 0.4,
         actions: [
           IconButton(
-            tooltip: context.tr('tv_shop_delete_item'),
+            tooltip: context.tr('delete'),
             onPressed: _saving ? null : _delete,
             icon: const Icon(Icons.delete_outline, color: Colors.red),
           ),

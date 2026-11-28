@@ -237,7 +237,7 @@ class _QuoteCard extends StatelessWidget {
               ),
               child: busy
                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                  : Text(context.tr('dq_respond')),
+                  : Text(context.tr('submit')),
             ),
           ]),
         ],

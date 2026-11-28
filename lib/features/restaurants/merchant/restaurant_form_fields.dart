@@ -540,7 +540,7 @@ class _RestaurantFormFieldsState extends State<RestaurantFormFields> {
         SwitchListTile(
           dense: true,
           contentPadding: EdgeInsets.zero,
-          title: Text(context.tr('restaurants_m_always_open'), style: TextStyle(fontSize: 13, color: c.ink)),
+          title: Text(context.tr('restaurants_hours_always'), style: TextStyle(fontSize: 13, color: c.ink)),
           value: d.alwaysOpen,
           onChanged: (v) => _set(() => d.alwaysOpen = v),
         ),

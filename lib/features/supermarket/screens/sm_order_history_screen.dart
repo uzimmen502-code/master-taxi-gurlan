@@ -69,7 +69,7 @@ class _SmOrderHistoryScreenState extends State<SmOrderHistoryScreen> {
       ..showSnackBar(SnackBar(
         key: const ValueKey('sm_reorder_snack'),
         content: Text(context.tr('sm_list_added').replaceAll('{n}', '$n')),
-        action: SnackBarAction(label: context.tr('sm_tab_cart'), onPressed: () => smOpenCart(context, widget.controller)),
+        action: SnackBarAction(label: context.tr('cart'), onPressed: () => smOpenCart(context, widget.controller)),
       ));
   }
 
@@ -96,7 +96,7 @@ class _SmOrderHistoryScreenState extends State<SmOrderHistoryScreen> {
                   const SizedBox(height: 12),
                   FilledButton(
                     onPressed: () => setState(() => _future = _load()),
-                    child: Text(context.tr('sm_retry')),
+                    child: Text(context.tr('err_retry')),
                   ),
                 ]),
               ),

@@ -91,7 +91,7 @@ class OrderCard extends StatelessWidget {
         ],
         if (order.isOrderDeliveryFailedFinal)
           _BadgeBox(
-            text: context.tr('delivery_failed_status_final'),
+            text: context.tr('delivery_failed_btn_failed'),
             color: Colors.red,
           ),
         if (order.deliveryTime.isNotEmpty)
@@ -107,7 +107,7 @@ class OrderCard extends StatelessWidget {
           ),
         if (isRestaurant && order.deliveryFee > 0)
           Text(
-            '${context.tr('restaurants_delivery_fee')}: ${formatPrice(order.deliveryFee)}',
+            '${context.tr('delivery')}: ${formatPrice(order.deliveryFee)}',
             style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
           ),
         if (order.balanceApplied > 0) ...[

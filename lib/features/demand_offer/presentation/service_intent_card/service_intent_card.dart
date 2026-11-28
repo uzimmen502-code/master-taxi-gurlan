@@ -184,7 +184,7 @@ class ServiceIntentCard extends StatelessWidget {
       parts.add('${intent.rooms} ${context.tr('intent_rooms')}');
     }
     if (intent.quantity != null) {
-      parts.add('${intent.quantity} ${context.tr('intent_quantity')}');
+      parts.add('${intent.quantity} ${context.tr('piece')}');
     }
     if (intent.destinationHint != null) {
       parts.add('${context.tr('intent_destination')}: ${intent.destinationHint}');

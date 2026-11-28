@@ -103,7 +103,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
                           children: [
                             _InfoTile(
                               icon: Icons.person_outline,
-                              label: context.tr('driver_label'),
+                              label: context.tr('driver_chip_title'),
                               value: c.myBooking!.driverName,
                             ),
                             const SizedBox(height: 6),
@@ -594,7 +594,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
         children: [
           _PreviewRow(
             Icons.person_outline,
-            context.tr('driver_label'),
+            context.tr('driver_chip_title'),
             ride.driverName,
           ),
           _PreviewRow(

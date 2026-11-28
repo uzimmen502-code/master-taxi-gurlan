@@ -450,7 +450,7 @@ class _RestaurantCheckoutSheetState extends State<RestaurantCheckoutSheet> {
               _Line(label: context.tr('restaurants_qty_discount'), value: formatPrice(-cart.qtyDiscountTotal)),
             if (delivery)
               _Line(
-                label: context.tr('restaurants_delivery_fee'),
+                label: context.tr('delivery'),
                 value: _quoting
                     ? '…'
                     : (_quote != null
@@ -458,7 +458,7 @@ class _RestaurantCheckoutSheetState extends State<RestaurantCheckoutSheet> {
                         : (_quoteError ?? context.tr('restaurants_address_needed'))),
                 warn: _quote == null && !_quoting,
               ),
-            _Line(label: context.tr('restaurants_total'), value: formatPrice(total), bold: true),
+            _Line(label: context.tr('total'), value: formatPrice(total), bold: true),
             const SizedBox(height: 12),
 
             FilledButton(
@@ -471,7 +471,7 @@ class _RestaurantCheckoutSheetState extends State<RestaurantCheckoutSheet> {
               ),
               child: _sending
                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                  : Text(context.tr('restaurants_place_order'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                  : Text(context.tr('restaurants_checkout'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
             ),
           ],
         ),

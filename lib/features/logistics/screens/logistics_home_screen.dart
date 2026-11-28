@@ -36,7 +36,7 @@ class _LogisticsHomeScreenState extends State<LogisticsHomeScreen> {
         surfaceTintColor: c.surface,
         elevation: 0,
         title: Text(
-          context.tr('home_module_logistics'),
+          context.tr('parcel'),
           style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: c.ink),
         ),
       ),

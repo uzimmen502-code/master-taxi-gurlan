@@ -266,7 +266,7 @@ class PriceOfferTile extends StatelessWidget {
           '${o.priceFrom ? trMsg('ps_amount_from', {'amount': formatPrice(o.price)}) : formatMoney(o.price)}$unitText'),
       if (o.wholesale && (o.moq ?? 1) > 1)
         _row(context, context.tr('ps_goods_for_moq'), '${formatMoney(o.goodsTotal)} · ${trMsg('ps_moq', {'qty': '${o.moq}', 'unit': o.unit})}'),
-      _row(context, context.tr('ps_delivery'), priceOfferDeliveryText(context.tr, trMsg, o), key: ValueKey('ps_delivery_${o.id}')),
+      _row(context, context.tr('delivery'), priceOfferDeliveryText(context.tr, trMsg, o), key: ValueKey('ps_delivery_${o.id}')),
       if (o.delivery.fee != null && o.delivery.fromPrice)
         Text(context.tr('ps_weight_note'), style: TextStyle(fontSize: 11.5, color: c.ink2)),
       if (o.delivery.fee == null && o.delivery.reason == PriceDeliveryReason.buyerLocationMissing)
@@ -274,7 +274,7 @@ class PriceOfferTile extends StatelessWidget {
       const Divider(height: 10),
       _row(
         context,
-        context.tr('ps_total'),
+        context.tr('total'),
         o.total == null
             ? '—'
             : (o.totalFrom ? trMsg('ps_amount_from', {'amount': formatPrice(o.total!)}) : formatMoney(o.total!)),

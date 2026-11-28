@@ -58,7 +58,7 @@ class SmBottomBar extends StatelessWidget {
                     child: _BarButton(
                       key: const ValueKey('sm_bar_cart'),
                       icon: Icons.shopping_cart_outlined,
-                      label: context.tr('sm_tab_cart'),
+                      label: context.tr('cart'),
                       active: cartActive,
                       badge: n,
                       onTap: cartActive ? null : onCart,
@@ -128,7 +128,7 @@ class SmCartAction extends StatelessWidget {
       listenable: controller,
       builder: (context, _) => IconButton(
         key: const ValueKey('sm_cart_action'),
-        tooltip: context.tr('sm_tab_cart'),
+        tooltip: context.tr('cart'),
         constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
         onPressed: onTap,
         icon: Badge(

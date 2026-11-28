@@ -121,7 +121,7 @@ class _SmGroupScreenState extends State<SmGroupScreen> {
             .tr('sm_added_to_cart')
             .replaceAll('{name}', name)
             .replaceAll('{qty}', '${smFormatQty(qtyMilli)} $unit'.trim())),
-        action: SnackBarAction(label: context.tr('sm_tab_cart'), onPressed: () => smOpenCart(context, c)),
+        action: SnackBarAction(label: context.tr('cart'), onPressed: () => smOpenCart(context, c)),
       ));
   }
 }

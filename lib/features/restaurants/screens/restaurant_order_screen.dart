@@ -425,8 +425,8 @@ class _ItemsCard extends StatelessWidget {
           _Total(label: context.tr('restaurants_items_total'), value: o.itemsTotal),
           if (o.qtyDiscountTotal > 0) _Total(label: context.tr('restaurants_qty_discount'), value: -o.qtyDiscountTotal),
           if (o.packagingTotal > 0) _Total(label: context.tr('restaurants_packaging'), value: o.packagingTotal),
-          if (o.deliveryFee > 0) _Total(label: context.tr('restaurants_delivery_fee'), value: o.deliveryFee),
-          _Total(label: context.tr('restaurants_total'), value: o.total, bold: true),
+          if (o.deliveryFee > 0) _Total(label: context.tr('delivery'), value: o.deliveryFee),
+          _Total(label: context.tr('total'), value: o.total, bold: true),
           if (o.note.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text('${context.tr('restaurants_note')}: ${o.note}', style: TextStyle(fontSize: 12, color: c.ink2)),

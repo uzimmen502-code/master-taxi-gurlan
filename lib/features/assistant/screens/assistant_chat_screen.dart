@@ -413,7 +413,7 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(ctx.tr('assistant_delete')),
+        title: Text(ctx.tr('delete')),
         content: Text(ctx.tr('assistant_delete_confirm')),
         actions: [
           TextButton(
@@ -423,7 +423,7 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: const Color(0xFFE53935)),
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(ctx.tr('assistant_delete')),
+            child: Text(ctx.tr('delete')),
           ),
         ],
       ),
@@ -598,7 +598,7 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
                 if (_convId != null) ...[
                   const PopupMenuDivider(),
                   _menuItem(ctx, 'delete', Icons.delete_outline,
-                      ctx.tr('assistant_delete'),
+                      ctx.tr('delete'),
                       color: const Color(0xFFE53935)),
                 ],
               ],

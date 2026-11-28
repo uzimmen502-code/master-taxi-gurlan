@@ -641,7 +641,7 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
               backgroundColor: Colors.orange.shade800,
               foregroundColor: Colors.white,
             ),
-            child: Text(ctx.tr('cancel_booking')),
+            child: Text(ctx.tr('cancel_trip')),
           ),
         ],
       ),

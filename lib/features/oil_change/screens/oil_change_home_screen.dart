@@ -467,7 +467,7 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
                       style: TextStyle(color: oilHubMuted),
                     ),
                     TextSpan(
-                      text: '${context.tr('oil_capacity_total_label')}: ',
+                      text: '${context.tr('total')}: ',
                       style: const TextStyle(
                         color: oilHubOk,
                         fontWeight: FontWeight.w700,

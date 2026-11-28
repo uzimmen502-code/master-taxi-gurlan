@@ -125,7 +125,7 @@ class _HomeAvagramSectionState extends State<HomeAvagramSection> {
   Widget build(BuildContext context) {
     return AvaSection(
       moduleId: 'tv_market',
-      title: context.tr('home_section_tv_market'),
+      title: context.tr('home_nav_avagram'),
       status: _status,
       onSeeAll: widget.onOpenAll,
       onRetry: _load,

@@ -409,7 +409,7 @@ class _OilCarSetupScreenState extends State<OilCarSetupScreen> {
                   color: AppColors.onPrimary,
                 ),
               )
-            : Text(context.tr('oil_save')),
+            : Text(context.tr('save')),
       ),
     ];
   }

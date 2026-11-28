@@ -317,7 +317,7 @@ class _WholesaleImportScreenState extends State<WholesaleImportScreen> {
             key: const ValueKey('wsimp-done'),
             onPressed: () => Navigator.pop(context, _imported),
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-            child: Text(context.tr('wsimp_done_btn')),
+            child: Text(context.tr('wsimp_count_ready')),
           ),
         if (r.errorRows.isNotEmpty) ...[
           const SizedBox(height: 12),

@@ -136,7 +136,7 @@ String _moduleLabel(String module, WalletTr tr) {
     case 'food':
       return tr('wlt_m_food');
     case 'milk':
-      return tr('wlt_m_milk');
+      return tr('milk');
     case 'rice':
       return tr('wlt_m_rice');
     case 'taxi-core':

@@ -147,7 +147,7 @@ class _CommentDialogState extends State<_CommentDialog> {
         FilledButton(
           key: const ValueKey('complaint_comment_send'),
           onPressed: text.length < 3 ? null : () => Navigator.pop(context, text),
-          child: Text(context.tr('content_report_send')),
+          child: Text(context.tr('submit')),
         ),
       ],
     );

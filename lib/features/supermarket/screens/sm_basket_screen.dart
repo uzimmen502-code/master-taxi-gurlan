@@ -267,7 +267,7 @@ class _SmBasketScreenState extends State<SmBasketScreen> {
                 if (_c.taxonomy.categories.isEmpty) await _c.load();
                 await b.load();
               },
-              child: Text(context.tr('sm_retry')),
+              child: Text(context.tr('err_retry')),
             ),
           ]),
         ),
@@ -944,7 +944,7 @@ class _SmBasketRemindSheetState extends State<SmBasketRemindSheet> {
           key: const ValueKey('smb_remind_save'),
           style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
           onPressed: smRemindProblems(_r).isEmpty ? () => Navigator.of(context).pop(_r) : null,
-          child: Text(context.tr('smb_save'), style: const TextStyle(fontSize: 16)),
+          child: Text(context.tr('save'), style: const TextStyle(fontSize: 16)),
         ),
       ],
     );

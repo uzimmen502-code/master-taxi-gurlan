@@ -319,7 +319,7 @@ class _YukIntercityBoardState extends State<YukIntercityBoard> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(context.tr('yuk_close_btn'),
+            child: Text(context.tr('close'),
                 style: const TextStyle(color: Colors.redAccent)),
           ),
         ],
@@ -1052,7 +1052,7 @@ class _ListingCard extends StatelessWidget {
                         ],
                         if (mine) ...[
                           _CompactAction(
-                            label: context.tr('yuk_edit'),
+                            label: context.tr('edit'),
                             fg: const Color(0xFF93C5FD),
                             border: const Color(0xFF1E3A5F),
                             icon: Icons.edit_outlined,
@@ -1060,7 +1060,7 @@ class _ListingCard extends StatelessWidget {
                           ),
                           const SizedBox(width: 6),
                           _CompactAction(
-                            label: context.tr('yuk_close_btn'),
+                            label: context.tr('close'),
                             fg: const Color(0xFFFCA5A5),
                             border: const Color(0xFF3F1D1D),
                             icon: Icons.cancel_outlined,
@@ -1442,7 +1442,7 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
     final maxH = MediaQuery.sizeOf(context).height * 0.92;
     final title = _editing
-        ? context.tr('yuk_edit')
+        ? context.tr('edit')
         : (widget.isCargo
             ? context.tr('yuk_create_cargo')
             : context.tr('yuk_create_truck'));
@@ -1680,7 +1680,7 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
                       onPressed: _submit,
                       child: Text(
                         _editing
-                            ? context.tr('yuk_save')
+                            ? context.tr('save')
                             : context.tr('yuk_post'),
                       ),
                     ),

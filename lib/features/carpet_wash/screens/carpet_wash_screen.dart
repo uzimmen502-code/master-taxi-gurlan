@@ -203,7 +203,7 @@ class _CarpetWashScreenState extends State<CarpetWashScreen> {
                             onChanged: (_) => setState(() {}),
                           ),
                           const SizedBox(height: 14),
-                          _fieldLabel(context.tr('carpet_phone_label')),
+                          _fieldLabel(context.tr('phone')),
                           Container(
                             width: double.infinity,
                             padding: const EdgeInsets.symmetric(

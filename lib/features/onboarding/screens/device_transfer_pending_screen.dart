@@ -25,6 +25,7 @@ class DeviceTransferPendingScreen extends StatefulWidget {
     this.oldDeviceLabel = '',
     this.expiresAtMs,
     this.controller,
+    this.adminReview = false,
   });
 
   final String phone;
@@ -34,6 +35,10 @@ class DeviceTransferPendingScreen extends StatefulWidget {
   final String oldDeviceLabel;
   final int? expiresAtMs;
   final OnboardingController? controller;
+
+  /// «Эски телефоним йўқ» — administrator ko'rigi (soatlab kutish mumkin:
+  /// so'rov kamroq, matnlar boshqa). Ilova yopilsa ham so'rov saqlanadi.
+  final bool adminReview;
 
   @override
   State<DeviceTransferPendingScreen> createState() =>
@@ -50,7 +55,11 @@ class _DeviceTransferPendingScreenState
   @override
   void initState() {
     super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 3), (_) => _poll());
+    // Admin ko'rigi soatlab davom etishi mumkin — har 15 s (§37); peer — 3 s.
+    _timer = Timer.periodic(
+      Duration(seconds: widget.adminReview ? 15 : 3),
+      (_) => _poll(),
+    );
     unawaited(_poll());
   }
 
@@ -78,7 +87,9 @@ class _DeviceTransferPendingScreenState
           st.status == 'cancelled') {
         setState(() {
           _error = context.tr(st.status == 'rejected'
-              ? 'ob_dev_pending_rejected'
+              ? (widget.adminReview
+                  ? 'ob_dev_review_rejected'
+                  : 'ob_dev_pending_rejected')
               : 'ob_dev_pending_expired');
         });
         _timer?.cancel();
@@ -129,7 +140,8 @@ class _DeviceTransferPendingScreenState
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(context.tr('ob_dev_pending_title')),
+        title: Text(context.tr(
+            widget.adminReview ? 'ob_dev_review_title' : 'ob_dev_pending_title')),
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.onPrimary,
       ),
@@ -139,19 +151,24 @@ class _DeviceTransferPendingScreenState
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SizedBox(height: 24),
-            const Icon(Icons.phonelink_lock, size: 56, color: AppColors.primaryText),
+            Icon(widget.adminReview ? Icons.support_agent : Icons.phonelink_lock,
+                size: 56, color: AppColors.primaryText),
             const SizedBox(height: 20),
             Text(
-              label.isEmpty
-                  ? context.tr('ob_dev_pending_sent_nolabel')
-                  : context.trMsg('ob_dev_pending_sent_label',
-                      params: {'label': label}),
+              widget.adminReview
+                  ? context.tr('ob_dev_review_sent')
+                  : label.isEmpty
+                      ? context.tr('ob_dev_pending_sent_nolabel')
+                      : context.trMsg('ob_dev_pending_sent_label',
+                          params: {'label': label}),
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 12),
             Text(
-              context.tr('ob_dev_pending_hint'),
+              context.tr(widget.adminReview
+                  ? 'ob_dev_review_hint'
+                  : 'ob_dev_pending_hint'),
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 14, color: Colors.grey.shade700, height: 1.4),
             ),

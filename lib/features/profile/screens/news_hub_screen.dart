@@ -1,9 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../services/device_transfer_inbox_service.dart';
 import '../../supermarket/domain/sm_inbox.dart';
 import '../../../services/push_navigation.dart' show PushNavigation;
 import '../../supermarket/screens/supermarket_home_screen.dart' show openSupermarketWith;
@@ -257,6 +259,11 @@ class _NewsHubScreenState extends State<NewsHubScreen> {
     final holiday = holidayInboxTarget(e.payload);
     if (holiday != null) {
       await PushNavigation.openHolidayTarget(Navigator.of(context), holiday);
+      return;
+    }
+    // «Бу сизми?» (эга 2026-11-28): фаол сўровлар серверданоқ — тасдиқлаш ойнаси очилади.
+    if (!kIsWeb && fp is NewsItem && fp.source == 'device_transfer') {
+      await DeviceTransferInboxService.instance.checkOnce(force: true);
       return;
     }
     final Widget? screen = switch (e.kind) {

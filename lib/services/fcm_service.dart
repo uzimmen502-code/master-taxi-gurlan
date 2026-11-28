@@ -14,6 +14,7 @@ import '../features/deal_chat/deal_chat_support.dart';
 import '../firebase_options.dart';
 import '../utils/locale_utils.dart';
 import 'arrival_ringer.dart';
+import 'device_transfer_inbox_service.dart';
 import 'notification_delivery.dart';
 import 'push_navigation.dart';
 import 'user_audience.dart';
@@ -192,6 +193,10 @@ class FCMService {
     if (type == 'customer_confirm') {
       // Очиқ банер/экран рўйхатни серверданоқ қайта олади.
       CustomerConfirmSignal.bump();
+    }
+    if (type == 'device_transfer_request') {
+      // «Бу сизми?» — илова очиқ бўлса ойна дарҳол очилади (рўйхат серверданоқ).
+      unawaited(DeviceTransferInboxService.instance.checkOnce(force: true));
     }
     // «Буюртма ёзиш» чати очиқ турибди — хабар экранда кўринади, банер ортиқча.
     if (DealChatPresence.suppressForeground(message.data)) return;

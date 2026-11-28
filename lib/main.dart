@@ -326,6 +326,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       unawaited(ServiceConfigHolder.bootstrap());
       unawaited(DeferredSettlementQueue.flush());
       unawaited(DatingYouthPromoService.maybeShowOnAppOpen());
+      // «Бу сизми?» — ilova fonda turgan paytda kelgan qurilma so'rovi.
+      unawaited(DeviceTransferInboxService.instance.checkOnce());
     }
   }
 

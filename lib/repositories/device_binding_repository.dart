@@ -27,6 +27,9 @@ class DeviceBindingCheckResult {
     this.oldDeviceLabel = '',
     this.selfServeHint = '',
     this.retryAfterMs = 0,
+    this.adminReviewAvailable = false,
+    this.reason = '',
+    this.code = '',
   });
 
   final DeviceBindingStatus status;
@@ -38,7 +41,18 @@ class DeviceBindingCheckResult {
   final String selfServeHint;
   final int retryAfterMs;
 
+  /// «Эски телефоним йўқ» → admin ko'rigi mumkin (server 2026-11-28+).
+  final bool adminReviewAvailable;
+
+  /// `account_unbound` (hisob bor, bog'langan qurilma yo'q) / `owner_rejected`.
+  final String reason;
+
+  /// Ichki kod, masalan `DEVICE_DENIED_24H` (egasi «Йўқ» degan — 24 soat).
+  final String code;
+
   bool get skipSms => status == DeviceBindingStatus.trustedDevice;
+  bool get deniedByOwner =>
+      code == 'DEVICE_DENIED_24H' || reason == 'owner_rejected';
 }
 
 class DeviceTransferRequestResult {
@@ -48,6 +62,7 @@ class DeviceTransferRequestResult {
     this.expiresAtMs,
     this.oldDeviceLabel = '',
     this.message,
+    this.channel = 'old_device_push',
   });
 
   final String status;
@@ -55,6 +70,9 @@ class DeviceTransferRequestResult {
   final int? expiresAtMs;
   final String oldDeviceLabel;
   final String? message;
+
+  /// `old_device_push` (bog'langan telefon tasdiqlaydi) yoki `admin_review`.
+  final String channel;
 }
 
 class DeviceTransferPendingItem {
@@ -62,11 +80,33 @@ class DeviceTransferPendingItem {
     required this.requestId,
     this.newDeviceLabel = '',
     this.expiresAtMs,
+    this.platform = '',
+    this.approxCity = '',
+    this.channel = 'old_device_push',
+    this.createdAtMs,
   });
 
   final String requestId;
   final String newDeviceLabel;
   final int? expiresAtMs;
+  final String platform;
+  final String approxCity;
+  final String channel;
+  final int? createdAtMs;
+}
+
+/// «Бу сизми?» javobi natijasi.
+class DeviceTransferRespondResult {
+  const DeviceTransferRespondResult({
+    required this.status,
+    this.reauthRequired = false,
+  });
+
+  final String status;
+
+  /// «Йўқ» → server hisobning barcha sessiyalarini bekor qildi: shu (bog'langan)
+  /// telefon o'z bog'lanishi bilan jim qayta kirishi kerak.
+  final bool reauthRequired;
 }
 
 class DeviceBindingRepository {
@@ -233,10 +273,44 @@ class DeviceBindingRepository {
       requestId: (data['requestId'] ?? requestId).toString(),
       expiresAtMs: (data['expiresAtMs'] as num?)?.toInt(),
       oldDeviceLabel: (data['oldDeviceLabel'] ?? '').toString(),
+      channel: (data['channel'] ?? 'old_device_push').toString(),
     );
   }
 
-  Future<void> respondDeviceTransfer({
+  /// «Эски телефоним йўқ»: admin ko'rigi so'rovi (auth yo'q — yangi qurilma).
+  /// Bir qurilma uchun qayta chaqirilsa o'sha faol so'rov qaytadi.
+  Future<DeviceTransferRequestResult> requestDeviceAdminReview({
+    required String phone,
+    required DeviceFingerprintSnapshot snapshot,
+    String note = '',
+  }) async {
+    final hash = normalizeFingerprintHash(snapshot.hash);
+    if (!isValidFingerprintHash(hash)) {
+      throw StateError('deviceFingerprintHash noto\'g\'ri');
+    }
+    final callable = _functions.httpsCallable(
+      'requestDeviceAdminReview',
+      options: HttpsCallableOptions(timeout: const Duration(seconds: 45)),
+    );
+    final result = await callable.call<Map<String, dynamic>>({
+      'phone': phoneDigits(phone),
+      'deviceFingerprintHash': hash,
+      'fingerprint': Map<String, String>.from(snapshot.components),
+      if (note.trim().isNotEmpty) 'note': note.trim(),
+    });
+    final data = Map<String, dynamic>.from(result.data as Map);
+    return DeviceTransferRequestResult(
+      status: (data['status'] ?? '').toString(),
+      requestId: (data['requestId'] ?? '').toString(),
+      expiresAtMs: (data['expiresAtMs'] as num?)?.toInt(),
+      oldDeviceLabel: (data['oldDeviceLabel'] ?? '').toString(),
+      channel: (data['channel'] ?? 'admin_review').toString(),
+    );
+  }
+
+  /// `fingerprint` ham yuboriladi: OS yangilanishidan keyin hash siljigan
+  /// bo'lsa server shu o'rnatmani bog'langan qurilma deb taniydi (2026-11-28).
+  Future<DeviceTransferRespondResult> respondDeviceTransfer({
     required String requestId,
     required bool approve,
     required DeviceFingerprintSnapshot snapshot,
@@ -246,11 +320,17 @@ class DeviceBindingRepository {
       'respondDeviceTransfer',
       options: HttpsCallableOptions(timeout: const Duration(seconds: 45)),
     );
-    await callable.call<Map<String, dynamic>>({
+    final result = await callable.call<Map<String, dynamic>>({
       'requestId': requestId,
       'approve': approve,
       'deviceFingerprintHash': hash,
+      'fingerprint': Map<String, String>.from(snapshot.components),
     });
+    final data = Map<String, dynamic>.from(result.data as Map);
+    return DeviceTransferRespondResult(
+      status: (data['status'] ?? '').toString(),
+      reauthRequired: data['reauthRequired'] == true,
+    );
   }
 
   Future<List<DeviceTransferPendingItem>> listMyPendingDeviceTransfers({
@@ -263,6 +343,7 @@ class DeviceBindingRepository {
     );
     final result = await callable.call<Map<String, dynamic>>({
       'deviceFingerprintHash': hash,
+      'fingerprint': Map<String, String>.from(snapshot.components),
     });
     final data = Map<String, dynamic>.from(result.data as Map);
     final raw = data['items'];
@@ -273,8 +354,25 @@ class DeviceBindingRepository {
         requestId: (m['requestId'] ?? '').toString(),
         newDeviceLabel: (m['newDeviceLabel'] ?? '').toString(),
         expiresAtMs: (m['expiresAtMs'] as num?)?.toInt(),
+        platform: (m['platform'] ?? '').toString(),
+        approxCity: (m['approxCity'] ?? '').toString(),
+        channel: (m['channel'] ?? 'old_device_push').toString(),
+        createdAtMs: (m['createdAtMs'] as num?)?.toInt(),
       );
     }).where((e) => e.requestId.isNotEmpty).toList();
+  }
+
+  /// Bog'langan (shu) telefon uchun yangi token — «Йўқ» dan keyin server barcha
+  /// sessiyalarni bekor qilganda jim qayta kirish. Ishonchli bo'lmasa `null`.
+  Future<String?> trustedTokenForThisDevice({
+    required String phone,
+    required DeviceFingerprintSnapshot snapshot,
+  }) async {
+    final result = await checkDeviceBinding(phone: phone, snapshot: snapshot);
+    if (result.status != DeviceBindingStatus.trustedDevice) return null;
+    final token = (result.customToken ?? '').trim();
+    if (token.isNotEmpty) return token;
+    return createPhoneSession(phone: phone, snapshot: snapshot);
   }
 
   Future<void> registerDeviceBinding({
@@ -355,6 +453,9 @@ class DeviceBindingRepository {
       oldDeviceLabel: (data['oldDeviceLabel'] ?? '').toString(),
       selfServeHint: (data['selfServeHint'] ?? '').toString(),
       retryAfterMs: (data['retryAfterMs'] as num?)?.toInt() ?? 0,
+      adminReviewAvailable: data['adminReviewAvailable'] == true,
+      reason: (data['reason'] ?? '').toString(),
+      code: (data['code'] ?? '').toString(),
     );
   }
 }

@@ -11,6 +11,8 @@ import '../repositories/device_binding_repository.dart';
 import 'device_fingerprint_service.dart';
 
 /// Login bo‘lgach eski qurilmada pending transfer so‘rovlarini tekshiradi.
+/// Chaqiriladi: ilova ochilganda, ilova qayta faollashganda (resume) va
+/// `device_transfer_request` push'i ilova ochiq paytda kelganda (2026-11-28).
 class DeviceTransferInboxService {
   DeviceTransferInboxService._();
   static final instance = DeviceTransferInboxService._();
@@ -19,9 +21,18 @@ class DeviceTransferInboxService {
   final _fp = DeviceFingerprintService();
   bool _running = false;
   final Set<String> _shown = {};
+  DateTime? _lastRun;
 
-  Future<void> checkOnce() async {
+  /// Resume'da har safar callable chaqirilmasin (§37): `force` bo'lmasa
+  /// ko'pi bilan 60 soniyada bir marta.
+  static const _minInterval = Duration(seconds: 60);
+
+  Future<void> checkOnce({bool force = false}) async {
     if (_running || kIsWeb) return;
+    final now = DateTime.now();
+    final last = _lastRun;
+    if (!force && last != null && now.difference(last) < _minInterval) return;
+    _lastRun = now;
     _running = true;
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -47,6 +58,10 @@ class DeviceTransferInboxService {
             builder: (_) => DeviceTransferApproveScreen(
               requestId: item.requestId,
               newDeviceLabel: item.newDeviceLabel,
+              platform: item.platform,
+              approxCity: item.approxCity,
+              createdAtMs: item.createdAtMs,
+              channel: item.channel,
             ),
           ),
         );

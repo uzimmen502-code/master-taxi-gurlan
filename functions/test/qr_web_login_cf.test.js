@@ -5,7 +5,7 @@
  *
  * Tekshiradi: bosqich (OFF/internal/public), faqat bog'langan telefon tasdiqlaydi, begona telefon,
  * replay, muddat, bir vaqtda ikki tasdiq / ikki consume (bitta g'olib), noto'g'ri sir, telefon
- * bog'lanishi o'zgarmaydi, 24 s pul chiqimi bloki, renew, «Чиқиш» (telefon / web o'zi), limitlar, audit.
+ * bog'lanishi o'zgarmaydi, pul chiqimi bloki YO'Q, «1 raqam = 1 kompyuter» (almashtirish), renew, «Чиқиш» (telefon / web o'zi), limitlar, audit.
  */
 'use strict';
 const assert = require('assert');
@@ -157,7 +157,7 @@ async function main() {
     const p = await fns.qrLoginPeek.run({ qr: S1.qrPayload, deviceFingerprintHash: HA, fingerprint: FP() }, ctxOf(A));
     assert.strictEqual(p.status, 'scanned');
     assert.strictEqual(p.browserLabel, 'Chrome · Windows');
-    assert.strictEqual(p.outflowBlockHours, 24);
+    assert.strictEqual(p.outflowBlockHours, undefined, 'ega 2026-11-28: QR tasdig\'ida pul bloki yo\'q');
     assert.ok(p.expiresAtMs > Date.now());
     assert.strictEqual((await get(`qr_login_watch/${S1.watchId}`)).status, 'scanned');
     assert.strictEqual((await get(`qr_login_sessions/${S1.sid}`)).scannedBy, A);
@@ -199,7 +199,7 @@ async function main() {
   });
 
   let WS1;
-  await check('Q10 consume: token, web sessiya active, telefon bog\'lanishi O\'ZGARMAYDI, 24 s blok, xabar, audit', async () => {
+  await check('Q10 consume: token, web sessiya active, telefon bog\'lanishi O\'ZGARMAYDI, pul bloki YO\'Q, xabar, audit', async () => {
     WS1 = await consume(S1);
     assert.strictEqual(WS1.customToken, `token_for_uid_${A}`);
     assert.strictEqual(WS1.phone, A);
@@ -213,18 +213,22 @@ async function main() {
     assert.strictEqual((await get(`device_aliases/${A}`)).deviceFingerprintHash, HA, 'telefon bog\'lanishi joyida');
     assert.strictEqual((await get(`device_bindings/${HA}`)).phone, A);
     const u = await get(`users/${A}`);
-    assert.strictEqual(u.security.deviceTrustMode, 'limited');
-    assert.strictEqual(u.security.deviceTrustReason, 'qr_web_login');
-    assert.ok(u.security.deviceTrustUntil.toMillis() > Date.now() + 23 * 3600 * 1000);
+    assert.strictEqual((u.security || {}).deviceTrustMode, undefined, 'deviceTrustMode qo\'yilmaydi');
+    assert.strictEqual(WS1.limitedUntilMs, undefined);
+    assert.strictEqual(WS1.replacedSessions, 0);
     const news = await db.collection('admin_news').where('targetUserId', '==', A).where('source', '==', 'qr_web_login').get();
     assert.ok(news.size >= 1 && news.docs[0].data().i18n.ru, 'xabar 3 tilda');
+    for (const l of ['uz_Cyrl', 'uz_Latn', 'ru']) {
+      assert.ok(!/24/.test(news.docs[0].data().i18n[l].body), `xabarda «24 soat» yo'q (${l})`);
+    }
     assert.ok((await events(A)).some((e) => e.action === 'qr_consumed' && e.requestId === WS1.webSessionId));
   });
 
-  await check('Q10b 24 s blok amalda: requestWalletWithdraw device_trust_limited', async () => {
+  await check('Q10b QR kirishdan keyin requestWalletWithdraw device_trust_limited BILAN rad etilmaydi', async () => {
     await db.doc(`users/${A}`).set({ birthDate: '1990-01-01', payoutKycVerified: true }, { merge: true });
-    await assert.rejects(fns.requestWalletWithdraw.run({ amount: 10000, payoutCardNumber: '8600123412341234', payoutCardHolder: 'TEST' }, ctxOf(A)),
-      (e) => (e.details || {}).code === 'device_trust_limited');
+    const r = await fns.requestWalletWithdraw.run({ amount: 10000, payoutCardNumber: '8600123412341234', payoutCardHolder: 'TEST' }, ctxOf(A))
+      .catch((e) => e);
+    if (r instanceof Error) assert.notStrictEqual((r.details || {}).code, 'device_trust_limited', r.message);
   });
 
   await check('Q11 replay: ikkinchi consume — token YO\'Q (consumed)', async () => {
@@ -233,11 +237,24 @@ async function main() {
     assert.strictEqual(n, 1);
   });
 
-  await check('Q11b bir vaqtda ikki consume — bitta token, bitta web sessiya', async () => {
+  await check('Q11b bir vaqtda ikki consume — bitta token; «1 raqam = 1 kompyuter»: oldingi sessiya almashtirildi', async () => {
     const s = await approvedSession(A, HA);
     const r = await Promise.allSettled([consume(s), consume(s)]);
-    assert.strictEqual(r.filter((x) => x.status === 'fulfilled').length, 1, JSON.stringify(r.map((x) => x.status)));
+    const ok = r.filter((x) => x.status === 'fulfilled');
+    assert.strictEqual(ok.length, 1, JSON.stringify(r.map((x) => x.status)));
     assert.strictEqual((await db.collection('qr_web_sessions').where('qrSessionId', '==', s.sid).get()).size, 1);
+    const winner = ok[0].value;
+    assert.strictEqual(winner.replacedSessions, 1);
+    const old = await get(`qr_web_sessions/${WS1.webSessionId}`);
+    assert.strictEqual(old.status, 'revoked');
+    assert.strictEqual(old.revokedBy, 'replaced');
+    assert.strictEqual(old.replacedBy, winner.webSessionId);
+    await assert.rejects(fns.qrWebSessionRenew.run({ webSessionId: WS1.webSessionId, renewSecret: WS1.renewSecret }, web()),
+      expectCode('permission-denied', 'QR_WEB_SESSION_INVALID'));
+    assert.ok((await events(A)).some((e) => e.action === 'qr_web_replaced' && e.requestId === WS1.webSessionId));
+    const l = await fns.qrWebSessionsList.run({ deviceFingerprintHash: HA }, ctxOf(A));
+    assert.deepStrictEqual(l.items.map((i) => i.webSessionId), [winner.webSessionId]);
+    WS1 = winner; // keyingi testlar shu (yagona faol) sessiya bilan
   });
 
   await check('Q12 muddat: o\'tgan QR — skaner/tasdiq rad, expired; tasdiqdan keyin oyna o\'tsa consume rad', async () => {
@@ -319,28 +336,38 @@ async function main() {
     assert.strictEqual((await get(`qr_web_sessions/${w.webSessionId}`)).status, 'revoked');
   });
 
-  await check('Q18 «Барчасидан чиқиш» (all) + faol sessiyalar limiti (5)', async () => {
-    await fns.qrWebSessionRevoke.run({ all: true, deviceFingerprintHash: HA }, ctxOf(A));
+  await check('Q18 «1 raqam = 1 kompyuter»: ketma-ket 3 kirish — faqat oxirgisi faol; bir vaqtda 2 xil QR — bitta faol; «all»', async () => {
     await db.doc(`device_binding_rate/qa_p_${A}`).delete(); // 20/soat chegarasi alohida (Q21-turi) tekshiriladi
-    for (let i = 0; i < 5; i += 1) await consume(await approvedSession(A, HA));
-    const s = await start();
-    await peek(s.sid, A, HA);
-    await assert.rejects(approve(s.sid, A, HA), expectCode('failed-precondition', 'QR_WEB_SESSION_LIMIT'));
-    const r = await fns.qrWebSessionRevoke.run({ all: true, deviceFingerprintHash: HA }, ctxOf(A));
-    assert.strictEqual(r.revoked, 5);
-    const l = await fns.qrWebSessionsList.run({ deviceFingerprintHash: HA }, ctxOf(A));
+    const ws = [];
+    for (let i = 0; i < 3; i += 1) ws.push(await consume(await approvedSession(A, HA)));
+    for (const w of ws.slice(0, 2)) assert.strictEqual((await get(`qr_web_sessions/${w.webSessionId}`)).status, 'revoked');
+    assert.strictEqual((await get(`qr_web_sessions/${ws[2].webSessionId}`)).status, 'active');
+    let l = await fns.qrWebSessionsList.run({ deviceFingerprintHash: HA }, ctxOf(A));
+    assert.deepStrictEqual(l.items.map((i) => i.webSessionId), [ws[2].webSessionId]);
+
+    const s1 = await approvedSession(A, HA);
+    const s2 = await approvedSession(A, HA);
+    const r = await Promise.allSettled([consume(s1), consume(s2)]);
+    assert.strictEqual(r.filter((x) => x.status === 'fulfilled').length, 2, 'ikkalasi ham kiradi (almashtirish)');
+    const act = await db.collection('qr_web_sessions').where('phone', '==', A).where('status', '==', 'active').get();
+    assert.strictEqual(act.size, 1, 'poyga yo\'q: bitta faol sessiya');
+
+    const all = await fns.qrWebSessionRevoke.run({ all: true, deviceFingerprintHash: HA }, ctxOf(A));
+    assert.strictEqual(all.revoked, 1);
+    l = await fns.qrWebSessionsList.run({ deviceFingerprintHash: HA }, ctxOf(A));
     assert.strictEqual(l.items.length, 0);
-    assert.strictEqual((await approve(s.sid, A, HA)).status, 'approved');
+    const lb = await fns.qrWebSessionsList.run({ deviceFingerprintHash: HB }, ctxOf(B));
+    assert.ok(Array.isArray(lb.items), 'boshqa raqam sessiyalariga tegilmaydi');
   });
 
-  await check('Q19 admin raqami — xuddi shu qoidalar: bog\'lanmagan qurilma rad, bog\'langan — 24 s blok ham', async () => {
+  await check('Q19 admin raqami — xuddi shu qoidalar: bog\'lanmagan qurilma rad, bog\'langan kiradi, pul bloki yo\'q', async () => {
     const s = await start();
     await assert.rejects(peek(s.sid, ADM, HA), expectCode('permission-denied', 'DEVICE_NOT_BOUND'));
     await peek(s.sid, ADM, HADM);
     await approve(s.sid, ADM, HADM);
     const w = await consume(s);
     assert.strictEqual(w.phone, ADM);
-    assert.strictEqual((await get(`users/${ADM}`)).security.deviceTrustMode, 'limited');
+    assert.strictEqual(((await get(`users/${ADM}`)).security || {}).deviceTrustMode, undefined);
   });
 
   await check('Q20 token yaratilmasa: web sessiya failed, xato QR_TOKEN_FAILED (token oqib chiqmaydi)', async () => {

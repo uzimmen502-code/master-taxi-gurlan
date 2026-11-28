@@ -38,8 +38,11 @@ const QR_WEB = Object.freeze({
   CONSUME_WINDOW_MS: 60 * 1000,
   /** PROPOSED: web sessiyaning eng uzoq umri (keyin qayta QR). */
   SESSION_TTL_MS: 30 * 24 * 60 * 60 * 1000,
-  /** PROPOSED: bir raqamda bir vaqtda faol web sessiyalar. */
-  MAX_ACTIVE_SESSIONS: 5,
+  /**
+   * Ega 2026-11-28: «битта рақам 1 та компьютер». Yangi consume — oldingi faol web sessiya(lar)
+   * shu tranzaksiyada `revoked` (revokedBy `replaced`). Almashtirish (rad etish emas) — PROPOSED.
+   */
+  MAX_ACTIVE_SESSIONS: 1,
   RATE_WINDOW_MS: 60 * 60 * 1000,
   /** CGNAT: UZ mobil operatorlarida ko'p abonent bitta IP'da; bitta QR sahifasi soatiga ≤6 ta. */
   RATE_START_PER_IP: 120,
@@ -49,12 +52,8 @@ const QR_WEB = Object.freeze({
   RATE_APPROVER_PER_PHONE: 20,
   RATE_RENEW_PER_SESSION: 30,
   RATE_RENEW_PER_IP: 120,
-  /**
-   * PROPOSED (mavjud 24 soat qoidasiga mos): yangi web sessiya ochilganda hisob 24 soat
-   * `deviceTrustMode: limited` — barcha pul chiqimlari (telefondan ham) yopiq.
-   */
-  TRUST_LIMIT_ON_NEW_SESSION: true,
-  OUTFLOW_BLOCK_HOURS: 24,
+  // Ega 2026-11-28: QR tasdig'idan keyin pul chiqimi bloki YO'Q («тасдиқлаяптику ўзи эканлигини»).
+  // Telefon bog'lanishidagi yangi qurilma 24 soat qoidasi o'zgarmagan (device_security.js).
   LIST_LIMIT: 20,
 });
 
@@ -251,9 +250,9 @@ function texts(kind, { label = '', city = '', at = '' } = {}) {
   const m = meta ? ` (${meta})` : '';
   const T = {
     web_login: {
-      uz_Cyrl: ['💻 Компьютерда кирилди', `Ҳисобингизга компьютерда кирилди${m}. Сиз бўлмасангиз — «Компьютерда кириш» бўлимида «Чиқиш» ни босинг. 24 соат пул ечиш ва ўтказмалар ёпиқ.`],
-      uz_Latn: ['💻 Kompyuterda kirildi', `Hisobingizga kompyuterda kirildi${m}. Siz bölmasangiz — «Kompyuterda kiriş» bölimida «Çiqiş» ni bosing. 24 soat pul yeçiş va ötkazmalar yopiq.`],
-      ru: ['💻 Вход на компьютере', `В ваш аккаунт вошли на компьютере${m}. Если это не вы — нажмите «Выйти» в разделе «Вход на компьютере». 24 часа вывод и переводы денег закрыты.`],
+      uz_Cyrl: ['💻 Компьютерда кирилди', `Ҳисобингизга компьютерда кирилди${m}. Сиз бўлмасангиз — «Компьютерда кириш» бўлимида «Чиқиш» ни босинг.`],
+      uz_Latn: ['💻 Kompyuterda kirildi', `Hisobingizga kompyuterda kirildi${m}. Siz bölmasangiz — «Kompyuterda kiriş» bölimida «Çiqiş» ni bosing.`],
+      ru: ['💻 Вход на компьютере', `В ваш аккаунт вошли на компьютере${m}. Если это не вы — нажмите «Выйти» в разделе «Вход на компьютере».`],
     },
   };
   const t = T[kind] || T.web_login;
@@ -447,7 +446,6 @@ function attachQrWebLogin(exports, deps) {
         approxCity: String(out.x.approxCity || ''),
         createdAtMs: toMs(out.x.createdAt),
         expiresAtMs: toMs(out.x.expiresAt),
-        outflowBlockHours: QR_WEB.TRUST_LIMIT_ON_NEW_SESSION ? QR_WEB.OUTFLOW_BLOCK_HOURS : 0,
       };
     });
 
@@ -463,15 +461,6 @@ function attachQrWebLogin(exports, deps) {
       }
       const hash = await requireBoundDevice(phone, data);
       await rateLimit([{ id: `qa_p_${phone}`, limit: QR_WEB.RATE_APPROVER_PER_PHONE }]);
-
-      if (approve) {
-        const active = await db.collection(QR_COL.WEB_SESSIONS)
-          .where('phone', '==', phone).where('status', '==', 'active').limit(QR_WEB.LIST_LIMIT).get();
-        const live = active.docs.filter((d) => toMs((d.data() || {}).expiresAt) > now());
-        if (live.length >= QR_WEB.MAX_ACTIVE_SESSIONS) {
-          throw qrError(functions, 'failed-precondition', 'QR_WEB_SESSION_LIMIT', { max: QR_WEB.MAX_ACTIVE_SESSIONS });
-        }
-      }
 
       const ref = db.collection(QR_COL.SESSIONS).doc(sid);
       const target = approve ? QR_STATES.APPROVED : QR_STATES.REJECTED;
@@ -549,6 +538,19 @@ function attachQrWebLogin(exports, deps) {
         }
         const phone = canonicalUid(x.scannedBy || '');
         if (phone.length < 12) return { ok: false, code: 'QR_SESSION_INVALID' };
+        // «Битта рақам 1 та компьютер»: oldingi faol sessiyalar shu tranzaksiyada almashtiriladi
+        // (o'qishlar yozuvlardan oldin; parallel consume'lar tranzaksiya to'qnashuvida ketma-ket bo'ladi).
+        const prev = await tx.get(db.collection(QR_COL.WEB_SESSIONS)
+          .where('phone', '==', phone).where('status', '==', 'active').limit(QR_WEB.LIST_LIMIT));
+        for (const d of prev.docs) {
+          tx.set(d.ref, {
+            status: 'revoked', revokedBy: 'replaced', replacedBy: wsid, revokedAt: ts(), updatedAt: ts(),
+          }, { merge: true });
+          sec.logEventInTx(tx, {
+            phone, action: 'qr_web_replaced', result: 'revoked', requestId: d.id, channel: 'qr_web',
+            actor: 'web', label: (d.data() || {}).browserLabel, note: `by:${wsid}`,
+          });
+        }
         tx.set(ref, { status: QR_STATES.CONSUMED, consumedAt: ts(), webSessionId: wsid, updatedAt: ts() }, { merge: true });
         if (x.watchId) tx.set(db.collection(QR_COL.WATCH).doc(x.watchId), { status: QR_STATES.CONSUMED }, { merge: true });
         tx.set(db.collection(QR_COL.WEB_SESSIONS).doc(wsid), {
@@ -569,7 +571,7 @@ function attachQrWebLogin(exports, deps) {
           phone, action: 'qr_consumed', result: 'web_session_created', requestId: wsid, channel: 'qr_web',
           actor: 'web', label: x.browserLabel, city: x.approxCity, ipKey, note: `qr:${sid}`,
         });
-        return { ok: true, phone, x };
+        return { ok: true, phone, x, replaced: prev.size };
       });
       if (!out.ok) {
         if (out.badSecret) {
@@ -589,14 +591,6 @@ function attachQrWebLogin(exports, deps) {
         log({ action: 'qr_consume', result: 'token_failed', sid: sid.slice(0, 8), err: String(e && e.message).slice(0, 120) });
         throw qrError(functions, 'internal', 'QR_TOKEN_FAILED');
       }
-      let limitedUntilMs = 0;
-      if (QR_WEB.TRUST_LIMIT_ON_NEW_SESSION) {
-        try {
-          limitedUntilMs = await sec.markTrustLimited(phone, 'qr_web_login');
-        } catch (e) {
-          log({ action: 'qr_trust_limit', result: 'error', err: String(e && e.message).slice(0, 120) });
-        }
-      }
       const t = texts('web_login', {
         label: out.x.browserLabel, city: out.x.approxCity, at: deviceSecurity.tashkentTime(now()),
       });
@@ -609,8 +603,8 @@ function attachQrWebLogin(exports, deps) {
       } catch (e) {
         log({ action: 'qr_notify', result: 'error', err: String(e && e.message).slice(0, 120) });
       }
-      log({ action: 'qr_consume', result: 'ok', sid: sid.slice(0, 8), phoneTail: phone.slice(-4) });
-      return { customToken, phone, webSessionId: wsid, renewSecret, sessionExpiresAtMs, limitedUntilMs };
+      log({ action: 'qr_consume', result: 'ok', sid: sid.slice(0, 8), phoneTail: phone.slice(-4), replaced: out.replaced });
+      return { customToken, phone, webSessionId: wsid, renewSecret, sessionExpiresAtMs, replacedSessions: out.replaced };
     });
 
   /** Web: sessiyani jim yangilash (refresh token'lar bekor qilinganda). */

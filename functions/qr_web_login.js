@@ -41,7 +41,10 @@ const QR_WEB = Object.freeze({
   /** PROPOSED: bir raqamda bir vaqtda faol web sessiyalar. */
   MAX_ACTIVE_SESSIONS: 5,
   RATE_WINDOW_MS: 60 * 60 * 1000,
-  RATE_START_PER_IP: 40,
+  /** CGNAT: UZ mobil operatorlarida ko'p abonent bitta IP'da; bitta QR sahifasi soatiga ≤6 ta. */
+  RATE_START_PER_IP: 120,
+  /** Firestore TTL (expireAt) — QR hujjatlari muddatidan shuncha keyin o'chiriladi (TTL siyosati yoqilsa). */
+  TTL_GRACE_MS: 24 * 60 * 60 * 1000,
   RATE_CONSUME_PER_IP: 60,
   RATE_APPROVER_PER_PHONE: 20,
   RATE_RENEW_PER_SESSION: 30,
@@ -378,11 +381,13 @@ function attachQrWebLogin(exports, deps) {
         createdAt: ts(),
         updatedAt: ts(),
         expiresAt: tsAt(expiresAtMs),
+        expireAt: tsAt(expiresAtMs + QR_WEB.TTL_GRACE_MS),
         version: 1,
       });
       batch.set(db.collection(QR_COL.WATCH).doc(watchId), {
         status: QR_STATES.PENDING,
         expiresAt: tsAt(expiresAtMs),
+        expireAt: tsAt(expiresAtMs + QR_WEB.TTL_GRACE_MS),
       });
       await batch.commit();
       log({ action: 'qr_start', result: 'ok', sid: sid.slice(0, 8) });

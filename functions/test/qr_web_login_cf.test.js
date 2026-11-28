@@ -16,6 +16,7 @@ process.env.FUNCTIONS_EMULATOR = 'true';
 if (!/^demo-/.test(process.env.GCLOUD_PROJECT)) throw new Error('demo-* loyiha kerak');
 
 const fns = require('../index');
+const { QR_WEB } = require('../qr_web_login');
 const admin = require('firebase-admin');
 
 const db = admin.firestore();
@@ -123,7 +124,8 @@ async function main() {
     assert.strictEqual(s.qrPayload, `AVAQR1:${s.sid}`);
     assert.ok(!s.qrPayload.includes(s.secret) && !s.qrPayload.includes(s.watchId));
     const w = await get(`qr_login_watch/${s.watchId}`);
-    assert.deepStrictEqual(Object.keys(w).sort(), ['expiresAt', 'status']);
+    assert.deepStrictEqual(Object.keys(w).sort(), ['expireAt', 'expiresAt', 'status']);
+    assert.ok(w.expireAt.toMillis() > w.expiresAt.toMillis(), 'TTL maydoni muddatdan keyin');
     assert.strictEqual(w.status, 'pending');
     const x = await get(`qr_login_sessions/${s.sid}`);
     assert.ok(x.secretHash && x.secretHash !== s.secret);
@@ -352,9 +354,9 @@ async function main() {
     await assert.rejects(consume(s), expectCode('failed-precondition', 'QR_SESSION_NOT_PENDING'));
   });
 
-  await check('Q21 rate limit: bir IP\'dan soatiga 40 ta QR, 41-chi QR_RATE_LIMITED (3 til)', async () => {
+  await check(`Q21 rate limit: bir IP'dan soatiga ${QR_WEB.RATE_START_PER_IP} ta QR, keyingisi QR_RATE_LIMITED (3 til)`, async () => {
     const ip = '10.9.9.9';
-    for (let i = 0; i < 40; i += 1) await start(ip);
+    for (let i = 0; i < QR_WEB.RATE_START_PER_IP; i += 1) await start(ip);
     await assert.rejects(start(ip), (e) => {
       expectCode('resource-exhausted', 'QR_RATE_LIMITED')(e);
       for (const l of ['uz_Cyrl', 'uz_Latn', 'ru']) assert.ok(e.details.messages[l]);

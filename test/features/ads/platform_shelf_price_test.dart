@@ -5,10 +5,10 @@ import 'package:ava_gurlan/repositories/platform_products_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Эски товар (2026-10-07 гача) — поғоналар нархдан ҳисобланади.
+/// Эски товар (2026-10-07 гача) — энди ҳам ягона нарх.
 final _legacy = DateTime.utc(2026, 8, 1);
 
-/// Янги товар — поғона ҳисобланмайди.
+/// Янги товар.
 final _fresh = DateTime.utc(2026, 10, 8);
 
 PlatformProduct _p({
@@ -25,14 +25,14 @@ PlatformProduct _p({
     );
 
 void main() {
-  group('platformShelfPrice — бош саҳифа Улгуржи бўлими (2026-10-07)', () {
-    test('эски товар: ўрта поғона нархи + «10–50 дона»', () {
+  group('platformShelfPrice — ягона нарх (эга 2026-11-28, поғоналар олиб ташланди)', () {
+    test('эски товар: ягона нарх, изоҳ йўқ (аввал «10–49 дона» эди)', () {
       final r = platformShelfPrice(_p());
       expect(r.price, '10 000 сўм');
-      expect(r.note, '10–49 дона');
+      expect(r.note, '');
     });
 
-    test('админ қўйган поғоналар: биринчи поғона + «N+ дона»', () {
+    test('базадаги priceTiers эътиборсиз: price кўрсатилади', () {
       final r = platformShelfPrice(_p(
         createdAt: _fresh,
         tiers: const [
@@ -40,24 +40,22 @@ void main() {
           PriceTier(minQty: 50, price: 9000),
         ],
       ));
-      expect(r.price, '12 000 сўм');
-      expect(r.note, '5+ дона');
+      expect(r.price, '10 000 сўм');
+      expect(r.note, '');
     });
 
-    test('янги товар, поғонасиз: ягона нарх, изоҳ йўқ', () {
+    test('янги товар: ягона нарх, изоҳ йўқ', () {
       final r = platformShelfPrice(_p(createdAt: _fresh, price: 7000));
       expect(r.price, '7 000 сўм');
       expect(r.note, '');
     });
 
     test('нарх Улгуржи лентасидаги карточка билан бир хил манбадан', () {
-      // Тор карточка учун қисқа шакл, лекин РАҚАМ ўша: ўрта поғона.
       final p = _p();
-      expect(platformWholesalePriceLine(p), contains('10 000 сўм'));
+      expect(platformWholesalePriceLine(p), '10 000 сўм / дона');
       expect(platformShelfPrice(p).price, '10 000 сўм');
     });
   });
-
   testWidgets('«AVA» белгиси ~20% кичик (эга, 2026-11-01): шрифт 9', (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(body: SizedBox(width: 180, height: 320, child: PlatformMarketCard(product: _p()))),

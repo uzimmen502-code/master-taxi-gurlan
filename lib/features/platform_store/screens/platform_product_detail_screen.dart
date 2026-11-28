@@ -10,7 +10,6 @@ import '../../../core/utils/data_url_image.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/edge_swipe_pager.dart';
 import '../../../models/platform_product.dart';
-import '../../../models/price_tier.dart';
 import '../controllers/platform_store_controller.dart';
 import '../widgets/platform_cart_sheet.dart';
 import '../widgets/platform_image_gallery.dart';
@@ -433,11 +432,6 @@ class _ProductPageState extends State<_ProductPage>
                             ),
                         ],
                       ),
-                      // Улгуржи поғоналари — босиб танланади.
-                      if (product.effectiveTiers.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        _PriceTiers(product: product, qty: qty),
-                      ],
                       if (product.description.trim().isNotEmpty) ...[
                         const SizedBox(height: 8),
                         Text(
@@ -937,142 +931,6 @@ class _Thumb extends StatelessWidget {
       Icons.shopping_bag_outlined,
       size: 22,
       color: _S.muted,
-    );
-  }
-}
-
-/// Улгуржи нарх поғоналари — ихчам «чип»лар: босилса миқдор шу поғона
-/// бошланишига ўтади, нарх ва сумма шу ернинг ўзида мос ўзгаради. Қолдиқ
-/// етмаган поғона хира ва босилмайди.
-class _PriceTiers extends StatelessWidget {
-  const _PriceTiers({required this.product, required this.qty});
-
-  final PlatformProduct product;
-
-  /// Саватдаги жорий миқдор — қайси поғона амалдалигини белгилайди.
-  final int qty;
-
-  @override
-  Widget build(BuildContext context) {
-    // Амалдаги поғоналар: админ қўймаган бўлса — базадаги нархдан
-    // ҳисобланган (2026-10-06).
-    final tiers = product.effectiveTiers;
-    if (tiers.isEmpty) return const SizedBox.shrink();
-    // Амалдаги поғона — ИНДЕКС бўйича (`priceForQty` қоидаси: qty >= minQty
-    // бўлган охирги поғона). Нарх бўйича солиштирилса, икки поғона нархи
-    // бир хил бўлганда иккаласи ҳам «танланган» кўринар эди.
-    final activeIndex = activeTierIndex(tiers, qty <= 0 ? product.minQty : qty);
-    final c = context.read<PlatformStoreController>();
-    const gap = 6.0;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          context.tr('wholesale_price_tiers'),
-          style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: _S.muted,
-          ),
-        ),
-        const SizedBox(height: 5),
-        LayoutBuilder(
-          builder: (context, cons) {
-            final n = tiers.length;
-            final w = ((cons.maxWidth - gap * (n - 1)) / n)
-                .clamp(84.0, cons.maxWidth);
-            return Wrap(
-              spacing: gap,
-              runSpacing: gap,
-              children: [
-                for (final (i, t) in tiers.indexed)
-                  SizedBox(
-                    width: w,
-                    child: _TierChip(
-                      label: '${tierRangeText(tiers, i)} ${product.unit}',
-                      price: '${formatPrice(t.price)} $kCurrencySum',
-                      active: i == activeIndex,
-                      reachable: PlatformStoreController.qtyForTier(
-                              product, t.minQty) !=
-                          null,
-                      onTap: () {
-                        HapticFeedback.selectionClick();
-                        c.selectTier(product, t.minQty);
-                      },
-                    ),
-                  ),
-              ],
-            );
-          },
-        ),
-      ],
-    );
-  }
-}
-
-class _TierChip extends StatelessWidget {
-  const _TierChip({
-    required this.label,
-    required this.price,
-    required this.active,
-    required this.reachable,
-    required this.onTap,
-  });
-
-  final String label;
-  final String price;
-  final bool active;
-  final bool reachable;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Opacity(
-      opacity: reachable ? 1 : 0.4,
-      child: Material(
-        color: active ? PdDark.brandSoft : _S.surface,
-        borderRadius: BorderRadius.circular(10),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: reachable ? onTap : null,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: active ? _S.accent : _S.border,
-                width: active ? 1.4 : 1,
-              ),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 9.5,
-                    fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-                    color: _S.ink.withValues(alpha: active ? 1 : 0.75),
-                  ),
-                ),
-                const SizedBox(height: 1),
-                Text(
-                  price,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    color: active ? _S.accent : _S.ink,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

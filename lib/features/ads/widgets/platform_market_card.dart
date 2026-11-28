@@ -115,60 +115,28 @@ class PlatformMarketCard extends StatelessWidget {
   }
 }
 
-/// Улгуржи лентасидаги асосий нарх қатори.
+/// Улгуржи лентасидаги асосий нарх қатори — «10 000 сўм / дона».
 ///
-/// Эга қарори (2026-10-06): поғонаси қўйилмаган товарда базадаги нарх —
-/// ўрта поғона, карточкада «10–50 дона: 10 000 сўм». Админ поғона қўйган
-/// товар — аввалгидек «дан 9 000 сўм / дона».
-///
-/// [fromWord] — «дан» сўзи (экранда `home_price_from` калити билан берилади).
+/// Эга 2026-11-28: AVA дўкони нархи ЯГОНА (ҳисобланган поғоналар олиб
+/// ташланди) — миқдорга қараб «дан …» ёки «10–50 дона: …» йўқ.
+/// [fromWord] — эски чақирувлар учун қолди (ишлатилмайди).
 String platformWholesalePriceLine(PlatformProduct p,
-    {String fromWord = 'дан'}) {
-  final mid = p.midTier;
-  if (p.hasDerivedTiers && mid != null) {
-    return '${p.tierRangeLabel(1)} ${p.unit}: ${formatMoney(mid.price)}';
-  }
-  return '${p.effectiveTiers.length > 1 ? '$fromWord ' : ''}'
-      '${formatMoney(p.wholesaleBasePrice)} / ${p.unit}';
-}
+        {String fromWord = 'дан'}) =>
+    '${formatMoney(p.price)} / ${p.unit}';
 
-/// Иккинчи қатор: ҳисобланган поғонада кам миқдор нархи («1–9 дона:
-/// 10 500 сўм» — харидор 1 дона олса қанча тўлашини кўрсин), акс ҳолда МОҚ.
+/// Иккинчи қатор: МОҚ ([PlatformProduct.minQty]).
 ///
 /// [moqTemplate] — «МОҚ {qty} {unit}» шаблони (экранда `wholesale_moq_line`
 /// калити билан берилади).
 String platformWholesaleSubLine(PlatformProduct p,
-    {String moqTemplate = 'МОҚ {qty} {unit}'}) {
-  final t = p.effectiveTiers;
-  if (p.hasDerivedTiers && t.isNotEmpty) {
-    return '${p.tierRangeLabel(0)} ${p.unit}: ${formatMoney(t.first.price)}';
-  }
-  return moqTemplate
-      .replaceAll('{qty}', '${p.wholesaleMinQty}')
-      .replaceAll('{unit}', p.unit);
-}
+        {String moqTemplate = 'МОҚ {qty} {unit}'}) =>
+    moqTemplate
+        .replaceAll('{qty}', '${p.minQty}')
+        .replaceAll('{unit}', p.unit);
 
-/// Бош саҳифадаги тор карточка (148 px) учун ҚИСҚА нарх ва изоҳ.
-///
-/// [platformWholesalePriceLine] («10–50 дона: 10 000 сўм») тор карточкада
-/// икки қаторга ўтиб, қатор баландлигидан тошарди. Шунинг учун нарх ва
-/// оралиқ устма-уст: «10 000 сўм» / «10–50 дона» — сотувчи товари
-/// карточкаси билан бир хил шакл («9 000 сўм» / «10+ дона»).
-({String price, String note}) platformShelfPrice(PlatformProduct p) {
-  if (p.hasDerivedTiers && p.midTier != null) {
-    return (
-      price: formatMoney(p.midTier!.price),
-      note: '${p.tierRangeLabel(1)} ${p.unit}',
-    );
-  }
-  if (p.effectiveTiers.isNotEmpty) {
-    return (
-      price: formatMoney(p.wholesaleBasePrice),
-      note: '${p.tierRangeLabel(0)} ${p.unit}',
-    );
-  }
-  return (price: formatMoney(p.price), note: '');
-}
+/// Бош саҳифадаги тор карточка (148 px) учун нарх — ягона нарх, изоҳсиз.
+({String price, String note}) platformShelfPrice(PlatformProduct p) =>
+    (price: formatMoney(p.price), note: '');
 
 /// AVA товари тафсилоти — лента, бош саҳифа ва қидирувдан бир хил.
 ///

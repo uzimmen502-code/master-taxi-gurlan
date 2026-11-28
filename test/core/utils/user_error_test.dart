@@ -13,6 +13,47 @@ void main() {
   FirebaseFunctionsException fn(String code, [String message = 'x']) =>
       FirebaseFunctionsException(code: code, message: message);
 
+  group('userErrorKeyPure — server details.code (eski endpoint / F-1)', () {
+    FirebaseFunctionsException withCode(String code, String detail) =>
+        FirebaseFunctionsException(
+          code: code,
+          message: 'x',
+          details: {'code': detail, 'messages': {'uz_Cyrl': 'x'}},
+        );
+
+    test('ENDPOINT_RETIRED (failed-precondition va unimplemented)', () {
+      expect(userErrorKeyPure(withCode('failed-precondition', 'ENDPOINT_RETIRED')),
+          'err_endpoint_retired');
+      expect(userErrorKeyPure(withCode('unimplemented', 'ENDPOINT_RETIRED')),
+          'err_endpoint_retired');
+    });
+
+    test('MARKET_AD_RETIRED amalga xos fallback dan ustun', () {
+      expect(
+        userErrorKeyPure(withCode('failed-precondition', 'MARKET_AD_RETIRED'),
+            fallbackKey: 'ad_submit_failed'),
+        'err_market_ad_retired',
+      );
+    });
+
+    test('notanish details.code yoki details yo\'q — avvalgi xulq', () {
+      expect(userErrorKeyPure(withCode('failed-precondition', 'OTHER')), 'err_conflict');
+      expect(
+        userErrorKeyPure(FirebaseFunctionsException(
+            code: 'internal', message: 'x', details: 'str')),
+        'err_server',
+      );
+    });
+
+    test('kalitlar 3 tilda bor', () {
+      for (final lang in ['uz_Cyrl', 'uz_Latn', 'ru']) {
+        final m = jsonDecode(File('assets/lang/$lang.json').readAsStringSync())
+            as Map<String, dynamic>;
+        expect(m['err_endpoint_retired'], isA<String>(), reason: lang);
+        expect(m['err_market_ad_retired'], isA<String>(), reason: lang);
+      }
+    });
+  });
   group('userErrorKeyPure — callable kodlari', () {
     test('tarmoq / vaqt / limit / auth / ruxsat / topilmadi / server', () {
       expect(userErrorKeyPure(fn('unavailable')), 'err_network');

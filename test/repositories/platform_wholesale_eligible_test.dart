@@ -29,12 +29,15 @@ void main() {
           ['a']);
     });
 
-    test('поғонали товар ҳам чиқади', () {
+    test('нархсиз товар поғонаси бўлса ҳам чиқмайди (поғоналар эътиборсиз, эга 2026-11-28)', () {
       final t = [const PriceTier(minQty: 10, price: 9000)];
       expect(
-        _ids(PlatformProductsRepository.wholesaleEligible(
-            [_p('t', price: 0, tiers: t)])),
-        ['t'],
+        PlatformProductsRepository.wholesaleEligible([_p('t', price: 0, tiers: t)]),
+        isEmpty,
+      );
+      expect(
+        _ids(PlatformProductsRepository.wholesaleEligible([_p('u', tiers: t)])),
+        ['u'],
       );
     });
 

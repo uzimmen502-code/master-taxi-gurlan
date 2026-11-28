@@ -82,57 +82,16 @@ class PlatformProduct {
   /// Админ ўзи поғона қўйганми (базада `priceTiers` бор).
   bool get hasPriceTiers => priceTiers.isNotEmpty;
 
-  /// ЭСКИ товарми (2026-10-07 гача яратилган ёки санаси йўқ) — фақат
-  /// шуларда поғона нархдан ҳисобланади.
-  bool get isLegacyPricing =>
-      createdAt == null || createdAt!.isBefore(kPlatformDerivedTiersCutoff);
+  /// НАРХ ЯГОНА (эга 2026-11-28): ҳисобланган поғоналар (1–9 +5 %, 50+ −5 %)
+  /// олиб ташланди; базадаги `priceTiers` ҳам эътиборсиз — сервер
+  /// (`functions/platform_pricing.js` `platformUnitPrice`) ҳар доим [price]
+  /// олади. Майдон фақат эски ҳужжатларни ўқиш учун қолди.
+  ///
+  /// Экранда кўрсатиладиган нарх — бир дона нархи.
+  int get displayPrice => price;
 
-  /// АМАЛДАГИ поғоналар (эга қарорлари, 2026-10-06):
-  /// - қўйилган поғоналар бўлса — ўшалар;
-  /// - ЭСКИ товарда — базадаги [price] ЎРТА поғона (10–50 дона), 1–9 (+5%)
-  ///   ва 50+ (−5%) ҳисобланади;
-  /// - ЯНГИ товарда — ҳисобланмайди (поғонани қўшувчининг ўзи қўяди),
-  ///   қўйилмаган бўлса ягона [price].
-  /// Сервер ҳам айнан шундай (`functions/platform_pricing.js`).
-  List<PriceTier> get effectiveTiers {
-    if (hasPriceTiers) return priceTiers;
-    return isLegacyPricing ? derivedPriceTiers(price) : const [];
-  }
-
-  /// Поғоналар [price] дан ҳисобланганми.
-  bool get hasDerivedTiers => !hasPriceTiers && price > 0 && isLegacyPricing;
-
-  /// Ўрта поғона — «10–50 дона: 10 000 сўм» (ҳисобланган поғоналарда).
-  PriceTier? get midTier {
-    final t = effectiveTiers;
-    return t.length >= 2 ? t[1] : (t.isEmpty ? null : t.first);
-  }
-
-  /// Поғона оралиғи ёрлиғи: ҳисобланган поғоналарда Улгуржи формасидаги
-  /// тайёр оралиқлар («1–9», «10–50», «50+»), админ поғонасида «10+».
-  String tierRangeLabel(int index) {
-    final t = effectiveTiers;
-    if (index < 0 || index >= t.length) return '';
-    if (hasDerivedTiers) return kStandardTierBrackets[index].$2;
-    return '${t[index].minQty}+';
-  }
-
-  /// Экранда кўрсатиладиган нарх — ЭНГ КАМ харидда ҳақиқатда тўланадиган
-  /// бир дона нархи ([minQty] учун поғона нархи). Карточкада бир нарх,
-  /// саватда бошқа нарх чиқиб қолмасин.
-  int get displayPrice => priceForQty(minQty);
-
-  /// Минимал улгуржи буюртма — энг паст поғона.
-  int get wholesaleMinQty =>
-      effectiveTiers.isEmpty ? minQty : effectiveTiers.first.minQty;
-
-  /// «дан 9 000 сўм» — лентада кўрсатиладиган бошланғич нарх.
-  int get wholesaleBasePrice =>
-      effectiveTiers.isEmpty ? price : effectiveTiers.first.price;
-
-  /// Берилган миқдорга тўғри келадиган нарх: [qty] дан кичик ёки тенг
-  /// энг юқори поғона. Поғона бўлмаса — одатдаги [price].
-  int priceForQty(int qty) => tierPriceForQty(effectiveTiers, qty) ?? price;
+  /// Миқдордан қатъи назар бир дона нархи ([price]).
+  int priceForQty(int qty) => price;
 
   /// Жойлаштириш вақти (тартиб учун).
   final DateTime? createdAt;

@@ -83,6 +83,8 @@ String _keyFor(
   if (error is FirebaseFunctionsException) {
     final byMsg = byServerMessage[error.message?.trim() ?? ''];
     if (byMsg != null) return byMsg;
+    final byDetail = _keyForDetailCode(error.details);
+    if (byDetail != null) return byDetail;
     return _keyForCode(error.code, fallbackKey);
   }
   if (error is FirebaseException) {
@@ -91,6 +93,21 @@ String _keyFor(
   if (error is TimeoutException) return 'err_timeout';
   if (error is SocketException) return 'err_network';
   return fallbackKey;
+}
+
+/// Server `HttpsError.details.code` (ichki diagnostika kodi) → l10n kaliti.
+/// Faqat amaldan qat'i nazar bir xil ma'noli kodlar shu yerda:
+/// - `ENDPOINT_RETIRED` — eski endpoint o'chirilgan (W-2, eski pending-code oqimi);
+/// - `MARKET_AD_RETIRED` — eski «Аралаш» e'lonlari yopiq (F-1, ega 2026-11-28).
+String? _keyForDetailCode(Object? details) {
+  if (details is! Map) return null;
+  switch (details['code']) {
+    case 'ENDPOINT_RETIRED':
+      return 'err_endpoint_retired';
+    case 'MARKET_AD_RETIRED':
+      return 'err_market_ad_retired';
+  }
+  return null;
 }
 
 String _keyForCode(String rawCode, String fallbackKey) {

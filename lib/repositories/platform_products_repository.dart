@@ -175,7 +175,7 @@ class PlatformProductsRepository {
     Iterable<PlatformProduct> all,
   ) =>
       all
-          .where((p) => p.active && (p.price > 0 || p.hasPriceTiers))
+          .where((p) => p.active && p.price > 0)
           .toList(growable: false);
 
   Future<PlatformProduct?> getById(String id) async {

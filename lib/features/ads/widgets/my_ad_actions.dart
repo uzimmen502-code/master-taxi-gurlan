@@ -7,6 +7,11 @@ import '../models/ad_model.dart';
 import '../repositories/ads_repository.dart';
 import '../screens/edit_ad_screen.dart';
 
+/// Эски «Аралаш» эълонини (`ads` cheap_product) «Қайта жойлаштириш» — ЁПИҚ
+/// (F-1, эга 2026-11-28; сервер `functions/market_ad_retired.js`
+/// `MARKET_ADS_RETIRED`). Қайтариш фақат сервер билан бирга.
+const bool kLegacyAdRepublishEnabled = false;
+
 /// Popup actions for owner's ad row.
 class MyAdActions extends StatelessWidget {
   const MyAdActions({super.key, required this.ad});
@@ -78,12 +83,16 @@ class MyAdActions extends StatelessWidget {
         if (isActive || isPending) {
           return [edit, hide, remove];
         }
-        // Яширилган / муддати тугаган — қайта жойлаштириш мумкин.
+        // Яширилган / муддати тугаган. F-1 (эга 2026-11-28): эски «Аралаш»
+        // эълонлари (`ads` cheap_product) қайта жойлаштирилмайди — сервер
+        // `onAdUpdate` уни барибир `inactive` га қайтаради. Маҳсулот «＋»
+        // орқали қўшилади ([kLegacyAdRepublishEnabled]).
         return [
-          PopupMenuItem(
-            value: 'republish',
-            child: Text(ctx.tr('my_ad_republish')),
-          ),
+          if (kLegacyAdRepublishEnabled)
+            PopupMenuItem(
+              value: 'republish',
+              child: Text(ctx.tr('my_ad_republish')),
+            ),
           edit,
           remove,
         ];

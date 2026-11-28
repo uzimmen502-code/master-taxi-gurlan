@@ -72,70 +72,13 @@ String tierRangeText(List<PriceTier> tiers, int i) {
   return to > from ? '$from–$to' : '$from';
 }
 
-/// AVA дўкони — нарх қоидаси версияси (`orderBase.pricingVersion`).
+/// AVA дўкони — илова юборадиган `orderBase.pricingVersion`.
 ///
-/// 2 — улгуржи поғоналари (1.0.33+). Сервер версиясиз буюртмага (эски
-/// илова) эски ягона нархни қўллайди. Қоида:
-/// `functions/platform_pricing.js` билан АЙНАН бир хил (паритет тести:
-/// `functions/test/fixtures/platform_price_vectors.json`).
+/// Эга 2026-11-28: нарх ЯГОНА (ҳисобланган поғоналар 1–9 +5 % / 50+ −5 %
+/// олиб ташланди). Сервер (`functions/platform_pricing.js`,
+/// SERVER_PRICING_VERSION 3) бу қийматни эътиборсиз қолдиради ва буюртмага
+/// ўз версиясини ёзади; қиймат эски сервер билан мослик учун ўзгармади.
 const int kPlatformPricingVersion = 2;
-
-/// Ўрта поғона (10–50 дона) бошланиши ва юқори поғона (50+).
-const int kPlatformMidMinQty = 10;
-const int kPlatformHighMinQty = 50;
-
-/// Ҳисобланган поғоналар ФАҚАТ ЭСКИ товарларга: `createdAt` шу вақтдан
-/// ОЛДИН (2026-10-07 00:00 Тошкент) ёки йўқ. Янги товарда поғонани
-/// қўшаётган одамнинг ЎЗИ белгилайди (эга қарори, 2026-10-06). Сервер:
-/// `DERIVED_TIERS_CUTOFF_MS` (`functions/platform_pricing.js`).
-final DateTime kPlatformDerivedTiersCutoff = DateTime.utc(2026, 10, 6, 19);
-
-/// 1–9 дона: +5%, 50+ дона: −5% (эга қарори, 2026-10-06).
-const int kPlatformLowMarkupPct = 5;
-const int kPlatformHighDiscountPct = 5;
-
-/// ceil(a × num / den) — фақат бутун сонлар.
-int _ceilMulDiv(int a, int num, int den) => (a * num + den - 1) ~/ den;
-
-/// Базадаги нарх — ЎРТА поғона (10–50 дона) нархи; қолган иккаласи
-/// ундан ҳисобланади, юқорига бутун сўмгача. Нарх йўқ бўлса — бўш.
-List<PriceTier> derivedPriceTiers(int midPrice) {
-  if (midPrice <= 0) return const [];
-  return [
-    PriceTier(
-      minQty: 1,
-      price: _ceilMulDiv(midPrice, 100 + kPlatformLowMarkupPct, 100),
-    ),
-    PriceTier(minQty: kPlatformMidMinQty, price: midPrice),
-    PriceTier(
-      minQty: kPlatformHighMinQty,
-      price: _ceilMulDiv(midPrice, 100 - kPlatformHighDiscountPct, 100),
-    ),
-  ];
-}
-
-/// Тайёр поғона оралиқлари — Улгуржи сотувчи формаси билан бир хил
-/// (1–9 / 10–49 / 50+). Янги товарда қўшувчи ўзи нарх киритади.
-/// Ёрлиқ «10–49» (эга, 2026-10-09): 50 дона аллақачон кейинги поғонага
-/// киради (`priceForQty` — `qty >= minQty`), аввалги «10–50» ёзуви
-/// адаштирарди; мантиқ ўзгармаган.
-const List<(int, String)> kStandardTierBrackets = [
-  (1, '1–9'),
-  (kPlatformMidMinQty, '10–49'),
-  (kPlatformHighMinQty, '50+'),
-];
-
-/// Тайёр оралиқлар бўйича киритилган нархлардан поғоналар: бўш ёки
-/// нотўғри майдон ўтказиб юборилади (тартиб [kStandardTierBrackets] га мос).
-List<PriceTier> collectStandardTiers(List<String> rawPrices) {
-  final out = <PriceTier>[];
-  for (var i = 0; i < kStandardTierBrackets.length && i < rawPrices.length; i++) {
-    final p = int.tryParse(rawPrices[i].trim().replaceAll(' ', ''));
-    if (p == null || p <= 0) continue;
-    out.add(PriceTier(minQty: kStandardTierBrackets[i].$1, price: p));
-  }
-  return sortPriceTiers(out);
-}
 
 /// Firestore'даги `priceTiers` рўйхатини ўқийди.
 List<PriceTier> parsePriceTiers(dynamic raw) {

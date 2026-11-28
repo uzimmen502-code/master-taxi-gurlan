@@ -1,147 +1,78 @@
-import 'dart:convert';
-import 'dart:io';
-
 import 'package:ava_gurlan/features/ads/widgets/platform_market_card.dart';
 import 'package:ava_gurlan/models/platform_product.dart';
 import 'package:ava_gurlan/models/price_tier.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// AVA дўкони нарх поғоналари (эга қарори, 2026-10-06):
-/// базадаги нарх = 10–50 дона, 1–9 +5%, 50+ −5%, юқорига бутун сўмгача.
-///
-/// Fixture: `functions/test/fixtures/platform_price_vectors.json` — сервер
-/// (`functions/platform_pricing.js`) ҳам айнан шу векторларни текширади.
-/// Илова карточкада кўрсатган нарх сервер ечадиган нархдан фарқ қилмасин.
+/// AVA дўкони нархи ЯГОНА (эга 2026-11-28): ҳисобланган поғоналар
+/// (1–9 +5 %, 50+ −5 %) олиб ташланди, базадаги `priceTiers` эътиборсиз.
+/// Сервер: `functions/platform_pricing.js` `platformUnitPrice` (ҳар доим
+/// `price`), тест `functions/test/platform_pricing_server_cf.test.js`.
 void main() {
-  final file = File('functions/test/fixtures/platform_price_vectors.json');
+  group('эски товар (2026-10-07 гача, поғонасиз) — энди ҳисобланмайди', () {
+    final legacy = PlatformProduct(
+      id: 'a',
+      name: 'a',
+      price: 10000,
+      createdAt: DateTime.utc(2026, 8, 1),
+    );
 
-  test('fixture топилди (тест репо илдизидан ишлайди)', () {
-    expect(file.existsSync(), isTrue, reason: file.absolute.path);
-  });
-
-  group('сервер билан паритет (pricingVersion 2)', () {
-    final data = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
-    final vectors = (data['vectors'] as List).cast<Map<String, dynamic>>();
-    for (final v in vectors) {
-      test('price=${v['price']} tiers=${v['tiers']} qty=${v['qty']} → ${v['v2']}',
-          () {
-        final created = v['createdAt'] as String?;
-        final p = PlatformProduct(
-          id: 'x',
-          name: 'x',
-          price: v['price'] as int,
-          priceTiers: parsePriceTiers(v['tiers']),
-          createdAt: created == null ? null : DateTime.parse(created),
-        );
-        expect(p.priceForQty(v['qty'] as int), v['v2']);
-      });
-    }
-  });
-
-  group('ҳисобланган поғоналар', () {
-    const p = PlatformProduct(id: 'a', name: 'a', price: 10000);
-
-    test('эга мисоли: 10 000 → 10 500 / 10 000 / 9 500', () {
-      expect(
-        p.effectiveTiers.map((t) => (t.minQty, t.price)).toList(),
-        [(1, 10500), (10, 10000), (50, 9500)],
-      );
-      expect(p.hasDerivedTiers, isTrue);
+    test('ҳар қандай миқдорда ягона нарх (аввал 1 дона = 10 500 эди)', () {
+      expect(legacy.priceForQty(1), 10000);
+      expect(legacy.priceForQty(9), 10000);
+      expect(legacy.priceForQty(10), 10000);
+      expect(legacy.priceForQty(50), 10000);
+      expect(legacy.priceForQty(500), 10000);
+      expect(legacy.displayPrice, 10000);
     });
 
-    test('Улгуржи карточкаси: «10–50 дона: 10 000 сўм» + «1–9 дона: 10 500 сўм»',
-        () {
-      expect(platformWholesalePriceLine(p), '10–49 дона: 10 000 сўм');
-      expect(platformWholesaleSubLine(p), '1–9 дона: 10 500 сўм');
-    });
-
-    test('чакана нарх = 1 дона учун ҲАҚИҚАТДА тўланадиган нарх', () {
-      // Карточкада 10 000, саватда 10 500 чиқиб қолмасин.
-      expect(p.displayPrice, 10500);
-      expect(p.displayPrice, p.priceForQty(p.minQty));
-    });
-
-    test('тафсилотдаги оралиқ ёрлиқлари', () {
-      expect([0, 1, 2].map(p.tierRangeLabel).toList(), ['1–9', '10–49', '50+']);
+    test('санаси йўқ товар ҳам ягона нарх', () {
+      const p = PlatformProduct(id: 'n', name: 'n', price: 10000);
+      expect(p.priceForQty(1), 10000);
+      expect(p.displayPrice, 10000);
     });
   });
 
-  group('админ поғонаси бор товар — ҳисобланмайди', () {
+  test('базада priceTiers бўлса ҳам эътиборсиз (сервер каби)', () {
     const p = PlatformProduct(
       id: 'b',
       name: 'b',
       price: 10000,
-      priceTiers: [PriceTier(minQty: 5, price: 8000)],
+      priceTiers: [
+        PriceTier(minQty: 1, price: 12000),
+        PriceTier(minQty: 5, price: 8000),
+      ],
     );
-
-    test('ўша поғоналар ишлатилади', () {
-      expect(p.hasDerivedTiers, isFalse);
-      expect(p.priceForQty(1), 8000);
-      expect(platformWholesaleSubLine(p), 'МОҚ 5 дона');
-      expect(p.tierRangeLabel(0), '5+');
-    });
+    expect(p.priceForQty(1), 10000);
+    expect(p.priceForQty(5), 10000);
+    expect(p.displayPrice, 10000);
   });
 
-  group('ЯНГИ товар (2026-10-07 дан) — поғонани қўшувчи ўзи қўяди', () {
-    final fresh = PlatformProduct(
-      id: 'n',
-      name: 'n',
-      price: 10000,
-      createdAt: DateTime.utc(2026, 10, 7, 9),
-    );
-
-    test('ҳисобланмайди: ягона нарх, «10–50» ёрлиғи йўқ', () {
-      expect(fresh.isLegacyPricing, isFalse);
-      expect(fresh.effectiveTiers, isEmpty);
-      expect(fresh.priceForQty(1), 10000);
-      expect(fresh.priceForQty(60), 10000);
-      expect(fresh.displayPrice, 10000);
-      expect(platformWholesalePriceLine(fresh), '10 000 сўм / дона');
-    });
-
-    test('чегара: 18:59:59Z — эски, 19:00:00Z — янги', () {
-      final before = PlatformProduct(
-          id: 'b', name: 'b', price: 10000,
-          createdAt: DateTime.utc(2026, 10, 6, 18, 59, 59));
-      final at = PlatformProduct(
-          id: 'a', name: 'a', price: 10000,
-          createdAt: DateTime.utc(2026, 10, 6, 19));
-      expect(before.priceForQty(1), 10500);
-      expect(at.priceForQty(1), 10000);
-    });
-  });
-
-  test('нархсиз товар — поғона йўқ, йиқилмайди', () {
+  test('нархсиз товар — 0, йиқилмайди', () {
     const p = PlatformProduct(id: 'z', name: 'z', price: 0);
-    expect(p.effectiveTiers, isEmpty);
     expect(p.priceForQty(3), 0);
-    expect(p.hasDerivedTiers, isFalse);
+    expect(p.displayPrice, 0);
   });
 
-  group('collectStandardTiers — бирданига қўшиш формаси (1–9 / 10–50 / 50+)', () {
-    test('учаласи тўлдирилган', () {
-      final t = collectStandardTiers(['10500', '10000', '9500']);
-      expect(t.map((e) => (e.minQty, e.price)).toList(),
-          [(1, 10500), (10, 10000), (50, 9500)]);
+  group('карточка қаторлари — ягона нарх', () {
+    final p = PlatformProduct(
+      id: 'c',
+      name: 'c',
+      price: 10000,
+      createdAt: DateTime.utc(2026, 8, 1),
+    );
+
+    test('асосий қатор: «10 000 сўм / дона», «дан» ва оралиқ йўқ', () {
+      expect(platformWholesalePriceLine(p), '10 000 сўм / дона');
     });
 
-    test('бўш ва нотўғри майдон ўтказиб юборилади', () {
-      final t = collectStandardTiers(['', '10 000', '0']);
-      expect(t.map((e) => (e.minQty, e.price)).toList(), [(10, 10000)]);
-    });
-
-    test('ҳеч бири тўлдирилмаса — бўш (форма сақлашни блоклайди)', () {
-      expect(collectStandardTiers(['', ' ', 'abc']), isEmpty);
-    });
-
-    test('оралиқлар Улгуржи сотувчи формаси билан бир хил', () {
-      expect(kStandardTierBrackets.map((b) => b.$1).toList(), [1, 10, 50]);
-      expect(kStandardTierBrackets.map((b) => b.$2).toList(),
-          ['1–9', '10–49', '50+']);
+    test('иккинчи қатор: МОҚ = minQty', () {
+      expect(platformWholesaleSubLine(p), 'МОҚ 1 дона');
+      const q = PlatformProduct(id: 'q', name: 'q', price: 5000, minQty: 3);
+      expect(platformWholesaleSubLine(q), 'МОҚ 3 дона');
     });
   });
 
-  test('версия сервер билан бир хил', () {
+  test('илова юборадиган версия ўзгармади (сервер эътиборсиз қолдиради)', () {
     expect(kPlatformPricingVersion, 2);
   });
 }

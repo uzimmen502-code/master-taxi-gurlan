@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../utils/taxi_price_region.dart';
+import '../widgets/taxi_commission_card.dart';
 
 /// Admin — mahalliy taksi narxi (`settings/prices`).
 class TaxiPriceScreen extends StatefulWidget {
@@ -273,6 +274,8 @@ class _TaxiPriceScreenState extends State<TaxiPriceScreen> {
                 'versiyasi bilan qotiradi.',
                 style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
               ),
+              const SizedBox(height: 16),
+              const TaxiCommissionCard(),
               const SizedBox(height: 24),
               Text(
                 'Umumiy (fallback)',

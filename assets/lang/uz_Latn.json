@@ -4607,6 +4607,8 @@
   "err_unexpected": "Xatolik yuz berdi. Qayta urinib köring.",
   "err_invalid": "Kiritilgan ma'lumot notöğri. Tekşirib, qayta urinib köring.",
   "err_conflict": "Hozir bu amalni bajarib bölmaydi. Sahifani yangilab, qayta urinib köring.",
+  "err_endpoint_retired": "Bu amal eskirgan va öçirilgan. Ilovani yangilang.",
+  "err_market_ad_retired": "Bu bölimga e'lon beriş yopildi. Mahsulotni «＋» orqali qöşing.",
   "err_load_failed": "Ma'lumotni yuklab bölmadi. Internetni tekşirib, qayta urinib köring.",
   "local_trip_load_failed": "Safar ma'lumotini yuklab bölmadi. Internetni tekşirib, qayta urinib köring.",
   "local_trip_not_found": "Bu safar topilmadi yoki allaqaçon yakunlangan.",

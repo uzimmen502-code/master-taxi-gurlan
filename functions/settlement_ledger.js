@@ -543,13 +543,33 @@ async function reconcile(db) {
     }
   });
 
+  // Проекция: ҳисоб эгалари — getAll пакетлари (N+1 ўрнига, 100 тадан).
   const mismatches = [];
-  for (const a of pcAccounts) {
-    const u = await db.collection('users').doc(a.uid).get();
-    const bonus = u.exists ? (u.data().bonusBalance || 0) : 0;
-    if (bonus !== a.balance) {
-      mismatches.push({ uid: a.uid, ledger: a.balance, bonusBalance: bonus });
-    }
+  const pcUids = new Set();
+  for (let i = 0; i < pcAccounts.length; i += 100) {
+    const chunk = pcAccounts.slice(i, i + 100);
+    const snaps = await db.getAll(...chunk.map((a) => db.collection('users').doc(a.uid)));
+    snaps.forEach((u, j) => {
+      const a = chunk[j];
+      pcUids.add(a.uid);
+      const bonus = u.exists ? (u.data().bonusBalance || 0) : 0;
+      if (bonus !== a.balance) {
+        mismatches.push({ uid: a.uid, ledger: a.balance, bonusBalance: bonus });
+      }
+    });
+  }
+  // Ҳисоби ЙЎҚ, лекин bonusBalance ≠ 0 — аввал кўринмасди (ledger'сиз пул). Саҳифалаб.
+  let cursor = null;
+  for (;;) {
+    let q = db.collection('users').where('bonusBalance', '!=', 0).orderBy('bonusBalance').limit(500);
+    if (cursor) q = q.startAfter(cursor);
+    const snap = await q.get();
+    snap.docs.forEach((d) => {
+      if (pcUids.has(d.id)) return;
+      mismatches.push({ uid: d.id, ledger: 0, bonusBalance: (d.data() || {}).bonusBalance, noAccount: true });
+    });
+    if (snap.size < 500) break;
+    cursor = snap.docs[snap.docs.length - 1];
   }
 
   return {

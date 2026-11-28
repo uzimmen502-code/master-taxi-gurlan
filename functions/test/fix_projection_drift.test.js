@@ -120,12 +120,27 @@ async function journalBalanced() {
   });
 
   await reset();
-  await check('D7 tuzatishdan keyin reconcile: faqat U3 (va hisobsiz U4) qoladi', async () => {
+  await check('D7 tuzatishdan keyin reconcile: U3, user\'siz U4 va hisobsiz U5 (W-1/4) qoladi', async () => {
     await tool.applyPlan(db, await tool.planDrift(db));
     const rep = await ledger.reconcile(db);
     const mm = rep.mismatches.map((m) => m.uid).sort();
-    assert.deepStrictEqual(mm, [U3, U4].sort());
+    assert.deepStrictEqual(mm, [U3, U4, U5].sort());
+    assert.deepStrictEqual(rep.mismatches.find((m) => m.uid === U5), { uid: U5, ledger: 0, bonusBalance: 10000, noAccount: true });
     assert.strictEqual(rep.balanced, true);
+  });
+
+  await reset();
+  await check('D8 reconcile getAll paketlari: 150 hisob (100+50) to\'g\'ri tekshiriladi', async () => {
+    const batch = db.batch();
+    for (let i = 0; i < 150; i += 1) {
+      const uid = `9989020${String(i).padStart(5, '0')}`;
+      batch.set(db.collection('users').doc(uid), { bonusBalance: i === 149 ? 7 : 0 });
+      batch.set(acc(uid), { type: 'liability', ownerUid: uid, balance: 0 });
+    }
+    await batch.commit();
+    const rep = await ledger.reconcile(db);
+    assert.ok(rep.mismatches.some((m) => m.uid === '998902000149' && m.bonusBalance === 7 && m.ledger === 0));
+    assert.ok(!rep.mismatches.some((m) => m.uid === '998902000148'));
   });
 
   const passed = results.filter(Boolean).length;

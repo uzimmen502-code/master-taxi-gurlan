@@ -19,6 +19,7 @@ import '../../../models/platform_product.dart';
 import '../../../repositories/platform_products_repository.dart';
 import '../services/admin_auth_service.dart';
 import '../services/admin_market_service.dart';
+import '../services/incentive_categories.dart';
 import '../utils/clipboard_paste_image.dart';
 import '../utils/web_image_compress.dart';
 
@@ -1071,14 +1072,11 @@ class _EditDialog extends StatefulWidget {
   State<_EditDialog> createState() => _EditDialogState();
 }
 
-/// Рағбат туркумлари (эга 2026-11-02) — машина дастури туркумлари билан бир хил калитлар
-/// (админ «Рағбат дастурлари»да шу калитларни ишлатади). Бўш — туркумсиз (умумий).
+/// Рағбат туркумлари (эга 2026-11-02) — ЯГОНА манба [kIncentiveCategories] («Рағбат дастурлари» формаси ҳам
+/// шуни ишлатади). Бўш — туркумсиз (умумий).
 const Map<String, String> _kIncentiveCats = {
   '': 'Йўқ',
-  'tire': 'Шина',
-  'oil': 'Мой',
-  'battery': 'Аккумулятор',
-  'insurance': 'Суғурта',
+  ...kIncentiveCategories,
 };
 
 class _EditDialogState extends State<_EditDialog> {

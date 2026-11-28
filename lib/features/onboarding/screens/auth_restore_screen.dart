@@ -1,11 +1,14 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/utils/formatters.dart';
+import '../../qr_login/services/qr_web_auth.dart';
 import '../../../repositories/device_binding_repository.dart';
 import '../../../services/device_fingerprint_service.dart';
 import '../../../shared/navigation/app_home_route.dart';
+import 'guest_intro_screen.dart';
 import 'phone_reverify_screen.dart';
 
 /// Restores Firebase Auth (trusted device) before Home or full reverify.
@@ -27,6 +30,22 @@ class _AuthRestoreScreenState extends State<AuthRestoreScreen> {
     if (FirebaseAuth.instance.currentUser != null) {
       _goHome();
       return;
+    }
+
+    // Компьютерда QR орқали кирилган браузер қайта очилди (Firebase SESSION — кириш йўқолган):
+    // жим тиклаш ЙЎҚ (эга 2026-11-28: «ҳар сафар кирганда янгидан сканерлаш») — излар тозаланади,
+    // кириш экрани (QR тугмаси шу ерда).
+    if (kIsWeb) {
+      try {
+        if (await QrWebAuth.clearAfterBrowserRestart()) {
+          if (!mounted) return;
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const GuestIntroScreen()),
+          );
+          return;
+        }
+      } catch (_) {}
     }
 
     try {

@@ -14,6 +14,7 @@ import '../../../repositories/device_binding_repository.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../services/device_fingerprint_service.dart';
 import '../../../shared/navigation/app_home_route.dart';
+import '../../qr_login/widgets/qr_web_login_entry.dart';
 import '../widgets/device_binding_conflict_sheet.dart';
 
 /// Mavjud foydalanuvchi — Firebase sessiyasi yo'qolganda qayta kirish.
@@ -455,6 +456,9 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
             label: context.tr('enter_name'),
             value: _userName.isNotEmpty ? _userName : '—',
           ),
+          const SizedBox(height: 16),
+          // Веб: телефондаги AVA орқали QR билан (сервер OFF — кўринмайди).
+          const QrWebLoginEntry(dark: true),
         ],
       ),
     );

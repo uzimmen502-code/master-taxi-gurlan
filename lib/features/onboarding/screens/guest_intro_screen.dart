@@ -7,6 +7,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../services/anon_session_service.dart';
 import '../../../shared/navigation/app_home_route.dart';
+import '../../qr_login/widgets/qr_web_login_entry.dart';
 
 /// Birinchi ochilish: qisqa intro (registratsiya/ruxsat so'ralmaydi) →
 /// anonim Firebase Auth sessiya → to'g'ridan-to'g'ri feed.
@@ -144,6 +145,8 @@ class _GuestIntroScreenState extends State<GuestIntroScreen> {
                       ),
                     ),
                   ),
+                  // Веб: ҳисоби бор ҳамкор телефондаги QR орқали киради (сервер OFF — кўринмайди).
+                  if (!widget.isReminder) const QrWebLoginEntry(),
                   if (isLast) ...[
                     const SizedBox(height: 6),
                     TextButton(

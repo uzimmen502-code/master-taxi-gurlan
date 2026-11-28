@@ -17,6 +17,9 @@ class AdminAuthService extends ChangeNotifier {
 
   static const _kPhoneKey = 'admin_web_phone';
 
+  /// PIN bilan ochilgan panel sessiyasining Firebase uid'i (qarang [restoreSession]).
+  static const _kPinUidKey = 'admin_web_pin_uid';
+
   String? _phone;
   String? _phoneDigits;
   String? _displayName;
@@ -121,9 +124,16 @@ class AdminAuthService extends ChangeNotifier {
 
   /// Brauzerdagi Firebase Auth sessiyasini tiklash. Avval sessiya bo'lmasa
   /// saqlangan telefon bilan PIN'siz qayta kirilardi — endi PIN kerak.
+  ///
+  /// Ilova (`/`) va panel (`/admin/`) bitta origin — Firebase Auth sessiyasi umumiy. Shuning uchun
+  /// foydalanuvchi ilovasidagi sessiya (masalan kompyuterda QR orqali kirish, 2026-11-28) panelni
+  /// PIN'siz ochmasin: faqat shu brauzerda PIN bilan ochilgan sessiya (uid mos) tiklanadi. Aks holda
+  /// kirish formasi ko'rinadi; ilova sessiyasi o'chirilmaydi.
   Future<void> restoreSession() async {
     final user = _auth.currentUser;
     if (user != null) {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getString(_kPinUidKey) != user.uid) return;
       try {
         await user.getIdToken(true);
         var rawPhone = user.phoneNumber ?? '';
@@ -183,6 +193,11 @@ class AdminAuthService extends ChangeNotifier {
         return 'Siz admin emassiz (hozirgi rol: ${role.isEmpty ? 'user' : role}).';
       }
       await _applyAdminSession(rawPhone: rawPhone, snap: snap);
+      final uid = _auth.currentUser?.uid ?? '';
+      if (uid.isNotEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_kPinUidKey, uid);
+      }
       return null;
     } on FirebaseFunctionsException catch (e) {
       return e.message ?? e.code;
@@ -260,6 +275,7 @@ class AdminAuthService extends ChangeNotifier {
     mustChangePin = false;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_kPhoneKey);
+    await prefs.remove(_kPinUidKey);
     await prefs.remove('user_phone');
     await prefs.remove('user_role');
     await prefs.remove('user_name');

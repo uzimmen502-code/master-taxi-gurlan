@@ -65,6 +65,7 @@ import 'core/widgets/zone_gate.dart';
 import 'features/home/screens/home_screen.dart';
 import 'core/utils/formatters.dart';
 import 'features/onboarding/screens/auth_restore_screen.dart';
+import 'features/qr_login/services/qr_web_auth.dart';
 import 'features/onboarding/screens/guest_intro_screen.dart';
 import 'features/onboarding/screens/language_select_screen.dart';
 import 'services/anon_session_service.dart';
@@ -206,7 +207,18 @@ Future<void> _deferredMobileBootstrap({
     unawaited(AnonSessionService().ensureAnonymousSession());
   }
 
-  if (kIsWeb) return;
+  if (kIsWeb) {
+    // QR орқали кирилган компьютер: телефондан «Компьютерни тизимдан чиқариш» / жимлик → дарҳол
+    // чиқиш, кейинги кириш — янги QR скан (эга 2026-11-28; жим тиклаш йўқ).
+    QrWebSessionGuard.instance.onEnded = () {
+      MyApp.navigatorKey.currentState?.pushAndRemoveUntil(
+        MaterialPageRoute<void>(builder: (_) => const GuestIntroScreen()),
+        (_) => false,
+      );
+    };
+    unawaited(QrWebSessionGuard.instance.start());
+    return;
+  }
 
   try {
     await NotificationDelivery.ensureInitialized();

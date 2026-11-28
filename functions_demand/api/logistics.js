@@ -1302,12 +1302,12 @@ function makeLegChainSweeper(deps) {
  */
 const CHAIN_EXPIRED_NEWS = {
   sender: {
-    uz_Latn: { title: 'Jo\'natma bekor qilindi', body: 'Belgilangan muddatda barcha kuryerlar topilmadi. To\'lov hamyoningizga qaytariladi.' },
+    uz_Latn: { title: 'Jönatma bekor qilindi', body: 'Belgilangan muddatda barça kuryerlar topilmadi. Tölov hamyoningizga qaytariladi.' },
     uz_Cyrl: { title: 'Жўнатма бекор қилинди', body: 'Белгиланган муддатда барча курьерлар топилмади. Тўлов ҳамёнингизга қайтарилади.' },
     ru: { title: 'Отправка отменена', body: 'За отведённое время не удалось найти всех курьеров. Оплата будет возвращена на ваш кошелёк.' },
   },
   courier: {
-    uz_Latn: { title: 'Jo\'natma bekor qilindi', body: 'Marshrutning hamma qismiga kuryer topilmadi — siz olgan qism ham bekor bo\'ldi.' },
+    uz_Latn: { title: 'Jönatma bekor qilindi', body: 'Marşrutning hamma qismiga kuryer topilmadi — siz olgan qism ham bekor böldi.' },
     uz_Cyrl: { title: 'Жўнатма бекор қилинди', body: 'Маршрутнинг ҳамма қисмига курьер топилмади — сиз олган қисм ҳам бекор бўлди.' },
     ru: { title: 'Отправка отменена', body: 'Не удалось найти курьеров на все участки маршрута — ваш участок тоже отменён.' },
   },

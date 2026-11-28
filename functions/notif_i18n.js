@@ -18,22 +18,22 @@ const LANGS = ['uz_Cyrl', 'uz_Latn', 'ru'];
 const MESSAGES = {
   auto_shift_driver: {
     uz_Cyrl: { title: '⏱ Рейс {hours} соатга сурилди', body: 'Салон тўлмади. Янги жўнаш вақти {time} ({n}/{max}).' },
-    uz_Latn: { title: '⏱ Reys {hours} soatga surildi', body: 'Salon to\'lmadi. Yangi jo\'nash vaqti {time} ({n}/{max}).' },
+    uz_Latn: { title: '⏱ Reys {hours} soatga surildi', body: 'Salon tölmadi. Yangi jönaş vaqti {time} ({n}/{max}).' },
     ru: { title: '⏱ Рейс перенесён на {hours} ч.', body: 'Салон не заполнен. Новое время отправления {time} ({n}/{max}).' },
   },
   auto_shift_passenger: {
     uz_Cyrl: { title: '🕐 Рейс вақти ўзгарди', body: 'Жўнаш {time} га сурилди. Қулай бўлмаса бронни бекор қилишингиз мумкин.' },
-    uz_Latn: { title: '🕐 Reys vaqti o\'zgardi', body: 'Jo\'nash {time} ga surildi. Qulay bo\'lmasa bronni bekor qilishingiz mumkin.' },
+    uz_Latn: { title: '🕐 Reys vaqti özgardi', body: 'Jönaş {time} ga surildi. Qulay bölmasa bronni bekor qilişingiz mumkin.' },
     ru: { title: '🕐 Время рейса изменилось', body: 'Отправление перенесено на {time}. Если неудобно, можно отменить бронь.' },
   },
   auto_shift_stop_cap: {
     uz_Cyrl: { title: '⏱ Рейс автоматик сурилмайди', body: 'Бугунги суриш лимити ({max} марта) тугади. Янги вақтни ўзингиз белгиланг ёки рейсни тугатинг.' },
-    uz_Latn: { title: '⏱ Reys avtomatik surilmaydi', body: 'Bugungi surish limiti ({max} marta) tugadi. Yangi vaqtni o\'zingiz belgilang yoki reysni tugating.' },
+    uz_Latn: { title: '⏱ Reys avtomatik surilmaydi', body: 'Bugungi suriş limiti ({max} marta) tugadi. Yangi vaqtni özingiz belgilang yoki reysni tugating.' },
     ru: { title: '⏱ Рейс больше не переносится автоматически', body: 'Лимит переносов на сегодня ({max}) исчерпан. Укажите новое время сами или завершите рейс.' },
   },
   china_quote_ready: {
     uz_Cyrl: { title: '🇨🇳 Хитой сўровингизга таклиф келди', body: '{refNo} бўйича таклифни иловада кўришингиз мумкин.' },
-    uz_Latn: { title: '🇨🇳 Xitoy so\'rovingizga taklif keldi', body: '{refNo} bo\'yicha taklifni ilovada ko\'rishingiz mumkin.' },
+    uz_Latn: { title: '🇨🇳 Xitoy sörovingizga taklif keldi', body: '{refNo} böyiça taklifni ilovada körişingiz mumkin.' },
     ru: { title: '🇨🇳 Получено предложение по запросу в Китай', body: 'Предложение по {refNo} можно посмотреть в приложении.' },
   },
   // Улгуржи/Хитой «Буюртма ёзиш» чати (deal_chats.js). Эга 2026-11-01: push'да хабар матни
@@ -45,7 +45,7 @@ const MESSAGES = {
   },
   auto_shift_stop_midnight: {
     uz_Cyrl: { title: '⏱ Рейс автоматик сурилмайди', body: 'Жўнаш вақти кеч бўлгани учун рейс бугун яна сурилмайди. Янги кунга кўчиринг ёки тугатинг.' },
-    uz_Latn: { title: '⏱ Reys avtomatik surilmaydi', body: 'Jo\'nash vaqti kech bo\'lgani uchun reys bugun yana surilmaydi. Yangi kunga ko\'chiring yoki tugating.' },
+    uz_Latn: { title: '⏱ Reys avtomatik surilmaydi', body: 'Jönaş vaqti keç bölgani uçun reys bugun yana surilmaydi. Yangi kunga köçiring yoki tugating.' },
     ru: { title: '⏱ Рейс больше не переносится автоматически', body: 'Время отправления слишком позднее, поэтому рейс сегодня больше не переносится. Перенесите на другой день или завершите.' },
   },
 
@@ -53,7 +53,7 @@ const MESSAGES = {
   // эга тасдиқлайди (рус тили ҳам). `{date}` — КК.ОО, `{time}` — СС:ДД (Тошкент).
   reschedule_passenger: {
     uz_Cyrl: { title: '🕐 Рейс вақти ўзгарди', body: 'Рейс {date} куни соат {time} га кўчирилди. Қулай бўлмаса бронни бекор қилишингиз мумкин.' },
-    uz_Latn: { title: '🕐 Reys vaqti o\'zgardi', body: 'Reys {date} kuni soat {time} ga ko\'chirildi. Qulay bo\'lmasa bronni bekor qilishingiz mumkin.' },
+    uz_Latn: { title: '🕐 Reys vaqti özgardi', body: 'Reys {date} kuni soat {time} ga köçirildi. Qulay bölmasa bronni bekor qilişingiz mumkin.' },
     ru: { title: '🕐 Время рейса изменилось', body: 'Отправление перенесено на {date}, {time}. Если неудобно, можно отменить бронь.' },
   },
 
@@ -61,32 +61,32 @@ const MESSAGES = {
   // (рус тили ҳам ҳали эга кўриб чиқмаган). `{amount}` — посилка қиймати G, `{left}` — қолган қарз.
   lost_customer_full: {
     uz_Cyrl: { title: 'Жўнатма йўқолди — пул қайтарилди', body: '{tracking} жўнатмаси йўқолган деб топилди. Посилка қиймати {amount} сўм ҳисобингизга қайтарилди. Етказиб бериш хизмати ҳақи қайтарилмайди.' },
-    uz_Latn: { title: 'Jo\'natma yo\'qoldi — pul qaytarildi', body: '{tracking} jo\'natmasi yo\'qolgan deb topildi. Posilka qiymati {amount} so\'m hisobingizga qaytarildi. Yetkazib berish xizmati haqi qaytarilmaydi.' },
+    uz_Latn: { title: 'Jönatma yöqoldi — pul qaytarildi', body: '{tracking} jönatmasi yöqolgan deb topildi. Posilka qiymati {amount} söm hisobingizga qaytarildi. Yetkazib beriş xizmati haqi qaytarilmaydi.' },
     ru: { title: 'Посылка утеряна — деньги возвращены', body: 'Посылка {tracking} признана утерянной. Стоимость посылки {amount} сум возвращена на ваш счёт. Плата за доставку не возвращается.' },
   },
   lost_customer_partial: {
     uz_Cyrl: { title: 'Жўнатма йўқолди — пул қисман қайтарилди', body: '{tracking} жўнатмаси йўқолган деб топилди. Посилка қийматидан {amount} сўм ҳисобингизга қайтарилди. Қолган {left} сўм курьер тўлаганидан кейин қўшилади. Етказиб бериш хизмати ҳақи қайтарилмайди.' },
-    uz_Latn: { title: 'Jo\'natma yo\'qoldi — pul qisman qaytarildi', body: '{tracking} jo\'natmasi yo\'qolgan deb topildi. Posilka qiymatidan {amount} so\'m hisobingizga qaytarildi. Qolgan {left} so\'m kuryer to\'laganidan keyin qo\'shiladi. Yetkazib berish xizmati haqi qaytarilmaydi.' },
+    uz_Latn: { title: 'Jönatma yöqoldi — pul qisman qaytarildi', body: '{tracking} jönatmasi yöqolgan deb topildi. Posilka qiymatidan {amount} söm hisobingizga qaytarildi. Qolgan {left} söm kuryer tölaganidan keyin qöşiladi. Yetkazib beriş xizmati haqi qaytarilmaydi.' },
     ru: { title: 'Посылка утеряна — деньги возвращены частично', body: 'Посылка {tracking} признана утерянной. Из стоимости посылки {amount} сум возвращено на ваш счёт. Оставшиеся {left} сум будут добавлены после оплаты курьером. Плата за доставку не возвращается.' },
   },
   lost_customer_none: {
     uz_Cyrl: { title: 'Жўнатма йўқолди', body: '{tracking} жўнатмаси йўқолган деб топилди. Посилка қиймати ({amount} сўм) курьер тўлаганидан кейин ҳисобингизга қайтарилади. Етказиб бериш хизмати ҳақи қайтарилмайди.' },
-    uz_Latn: { title: 'Jo\'natma yo\'qoldi', body: '{tracking} jo\'natmasi yo\'qolgan deb topildi. Posilka qiymati ({amount} so\'m) kuryer to\'laganidan keyin hisobingizga qaytariladi. Yetkazib berish xizmati haqi qaytarilmaydi.' },
+    uz_Latn: { title: 'Jönatma yöqoldi', body: '{tracking} jönatmasi yöqolgan deb topildi. Posilka qiymati ({amount} söm) kuryer tölaganidan keyin hisobingizga qaytariladi. Yetkazib beriş xizmati haqi qaytarilmaydi.' },
     ru: { title: 'Посылка утеряна', body: 'Посылка {tracking} признана утерянной. Стоимость посылки ({amount} сум) будет возвращена на ваш счёт после оплаты курьером. Плата за доставку не возвращается.' },
   },
   lost_customer_payment: {
     uz_Cyrl: { title: 'Ҳисобингизга пул қўшилди', body: '{tracking} жўнатмаси бўйича {amount} сўм ҳисобингизга қайтарилди. Қолган: {left} сўм.' },
-    uz_Latn: { title: 'Hisobingizga pul qo\'shildi', body: '{tracking} jo\'natmasi bo\'yicha {amount} so\'m hisobingizga qaytarildi. Qolgan: {left} so\'m.' },
+    uz_Latn: { title: 'Hisobingizga pul qöşildi', body: '{tracking} jönatmasi böyiça {amount} söm hisobingizga qaytarildi. Qolgan: {left} söm.' },
     ru: { title: 'На ваш счёт поступили деньги', body: 'По посылке {tracking} на ваш счёт возвращено {amount} сум. Осталось: {left} сум.' },
   },
   lost_customer_done: {
     uz_Cyrl: { title: 'Посилка қиймати тўлиқ қайтарилди', body: '{tracking} жўнатмаси бўйича посилка қиймати тўлиқ қайтарилди (жами {total} сўм).' },
-    uz_Latn: { title: 'Posilka qiymati to\'liq qaytarildi', body: '{tracking} jo\'natmasi bo\'yicha posilka qiymati to\'liq qaytarildi (jami {total} so\'m).' },
+    uz_Latn: { title: 'Posilka qiymati töliq qaytarildi', body: '{tracking} jönatmasi böyiça posilka qiymati töliq qaytarildi (jami {total} söm).' },
     ru: { title: 'Стоимость посылки возвращена полностью', body: 'По посылке {tracking} стоимость возвращена полностью (всего {total} сум).' },
   },
   lost_courier: {
     uz_Cyrl: { title: 'Жўнатма йўқолган деб белгиланди', body: '{tracking} жўнатмаси сизда йўқолган деб белгиланди. Ҳисобингиздан {taken} сўм ечилди. Қолган қарз: {left} сўм.' },
-    uz_Latn: { title: 'Jo\'natma yo\'qolgan deb belgilandi', body: '{tracking} jo\'natmasi sizda yo\'qolgan deb belgilandi. Hisobingizdan {taken} so\'m yechildi. Qolgan qarz: {left} so\'m.' },
+    uz_Latn: { title: 'Jönatma yöqolgan deb belgilandi', body: '{tracking} jönatmasi sizda yöqolgan deb belgilandi. Hisobingizdan {taken} söm yeçildi. Qolgan qarz: {left} söm.' },
     ru: { title: 'Посылка отмечена как утерянная', body: 'Посылка {tracking} отмечена как утерянная у вас. С вашего счёта списано {taken} сум. Остаток долга: {left} сум.' },
   },
 
@@ -102,12 +102,12 @@ const MESSAGES = {
   // ── «Етказилмади» мижоз тасдиғи билан (эга, 2026-10-31). Матнлар PROPOSED — эга тасдиқлайди.
   confirm_restaurant_delivery_failed: {
     uz_Cyrl: { title: 'Курьер буюртмани етказа олмадими?', body: 'Курьер «етказиб бўлмади» деб белгилади. Буюртмани олмаган бўлсангиз, тасдиқланг. Олмоқчи бўлсангиз, «Олмоқчиман» тугмасини босинг.' },
-    uz_Latn: { title: 'Kuryer buyurtmani yetkaza olmadimi?', body: 'Kuryer «yetkazib bo\'lmadi» deb belgiladi. Buyurtmani olmagan bo\'lsangiz, tasdiqlang. Olmoqchi bo\'lsangiz, «Olmoqchiman» tugmasini bosing.' },
+    uz_Latn: { title: 'Kuryer buyurtmani yetkaza olmadimi?', body: 'Kuryer «yetkazib bölmadi» deb belgiladi. Buyurtmani olmagan bölsangiz, tasdiqlang. Olmoqçi bölsangiz, «Olmoqçiman» tugmasini bosing.' },
     ru: { title: 'Курьер не смог доставить заказ?', body: 'Курьер отметил, что не смог доставить заказ. Если вы не получили заказ, подтвердите. Если хотите получить его, нажмите «Хочу получить».' },
   },
   restaurant_delivery_failed_decide: {
     uz_Cyrl: { title: 'Буюртма бўйича қарор керак', body: 'Курьер «етказиб бўлмади» деди, мижоз жавоб бермади. Буюртма етказилмадими ёки курьер етказишни давом эттирсинми — ҳал қилинг.' },
-    uz_Latn: { title: 'Buyurtma bo\'yicha qaror kerak', body: 'Kuryer «yetkazib bo\'lmadi» dedi, mijoz javob bermadi. Buyurtma yetkazilmadimi yoki kuryer yetkazishni davom ettirsinmi — hal qiling.' },
+    uz_Latn: { title: 'Buyurtma böyiça qaror kerak', body: 'Kuryer «yetkazib bölmadi» dedi, mijoz javob bermadi. Buyurtma yetkazilmadimi yoki kuryer yetkazişni davom ettirsinmi — hal qiling.' },
     ru: { title: 'Нужно решение по заказу', body: 'Курьер сообщил, что не смог доставить заказ, а клиент не ответил. Решите: заказ не доставлен или курьер продолжает доставку.' },
   },
   restaurant_delivery_failed_final: {
@@ -117,7 +117,7 @@ const MESSAGES = {
   },
   courier_delivery_failed_final: {
     uz_Cyrl: { title: 'Буюртма ёпилди', body: '«Етказиб бўлмади» тасдиқланди. Кейинги буюртмага ўтишингиз мумкин.' },
-    uz_Latn: { title: 'Buyurtma yopildi', body: '«Yetkazib bo\'lmadi» tasdiqlandi. Keyingi buyurtmaga o\'tishingiz mumkin.' },
+    uz_Latn: { title: 'Buyurtma yopildi', body: '«Yetkazib bölmadi» tasdiqlandi. Keyingi buyurtmaga ötişingiz mumkin.' },
     ru: { title: 'Заказ закрыт', body: 'Отметка «не удалось доставить» подтверждена. Можно переходить к следующему заказу.' },
   },
   customer_delivery_failed_final: {
@@ -127,75 +127,75 @@ const MESSAGES = {
   },
   courier_delivery_failed_continue: {
     uz_Cyrl: { title: 'Буюртмани етказинг', body: '«Етказиб бўлмади» қабул қилинмади: етказишни давом эттиринг.' },
-    uz_Latn: { title: 'Buyurtmani yetkazing', body: '«Yetkazib bo\'lmadi» qabul qilinmadi: yetkazishni davom ettiring.' },
+    uz_Latn: { title: 'Buyurtmani yetkazing', body: '«Yetkazib bölmadi» qabul qilinmadi: yetkazişni davom ettiring.' },
     ru: { title: 'Продолжите доставку', body: 'Отметка «не удалось доставить» не принята: продолжайте доставку.' },
   },
   customer_delivery_failed_continue: {
     uz_Cyrl: { title: 'Буюртма етказилади', body: 'Курьер буюртмангизни етказишни давом эттиради.' },
-    uz_Latn: { title: 'Buyurtma yetkaziladi', body: 'Kuryer buyurtmangizni yetkazishni davom ettiradi.' },
+    uz_Latn: { title: 'Buyurtma yetkaziladi', body: 'Kuryer buyurtmangizni yetkazişni davom ettiradi.' },
     ru: { title: 'Заказ будет доставлен', body: 'Курьер продолжит доставку вашего заказа.' },
   },
   // ── «Етказилмади» — нон/бозор, гилам, сут, йиғиш (эга, 2026-10-31; delivery_failed.js).
   // Матнлар PROPOSED — эга тасдиқлайди. Курьерга якун/давом — юқоридаги умумий калитлар.
   confirm_order_delivery_failed: {
     uz_Cyrl: { title: 'Курьер буюртмани етказа олмадими?', body: 'Курьер «етказиб бўлмади» деб белгилади. Буюртмани олмаган бўлсангиз, тасдиқланг — ҳамёндан тўлаган бўлсангиз, пул қайтади. Олмоқчи бўлсангиз, «Олмоқчиман» тугмасини босинг.' },
-    uz_Latn: { title: 'Kuryer buyurtmani yetkaza olmadimi?', body: 'Kuryer «yetkazib bo\'lmadi» deb belgiladi. Buyurtmani olmagan bo\'lsangiz, tasdiqlang — hamyondan to\'lagan bo\'lsangiz, pul qaytadi. Olmoqchi bo\'lsangiz, «Olmoqchiman» tugmasini bosing.' },
+    uz_Latn: { title: 'Kuryer buyurtmani yetkaza olmadimi?', body: 'Kuryer «yetkazib bölmadi» deb belgiladi. Buyurtmani olmagan bölsangiz, tasdiqlang — hamyondan tölagan bölsangiz, pul qaytadi. Olmoqçi bölsangiz, «Olmoqçiman» tugmasini bosing.' },
     ru: { title: 'Курьер не смог доставить заказ?', body: 'Курьер отметил, что не смог доставить заказ. Если вы его не получили, подтвердите — оплата с кошелька, если была, вернётся. Если хотите получить заказ, нажмите «Хочу получить».' },
   },
   confirm_carpet_pickup_failed: {
     uz_Cyrl: { title: 'Курьер гиламни ола олмадими?', body: 'Курьер «гиламни олиб бўлмади» деб белгилади. Тўғри бўлса, тасдиқланг — гилам кейинроқ олиб кетилади. Ҳозир бермоқчи бўлсангиз, «Ҳозир бераман» тугмасини босинг.' },
-    uz_Latn: { title: 'Kuryer gilamni ola olmadimi?', body: 'Kuryer «gilamni olib bo\'lmadi» deb belgiladi. To\'g\'ri bo\'lsa, tasdiqlang — gilam keyinroq olib ketiladi. Hozir bermoqchi bo\'lsangiz, «Hozir beraman» tugmasini bosing.' },
+    uz_Latn: { title: 'Kuryer gilamni ola olmadimi?', body: 'Kuryer «gilamni olib bölmadi» deb belgiladi. Töğri bölsa, tasdiqlang — gilam keyinroq olib ketiladi. Hozir bermoqçi bölsangiz, «Hozir beraman» tugmasini bosing.' },
     ru: { title: 'Курьер не смог забрать ковёр?', body: 'Курьер отметил, что не смог забрать ковёр. Если это так, подтвердите — ковёр заберут позже. Если хотите передать его сейчас, нажмите «Передам сейчас».' },
   },
   confirm_carpet_return_failed: {
     uz_Cyrl: { title: 'Курьер гиламни топшира олмадими?', body: 'Курьер «гиламни топшириб бўлмади» деб белгилади. Тўғри бўлса, тасдиқланг — гилам цехга қайтади ва қайта етказилади. Олмоқчи бўлсангиз, «Олмоқчиман» тугмасини босинг.' },
-    uz_Latn: { title: 'Kuryer gilamni topshira olmadimi?', body: 'Kuryer «gilamni topshirib bo\'lmadi» deb belgiladi. To\'g\'ri bo\'lsa, tasdiqlang — gilam sexga qaytadi va qayta yetkaziladi. Olmoqchi bo\'lsangiz, «Olmoqchiman» tugmasini bosing.' },
+    uz_Latn: { title: 'Kuryer gilamni topşira olmadimi?', body: 'Kuryer «gilamni topşirib bölmadi» deb belgiladi. Töğri bölsa, tasdiqlang — gilam sexga qaytadi va qayta yetkaziladi. Olmoqçi bölsangiz, «Olmoqçiman» tugmasini bosing.' },
     ru: { title: 'Курьер не смог вернуть ковёр?', body: 'Курьер отметил, что не смог передать ковёр. Если это так, подтвердите — ковёр вернётся в цех и будет доставлен повторно. Если хотите получить его, нажмите «Хочу получить».' },
   },
   confirm_agro_pickup_failed: {
     uz_Cyrl: { title: 'Курьер маҳсулотни ола олмадими?', body: 'Курьер «маҳсулотни олиб бўлмади» деб белгилади. Тўғри бўлса, тасдиқланг — маҳсулот кейинроқ олиб кетилади. Ҳозир бермоқчи бўлсангиз, «Ҳозир бераман» тугмасини босинг.' },
-    uz_Latn: { title: 'Kuryer mahsulotni ola olmadimi?', body: 'Kuryer «mahsulotni olib bo\'lmadi» deb belgiladi. To\'g\'ri bo\'lsa, tasdiqlang — mahsulot keyinroq olib ketiladi. Hozir bermoqchi bo\'lsangiz, «Hozir beraman» tugmasini bosing.' },
+    uz_Latn: { title: 'Kuryer mahsulotni ola olmadimi?', body: 'Kuryer «mahsulotni olib bölmadi» deb belgiladi. Töğri bölsa, tasdiqlang — mahsulot keyinroq olib ketiladi. Hozir bermoqçi bölsangiz, «Hozir beraman» tugmasini bosing.' },
     ru: { title: 'Курьер не смог забрать продукцию?', body: 'Курьер отметил, что не смог забрать продукцию. Если это так, подтвердите — её заберут позже. Если хотите передать её сейчас, нажмите «Передам сейчас».' },
   },
   confirm_collection_failed: {
     uz_Cyrl: { title: 'Курьер маҳсулотни ола олмадими?', body: 'Курьер «йиғиб олиш бўлмади» деб белгилади. Тўғри бўлса, тасдиқланг — админ янги вақт белгилайди. Ҳозир бермоқчи бўлсангиз, «Ҳозир бераман» тугмасини босинг.' },
-    uz_Latn: { title: 'Kuryer mahsulotni ola olmadimi?', body: 'Kuryer «yig\'ib olish bo\'lmadi» deb belgiladi. To\'g\'ri bo\'lsa, tasdiqlang — admin yangi vaqt belgilaydi. Hozir bermoqchi bo\'lsangiz, «Hozir beraman» tugmasini bosing.' },
+    uz_Latn: { title: 'Kuryer mahsulotni ola olmadimi?', body: 'Kuryer «yiğib oliş bölmadi» deb belgiladi. Töğri bölsa, tasdiqlang — admin yangi vaqt belgilaydi. Hozir bermoqçi bölsangiz, «Hozir beraman» tugmasini bosing.' },
     ru: { title: 'Курьер не смог забрать продукцию?', body: 'Курьер отметил, что сбор не состоялся. Если это так, подтвердите — администратор назначит новое время. Если хотите передать продукцию сейчас, нажмите «Передам сейчас».' },
   },
   delivery_failed_decide: {
     uz_Cyrl: { title: 'Курьер вазифаси бўйича қарор керак', body: 'Курьер вазифани бажара олмаганини белгилади, мижоз жавоб бермади. «Етказилмади» ёки «Давом этсин» — ҳал қилинг.' },
-    uz_Latn: { title: 'Kuryer vazifasi bo\'yicha qaror kerak', body: 'Kuryer vazifani bajara olmaganini belgiladi, mijoz javob bermadi. «Yetkazilmadi» yoki «Davom etsin» — hal qiling.' },
+    uz_Latn: { title: 'Kuryer vazifasi böyiça qaror kerak', body: 'Kuryer vazifani bajara olmaganini belgiladi, mijoz javob bermadi. «Yetkazilmadi» yoki «Davom etsin» — hal qiling.' },
     ru: { title: 'Нужно решение по заданию курьера', body: 'Курьер отметил, что не смог выполнить задание, а клиент не ответил. Решите: «Не доставлено» или «Продолжить».' },
   },
   customer_order_delivery_failed_refund: {
     uz_Cyrl: { title: 'Буюртма етказилмади — пул қайтарилди', body: 'Буюртма бекор қилинди. Ҳамёндан тўланган {amount} сўм ҳисобингизга қайтарилди.' },
-    uz_Latn: { title: 'Buyurtma yetkazilmadi — pul qaytarildi', body: 'Buyurtma bekor qilindi. Hamyondan to\'langan {amount} so\'m hisobingizga qaytarildi.' },
+    uz_Latn: { title: 'Buyurtma yetkazilmadi — pul qaytarildi', body: 'Buyurtma bekor qilindi. Hamyondan tölangan {amount} söm hisobingizga qaytarildi.' },
     ru: { title: 'Заказ не доставлен — деньги возвращены', body: 'Заказ отменён. Оплаченные с кошелька {amount} сум возвращены на ваш счёт.' },
   },
   customer_pickup_failed_final: {
     uz_Cyrl: { title: 'Курьер олиб кета олмади', body: 'Буюртмангиз қайта навбатга қўйилди — курьер қайта келади.' },
-    uz_Latn: { title: 'Kuryer olib keta olmadi', body: 'Buyurtmangiz qayta navbatga qo\'yildi — kuryer qayta keladi.' },
+    uz_Latn: { title: 'Kuryer olib keta olmadi', body: 'Buyurtmangiz qayta navbatga qöyildi — kuryer qayta keladi.' },
     ru: { title: 'Курьер не смог забрать', body: 'Ваш заказ снова поставлен в очередь — курьер приедет ещё раз.' },
   },
   customer_carpet_return_failed_final: {
     uz_Cyrl: { title: 'Гилам топширилмади', body: 'Гиламингиз цехга қайтарилди ва қайта етказилади.' },
-    uz_Latn: { title: 'Gilam topshirilmadi', body: 'Gilamingiz sexga qaytarildi va qayta yetkaziladi.' },
+    uz_Latn: { title: 'Gilam topşirilmadi', body: 'Gilamingiz sexga qaytarildi va qayta yetkaziladi.' },
     ru: { title: 'Ковёр не передан', body: 'Ваш ковёр возвращён в цех и будет доставлен повторно.' },
   },
   customer_collection_failed_final: {
     uz_Cyrl: { title: 'Йиғиб олиш бўлмади', body: 'Курьер маҳсулотни ола олмади. Админ янги вақт белгилайди.' },
-    uz_Latn: { title: 'Yig\'ib olish bo\'lmadi', body: 'Kuryer mahsulotni ola olmadi. Admin yangi vaqt belgilaydi.' },
+    uz_Latn: { title: 'Yiğib oliş bölmadi', body: 'Kuryer mahsulotni ola olmadi. Admin yangi vaqt belgilaydi.' },
     ru: { title: 'Сбор не состоялся', body: 'Курьер не смог забрать продукцию. Администратор назначит новое время.' },
   },
   // ── Топшириш (эга, 2026-10-31). Матнлар PROPOSED — эга тасдиқлайди.
   courier_handover_done: {
     uz_Cyrl: { title: 'Буюртма топширилди', body: 'Буюртма бошқа курьерга топширилди. Ҳақингиз масофа улушига қараб ҳисобланади.' },
-    uz_Latn: { title: 'Buyurtma topshirildi', body: 'Buyurtma boshqa kuryerga topshirildi. Haqingiz masofa ulushiga qarab hisoblanadi.' },
+    uz_Latn: { title: 'Buyurtma topşirildi', body: 'Buyurtma boşqa kuryerga topşirildi. Haqingiz masofa uluşiga qarab hisoblanadi.' },
     ru: { title: 'Заказ передан', body: 'Заказ передан другому курьеру. Ваша оплата рассчитывается по доле пройденного расстояния.' },
   },
   customer_courier_changed: {
     uz_Cyrl: { title: 'Курьер алмашди', body: 'Буюртмангизни энди бошқа курьер етказади.' },
-    uz_Latn: { title: 'Kuryer almashdi', body: 'Buyurtmangizni endi boshqa kuryer yetkazadi.' },
+    uz_Latn: { title: 'Kuryer almaşdi', body: 'Buyurtmangizni endi boşqa kuryer yetkazadi.' },
     ru: { title: 'Курьер сменился', body: 'Ваш заказ теперь доставит другой курьер.' },
   },
   courier_return_done: {
@@ -205,12 +205,12 @@ const MESSAGES = {
   },
   customer_no_courier_cancel: {
     uz_Cyrl: { title: 'Буюртма бекор қилинди', body: 'Буюртмангиз учун курьер топилмади, буюртма бекор қилинди.' },
-    uz_Latn: { title: 'Buyurtma bekor qilindi', body: 'Buyurtmangiz uchun kuryer topilmadi, buyurtma bekor qilindi.' },
+    uz_Latn: { title: 'Buyurtma bekor qilindi', body: 'Buyurtmangiz uçun kuryer topilmadi, buyurtma bekor qilindi.' },
     ru: { title: 'Заказ отменён', body: 'Для вашего заказа не нашёлся курьер, заказ отменён.' },
   },
   customer_no_courier_cancel_prepaid: {
     uz_Cyrl: { title: 'Буюртма бекор қилинди', body: 'Буюртмангиз учун курьер топилмади, буюртма бекор қилинди. Олдиндан тўлаган пулингизни қайтариш учун ресторанга хабар берилди.' },
-    uz_Latn: { title: 'Buyurtma bekor qilindi', body: 'Buyurtmangiz uchun kuryer topilmadi, buyurtma bekor qilindi. Oldindan to\'lagan pulingizni qaytarish uchun restoranga xabar berildi.' },
+    uz_Latn: { title: 'Buyurtma bekor qilindi', body: 'Buyurtmangiz uçun kuryer topilmadi, buyurtma bekor qilindi. Oldindan tölagan pulingizni qaytariş uçun restoranga xabar berildi.' },
     ru: { title: 'Заказ отменён', body: 'Для вашего заказа не нашёлся курьер, заказ отменён. Ресторан уведомлён о возврате вашей предоплаты.' },
   },
   restaurant_no_courier_cancel: {
@@ -220,7 +220,7 @@ const MESSAGES = {
   },
   restaurant_no_courier_cancel_prepaid: {
     uz_Cyrl: { title: 'Буюртма бекор қилинди — пулни қайтаринг', body: 'Қайтарилган буюртмага 30 дақиқада курьер топилмади. Мижоз олдиндан тўлаган — пулини мижозга қайтаринг. AVA ҳақи қайтарилди.' },
-    uz_Latn: { title: 'Buyurtma bekor qilindi — pulni qaytaring', body: 'Qaytarilgan buyurtmaga 30 daqiqada kuryer topilmadi. Mijoz oldindan to\'lagan — pulini mijozga qaytaring. AVA haqi qaytarildi.' },
+    uz_Latn: { title: 'Buyurtma bekor qilindi — pulni qaytaring', body: 'Qaytarilgan buyurtmaga 30 daqiqada kuryer topilmadi. Mijoz oldindan tölagan — pulini mijozga qaytaring. AVA haqi qaytarildi.' },
     ru: { title: 'Заказ отменён — верните деньги', body: 'Для возвращённого заказа за 30 минут не нашёлся курьер. Клиент внёс предоплату — верните ему деньги. Комиссия AVA возвращена.' },
   },
   confirm_carpet_pickup: {
@@ -242,7 +242,7 @@ const MESSAGES = {
   // `{amount}`, `{fee}`, `{buyout}` — сўм (бўшлиқ билан), `{min}` — дақиқа, `{km}` — масофа, `{name}` — объект номи.
   business_order_new: {
     uz_Cyrl: { title: 'Янги буюртма', body: '{amount} сўмлик буюртма. {min} дақиқа ичида қабул қилинг.' },
-    uz_Latn: { title: 'Yangi buyurtma', body: '{amount} so\'mlik buyurtma. {min} daqiqa ichida qabul qiling.' },
+    uz_Latn: { title: 'Yangi buyurtma', body: '{amount} sömlik buyurtma. {min} daqiqa içida qabul qiling.' },
     ru: { title: 'Новый заказ', body: 'Заказ на {amount} сум. Примите его в течение {min} мин.' },
   },
   business_order_cancelled: {
@@ -252,27 +252,27 @@ const MESSAGES = {
   },
   business_order_accepted: {
     uz_Cyrl: { title: 'Буюртма қабул қилинди', body: 'Сотувчи буюртмангизни тайёрламоқда. Курьер топилгач хабар берамиз.' },
-    uz_Latn: { title: 'Buyurtma qabul qilindi', body: 'Sotuvchi buyurtmangizni tayyorlamoqda. Kuryer topilgach xabar beramiz.' },
+    uz_Latn: { title: 'Buyurtma qabul qilindi', body: 'Sotuvçi buyurtmangizni tayyorlamoqda. Kuryer topilgaç xabar beramiz.' },
     ru: { title: 'Заказ принят', body: 'Продавец готовит ваш заказ. Сообщим, когда найдётся курьер.' },
   },
   business_order_rejected: {
     uz_Cyrl: { title: 'Буюртма рад этилди', body: 'Сотувчи буюртмани қабул қила олмади.' },
-    uz_Latn: { title: 'Buyurtma rad etildi', body: 'Sotuvchi buyurtmani qabul qila olmadi.' },
+    uz_Latn: { title: 'Buyurtma rad etildi', body: 'Sotuvçi buyurtmani qabul qila olmadi.' },
     ru: { title: 'Заказ отклонён', body: 'Продавец не смог принять заказ.' },
   },
   business_order_cancelled_courier: {
     uz_Cyrl: { title: 'Буюртма бекор бўлди', body: 'Сотувчи буюртмани бекор қилди — уни олиб кетиш шарт эмас.' },
-    uz_Latn: { title: 'Buyurtma bekor bo\'ldi', body: 'Sotuvchi buyurtmani bekor qildi — uni olib ketish shart emas.' },
+    uz_Latn: { title: 'Buyurtma bekor böldi', body: 'Sotuvçi buyurtmani bekor qildi — uni olib ketiş şart emas.' },
     ru: { title: 'Заказ отменён', body: 'Продавец отменил заказ — забирать его не нужно.' },
   },
   business_order_ready_courier: {
     uz_Cyrl: { title: 'Буюртма тайёр', body: 'Сотувчидан олиб кетишингиз мумкин.' },
-    uz_Latn: { title: 'Buyurtma tayyor', body: 'Sotuvchidan olib ketishingiz mumkin.' },
+    uz_Latn: { title: 'Buyurtma tayyor', body: 'Sotuvçidan olib ketişingiz mumkin.' },
     ru: { title: 'Заказ готов', body: 'Можно забрать у продавца.' },
   },
   business_order_courier_assigned_seller: {
     uz_Cyrl: { title: 'Курьер бириктирилди', body: 'Курьер буюртмани олиб кетишга келмоқда.' },
-    uz_Latn: { title: 'Kuryer biriktirildi', body: 'Kuryer buyurtmani olib ketishga kelmoqda.' },
+    uz_Latn: { title: 'Kuryer biriktirildi', body: 'Kuryer buyurtmani olib ketişga kelmoqda.' },
     ru: { title: 'Курьер назначен', body: 'Курьер едет забрать заказ.' },
   },
   business_order_courier_assigned: {
@@ -282,60 +282,60 @@ const MESSAGES = {
   },
   business_order_picked: {
     uz_Cyrl: { title: 'Буюртма йўлда', body: 'Курьер буюртмани сотувчидан олди.' },
-    uz_Latn: { title: 'Buyurtma yo\'lda', body: 'Kuryer buyurtmani sotuvchidan oldi.' },
+    uz_Latn: { title: 'Buyurtma yölda', body: 'Kuryer buyurtmani sotuvçidan oldi.' },
     ru: { title: 'Заказ в пути', body: 'Курьер забрал заказ у продавца.' },
   },
   business_order_delivered: {
     uz_Cyrl: { title: 'Буюртма етказилди', body: 'Харидингиз учун раҳмат!' },
-    uz_Latn: { title: 'Buyurtma yetkazildi', body: 'Xaridingiz uchun rahmat!' },
+    uz_Latn: { title: 'Buyurtma yetkazildi', body: 'Xaridingiz uçun rahmat!' },
     ru: { title: 'Заказ доставлен', body: 'Спасибо за покупку!' },
   },
   business_order_delivered_seller: {
     uz_Cyrl: { title: 'Буюртма етказилди', body: 'Курьер буюртмани мижозга топширди.' },
-    uz_Latn: { title: 'Buyurtma yetkazildi', body: 'Kuryer buyurtmani mijozga topshirdi.' },
+    uz_Latn: { title: 'Buyurtma yetkazildi', body: 'Kuryer buyurtmani mijozga topşirdi.' },
     ru: { title: 'Заказ доставлен', body: 'Курьер передал заказ клиенту.' },
   },
   business_order_expired: {
     uz_Cyrl: { title: 'Сотувчи жавоб бермади', body: 'Буюртма қабул қилинмади. Бошқа сотувчини танлаб кўринг.' },
-    uz_Latn: { title: 'Sotuvchi javob bermadi', body: 'Buyurtma qabul qilinmadi. Boshqa sotuvchini tanlab ko\'ring.' },
+    uz_Latn: { title: 'Sotuvçi javob bermadi', body: 'Buyurtma qabul qilinmadi. Boşqa sotuvçini tanlab köring.' },
     ru: { title: 'Продавец не ответил', body: 'Заказ не был принят. Попробуйте выбрать другого продавца.' },
   },
   business_order_expired_seller: {
     uz_Cyrl: { title: 'Буюртма ўтказиб юборилди', body: 'Буюртма вақтида қабул қилинмагани учун бекор бўлди.' },
-    uz_Latn: { title: 'Buyurtma o\'tkazib yuborildi', body: 'Buyurtma vaqtida qabul qilinmagani uchun bekor bo\'ldi.' },
+    uz_Latn: { title: 'Buyurtma ötkazib yuborildi', body: 'Buyurtma vaqtida qabul qilinmagani uçun bekor böldi.' },
     ru: { title: 'Заказ пропущен', body: 'Заказ отменён, так как не был принят вовремя.' },
   },
   business_courier_offer: {
     uz_Cyrl: { title: 'Янги етказиш буюртмаси', body: '{name} · {km} км · етказиш {fee} сўм · выкуп {buyout} сўм' },
-    uz_Latn: { title: 'Yangi yetkazish buyurtmasi', body: '{name} · {km} km · yetkazish {fee} so\'m · vykup {buyout} so\'m' },
+    uz_Latn: { title: 'Yangi yetkaziş buyurtmasi', body: '{name} · {km} km · yetkaziş {fee} söm · vykup {buyout} söm' },
     ru: { title: 'Новый заказ на доставку', body: '{name} · {km} км · доставка {fee} сум · выкуп {buyout} сум' },
   },
   // «Бозорлар» STAGE 11 — катта маиший техника етказиш нархи сўрови (delivery_quotes.js, эга 2026-11-16).
   delivery_quote_request_courier: {
     uz_Cyrl: { title: 'Етказиш нархини сўрашмоқда', body: '{title} · {name} · {km} км. Нархни ёзинг — биринчи жавоб қабул қилинади.' },
-    uz_Latn: { title: 'Yetkazish narxini so\'rashmoqda', body: '{title} · {name} · {km} km. Narxni yozing — birinchi javob qabul qilinadi.' },
+    uz_Latn: { title: 'Yetkaziş narxini söraşmoqda', body: '{title} · {name} · {km} km. Narxni yozing — birinçi javob qabul qilinadi.' },
     ru: { title: 'Запрос цены доставки', body: '{title} · {name} · {km} км. Укажите цену — принимается первый ответ.' },
   },
   delivery_quote_answered: {
     uz_Cyrl: { title: 'Етказиш нархи келди', body: '{title}: етказиш {price} сўм. Тасдиқласангиз, буюртма берилади.' },
-    uz_Latn: { title: 'Yetkazish narxi keldi', body: '{title}: yetkazish {price} so\'m. Tasdiqlasangiz, buyurtma beriladi.' },
+    uz_Latn: { title: 'Yetkaziş narxi keldi', body: '{title}: yetkaziş {price} söm. Tasdiqlasangiz, buyurtma beriladi.' },
     ru: { title: 'Цена доставки получена', body: '{title}: доставка {price} сум. Подтвердите, чтобы оформить заказ.' },
   },
   confirm_collection_finalize: {
     uz_Cyrl: { title: 'Курьер ёзган миқдорни тасдиқлайсизми?', body: 'Курьер қуйидагини ёзди: {summary}. Жами: {amount} сўм. Тўғри бўлса, тасдиқланг — шундан кейин ҳисоб-китоб амалга ошади.' },
-    uz_Latn: { title: 'Kuryer yozgan miqdorni tasdiqlaysizmi?', body: 'Kuryer quyidagini yozdi: {summary}. Jami: {amount} so\'m. To\'g\'ri bo\'lsa, tasdiqlang — shundan keyin hisob-kitob amalga oshadi.' },
+    uz_Latn: { title: 'Kuryer yozgan miqdorni tasdiqlaysizmi?', body: 'Kuryer quyidagini yozdi: {summary}. Jami: {amount} söm. Töğri bölsa, tasdiqlang — şundan keyin hisob-kitob amalga oşadi.' },
     ru: { title: 'Подтверждаете количество, указанное курьером?', body: 'Курьер указал: {summary}. Итого: {amount} сум. Если всё верно, подтвердите — после этого будет произведён расчёт.' },
   },
 
   // ── Улгуржи: харидор қарзини ҳамёндан тўлади (`payWholesaleBuyerDebt`, эга 2026-11-15, A вариант). Матн PROPOSED.
   ws_debt_paid_buyer: {
     uz_Cyrl: { title: 'Қарз тўланди', body: '{product}: {amount} сўм қарз AVA ҳамёнингиздан тўланди. Қарз ёпилди.' },
-    uz_Latn: { title: 'Qarz to\'landi', body: '{product}: {amount} so\'m qarz AVA hamyoningizdan to\'landi. Qarz yopildi.' },
+    uz_Latn: { title: 'Qarz tölandi', body: '{product}: {amount} söm qarz AVA hamyoningizdan tölandi. Qarz yopildi.' },
     ru: { title: 'Долг оплачен', body: '{product}: долг {amount} сум оплачен из вашего кошелька AVA. Долг закрыт.' },
   },
   ws_debt_paid_admin: {
     uz_Cyrl: { title: 'Улгуржи: харидор қарзини тўлади', body: 'Буюртма {orderId}: харидор {amount} сўм қарзни ҳамёндан тўлади.' },
-    uz_Latn: { title: 'Ulgurji: xaridor qarzini to\'ladi', body: 'Buyurtma {orderId}: xaridor {amount} so\'m qarzni hamyondan to\'ladi.' },
+    uz_Latn: { title: 'Ulgurji: xaridor qarzini töladi', body: 'Buyurtma {orderId}: xaridor {amount} söm qarzni hamyondan töladi.' },
     ru: { title: 'Оптовый рынок: покупатель оплатил долг', body: 'Заказ {orderId}: покупатель оплатил долг {amount} сум из кошелька.' },
   },
 };
@@ -350,29 +350,29 @@ Object.assign(MESSAGES, {
   },
   platform_order_handed_courier: {
     uz_Cyrl: { title: '🚚 Буюртмангиз курьерга топширилди', body: 'Курьерни кузатиш учун ҳаволага ўтинг.' },
-    uz_Latn: { title: '🚚 Buyurtmangiz kuryerga topshirildi', body: 'Kuryerni kuzatish uchun havolaga o\'ting.' },
+    uz_Latn: { title: '🚚 Buyurtmangiz kuryerga topşirildi', body: 'Kuryerni kuzatiş uçun havolaga öting.' },
     ru: { title: '🚚 Ваш заказ передан курьеру', body: 'Перейдите по ссылке, чтобы отследить курьера.' },
   },
   platform_seller_awaiting_courier: {
     uz_Cyrl: { title: '⏳ Буюртма курьерни кутмоқда', body: '{label} · №{no} · {amount} сўм. Курьер ҳали олмади.' },
-    uz_Latn: { title: '⏳ Buyurtma kuryerni kutmoqda', body: '{label} · №{no} · {amount} so\'m. Kuryer hali olmadi.' },
+    uz_Latn: { title: '⏳ Buyurtma kuryerni kutmoqda', body: '{label} · №{no} · {amount} söm. Kuryer hali olmadi.' },
     ru: { title: '⏳ Заказ ожидает курьера', body: '{label} · №{no} · {amount} сум. Курьер ещё не забрал.' },
   },
   platform_seller_handed_courier: {
     uz_Cyrl: { title: '🚚 Буюртма курьерга топширилди', body: '{label} · №{no}. Курьерни кузатиш учун ҳаволага ўтинг.' },
-    uz_Latn: { title: '🚚 Buyurtma kuryerga topshirildi', body: '{label} · №{no}. Kuryerni kuzatish uchun havolaga o\'ting.' },
+    uz_Latn: { title: '🚚 Buyurtma kuryerga topşirildi', body: '{label} · №{no}. Kuryerni kuzatiş uçun havolaga öting.' },
     ru: { title: '🚚 Заказ передан курьеру', body: '{label} · №{no}. Перейдите по ссылке, чтобы отследить курьера.' },
   },
   // Ҳудуддаги ОНЛАЙН курьерга «янги буюртма» (эга 2026-11-07: овоз + вибрация, канал `courier_new_order`).
   courier_new_order: {
     uz_Cyrl: { title: '🔔 Янги буюртма', body: '{label} · {amount} сўм{dist}. Курьер панелида олинг.' },
-    uz_Latn: { title: '🔔 Yangi buyurtma', body: '{label} · {amount} so\'m{dist}. Kuryer panelida oling.' },
+    uz_Latn: { title: '🔔 Yangi buyurtma', body: '{label} · {amount} söm{dist}. Kuryer panelida oling.' },
     ru: { title: '🔔 Новый заказ', body: '{label} · {amount} сум{dist}. Заберите в панели курьера.' },
   },
   // Диспетчер курьер жойини ўқий олмайди (rules `order_courier_live`: фақат админ) — ҳаволасиз.
   platform_seller_handed_courier_nolink: {
     uz_Cyrl: { title: '🚚 Буюртма курьерга топширилди', body: '{label} · №{no}. Курьер йўлда.' },
-    uz_Latn: { title: '🚚 Buyurtma kuryerga topshirildi', body: '{label} · №{no}. Kuryer yo\'lda.' },
+    uz_Latn: { title: '🚚 Buyurtma kuryerga topşirildi', body: '{label} · №{no}. Kuryer yölda.' },
     ru: { title: '🚚 Заказ передан курьеру', body: '{label} · №{no}. Курьер в пути.' },
   },
 });

@@ -1250,7 +1250,7 @@ async function notifyPlatformStaff(orderId, order, status) {
 
 /** Курьер хабари учун буюртма тури номи — уч тилда (ички атама йўқ). */
 const COURIER_ORDER_LABELS = Object.freeze({
-  platform: { uz_Cyrl: 'AVA дўкони', uz_Latn: 'AVA do\'koni', ru: 'Магазин AVA' },
+  platform: { uz_Cyrl: 'AVA дўкони', uz_Latn: 'AVA dökoni', ru: 'Магазин AVA' },
   bread: { uz_Cyrl: 'Нон', uz_Latn: 'Non', ru: 'Хлеб' },
 });
 
@@ -2777,7 +2777,7 @@ exports.creditChange = functions.https.onCall(async (data, context) => {
 const ENDPOINT_RETIRED = 'ENDPOINT_RETIRED';
 const ENDPOINT_RETIRED_MESSAGES = Object.freeze({
   uz_Cyrl: 'Бу амал эскирган ва ўчирилган. Иловани янгиланг.',
-  uz_Latn: "Bu amal eskirgan va o'chirilgan. Ilovani yangilang.",
+  uz_Latn: "Bu amal eskirgan va öçirilgan. Ilovani yangilang.",
   ru: 'Эта операция устарела и отключена. Обновите приложение.',
 });
 

@@ -8,7 +8,7 @@
  * Мослаштириш (тоза функция `matchProduct`):
  *   - кўп сўзли ибора (гуруҳ номи ёки synonym, масалан «кўк чой», «пахта ёғи») — 3 балл;
  *   - бир сўзли гуруҳ номи — 2; бир сўзли synonym — 1; бир нечта гуруҳда учрайдиган сўз («чой», «ёғ», «посуда») — 0.5;
- *   - ALIASES (пастда, PROPOSED — эга текширади) — 3;
+ *   - ALIASES (пастда; эга 2026-11-28 тасдиқлади — CONFIRMED) — 3;
  *   - сўз охиридаги ўзбекча қўшимча (-и, -си, -ни, -лар, ...) қабул қилинади: «уни» = «ун», «чойи» = «чой»;
  *   - энг юқори балл ягона ва ≥ 1 бўлса — мос; тенг бўлса AMBIGUOUS, йўқ бўлса NO_MATCH → ТЕГИЛМАЙДИ, рўйхатда чиқади;
  *   - EXCLUDE сўзи бор ном («тузланган», «қуриқ», ...) — EXCLUDED (фақат `--map` билан);
@@ -27,6 +27,8 @@
  *   node functions/tools/assign_supermarket_sample_groups.js --project <id> --map m.json         # DRY RUN + қўлда
  *   node functions/tools/assign_supermarket_sample_groups.js --project <id> [--map m.json] --apply
  *   node functions/tools/assign_supermarket_sample_groups.js --project <id> --rollback <f> [--apply]
+ *   node functions/tools/assign_supermarket_sample_groups.js --project <id> --taxonomy-file <v.json>  # DRY RUN: prod маҳсулотлари
+ *        + ФАЙЛДАГИ таксономия (янги гуруҳларни олдиндан кўриш). --apply билан ТАҚИҚЛАНГАН — ёзув фақат prod таксономия бўйича.
  *   ADC йўқ машинада: $env:GCLOUD_ACCESS_TOKEN = (gcloud auth print-access-token) — Firestore REST (токен лог'га чиқмайди).
  *   Эмулятор: FIRESTORE_EMULATOR_HOST=127.0.0.1:<port> ... --project demo-xxx
  */
@@ -43,8 +45,11 @@ const ACTOR = 'tool:assign_supermarket_sample_groups';
 const BACKUP_DIR = path.join(__dirname, 'backup');
 
 /**
- * Таксономияда йўқ, лекин «AVA» маҳсулот номларида учрайдиган сўзлар → гуруҳ (PROPOSED, эга 2026-11-28 текширади).
- * «семичка мойи» — кунгабоқар (писта) ёғи; «мойка» — идиш ювиш воситаси.
+ * Таксономияда йўқ, лекин «AVA» маҳсулот номларида учрайдиган сўзлар → гуруҳ.
+ * CONFIRMED (эга 2026-11-28: «тўғри»): «семичка мойи» → sunflower_oil, «мойка» → dish_wash; таксономия синоними орқали
+ * «горох» → chickpea ва «Океан … ювиш гели» → laundry (synonym «гель») ҳам тасдиқланган.
+ * Таксономия v2 (supermarket_taxonomy_v4.json, эга 2026-11-28 «қўш») янги гуруҳлари ўз синонимлари билан мос келади:
+ * Перловка → pearl_barley, Фунчоза → funchoza, Пишевая сода → baking_soda, Гугурт / резина қўлқоп / банка қопқоғи → small_household.
  */
 const ALIASES = Object.freeze({
   семичка: 'sunflower_oil',
@@ -313,6 +318,13 @@ async function commitInChunks(store, ops, label) {
   return { done, failedChunks };
 }
 
+/** Таксономия файли ({categories}) — фақат симуляция (DRY RUN). */
+function loadTaxonomyFile(file) {
+  const t = JSON.parse(fs.readFileSync(path.resolve(file), 'utf8'));
+  if (!t || !Array.isArray(t.categories)) throw new Error('--taxonomy-file: {categories:[...]} kerak');
+  return t;
+}
+
 function loadMap(file) {
   if (!file) return {};
   const m = JSON.parse(fs.readFileSync(path.resolve(file), 'utf8'));
@@ -322,8 +334,10 @@ function loadMap(file) {
 
 async function assign(store, args, { backupDir = BACKUP_DIR, now = Date.now() } = {}) {
   console.log(`${args.apply ? 'APPLY' : 'DRY RUN'} — loyiha ${args.project} (${store.label})`);
-  const taxonomy = await store.taxonomy();
-  if (!taxonomy) throw new Error(`${TAXONOMY_PATH} йўқ — аввал seed_supermarket.js`);
+  const prodTaxonomy = await store.taxonomy();
+  if (!prodTaxonomy) throw new Error(`${TAXONOMY_PATH} йўқ — аввал seed_supermarket.js`);
+  const taxonomy = args.taxonomyFile ? loadTaxonomyFile(args.taxonomyFile) : prodTaxonomy;
+  if (args.taxonomyFile) console.log(`SIMULYATSIYA: taksonomiya fayldan (${args.taxonomyFile}); prod taxonomy/supermarket v${prodTaxonomy.version || '?'}`);
   const docs = await store.listAll();
   const rows = planAssign(docs, taxonomy, loadMap(args.map));
   const groupName = buildIndex(taxonomy).groups;
@@ -386,7 +400,7 @@ function parseArgs(argv) {
     if (i < 0) return undefined;
     return argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[i + 1] : '';
   };
-  return { apply: argv.includes('--apply'), project: val('--project'), map: val('--map'), rollback: val('--rollback') };
+  return { apply: argv.includes('--apply'), project: val('--project'), map: val('--map'), rollback: val('--rollback'), taxonomyFile: val('--taxonomy-file') };
 }
 
 async function main(argv = process.argv.slice(2)) {
@@ -394,6 +408,8 @@ async function main(argv = process.argv.slice(2)) {
   if (!args.project) throw new Error('--project <id> majburiy (DRY RUN сукут, --apply — ёзиш)');
   if (args.map === '') throw new Error('--map <file.json> fayli berilmadi');
   if (args.rollback === '') throw new Error('--rollback <backup.json> fayli berilmadi');
+  if (args.taxonomyFile === '') throw new Error('--taxonomy-file <v.json> fayli berilmadi');
+  if (args.taxonomyFile && (args.apply || args.rollback)) throw new Error('--taxonomy-file faqat DRY RUN uchun (--apply/--rollback bilan emas): avval taksonomiyani prodga ko\'taring');
   const store = (!process.env.FIRESTORE_EMULATOR_HOST && process.env.GCLOUD_ACCESS_TOKEN)
     ? restStore(args.project, process.env.GCLOUD_ACCESS_TOKEN)
     : sdkStore(args.project);
@@ -404,4 +420,4 @@ if (require.main === module) {
   main().catch((e) => { console.error(e.message || e); process.exit(1); });
 }
 
-module.exports = { ALIASES, EXCLUDE, normalize, tokenize, tokenMatches, buildIndex, matchProduct, planAssign, planRollback };
+module.exports = { ALIASES, EXCLUDE, normalize, tokenize, tokenMatches, buildIndex, matchProduct, planAssign, planRollback, parseArgs, main };

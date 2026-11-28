@@ -1,0 +1,1992 @@
+{
+  "categories": [
+    {
+      "id": "meat_fish",
+      "order": 10,
+      "icon": "meat",
+      "names": {
+        "uz_Cyrl": "Гўшт ва балиқ",
+        "uz_Latn": "Göşt va baliq",
+        "ru": "Мясо и рыба"
+      },
+      "groups": [
+        {
+          "id": "beef",
+          "order": 10,
+          "names": {
+            "uz_Cyrl": "Мол гўшти",
+            "uz_Latn": "Mol göşti",
+            "ru": "Говядина"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": true,
+          "synonyms": [
+            "мол",
+            "гўшт",
+            "говядина",
+            "мясо"
+          ],
+          "pairs": [
+            "onion",
+            "carrot",
+            "rice",
+            "cottonseed_oil"
+          ]
+        },
+        {
+          "id": "mutton",
+          "order": 20,
+          "names": {
+            "uz_Cyrl": "Қўй гўшти",
+            "uz_Latn": "Qöy göşti",
+            "ru": "Баранина"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": true,
+          "synonyms": [
+            "қўй",
+            "гўшт",
+            "баранина",
+            "мясо"
+          ],
+          "pairs": [
+            "onion",
+            "carrot",
+            "rice",
+            "cottonseed_oil"
+          ]
+        },
+        {
+          "id": "chicken",
+          "order": 30,
+          "names": {
+            "uz_Cyrl": "Товуқ гўшти",
+            "uz_Latn": "Tovuq göşti",
+            "ru": "Курица"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": true,
+          "synonyms": [
+            "товуқ",
+            "курица",
+            "куриное",
+            "бройлер"
+          ],
+          "pairs": [
+            "onion",
+            "potato",
+            "sunflower_oil"
+          ]
+        },
+        {
+          "id": "fish",
+          "order": 40,
+          "names": {
+            "uz_Cyrl": "Балиқ",
+            "uz_Latn": "Baliq",
+            "ru": "Рыба"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": true,
+          "synonyms": [
+            "балиқ",
+            "рыба",
+            "сазан",
+            "лаққа"
+          ],
+          "pairs": [
+            "lemon",
+            "sunflower_oil"
+          ]
+        },
+        {
+          "id": "liver",
+          "order": 50,
+          "names": {
+            "uz_Cyrl": "Жигар",
+            "uz_Latn": "Jigar",
+            "ru": "Печень"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": true,
+          "synonyms": [
+            "жигар",
+            "печень",
+            "субпродукт"
+          ],
+          "pairs": [
+            "onion"
+          ]
+        },
+        {
+          "id": "mince",
+          "order": 60,
+          "names": {
+            "uz_Cyrl": "Қийма",
+            "uz_Latn": "Qiyma",
+            "ru": "Фарш"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": true,
+          "synonyms": [
+            "қийма",
+            "фарш"
+          ],
+          "pairs": [
+            "onion",
+            "pasta",
+            "tomato_paste"
+          ]
+        },
+        {
+          "id": "sausage",
+          "order": 70,
+          "names": {
+            "uz_Cyrl": "Колбаса маҳсулотлари",
+            "uz_Latn": "Kolbasa mahsulotlari",
+            "ru": "Колбасные изделия"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": true,
+          "synonyms": [
+            "колбаса",
+            "сосиска",
+            "сарделька",
+            "ветчина"
+          ]
+        },
+        {
+          "id": "frozen_semi",
+          "order": 80,
+          "names": {
+            "uz_Cyrl": "Музлатилган ярим тайёр маҳсулотлар",
+            "uz_Latn": "Muzlatilgan yarim tayyor mahsulotlar",
+            "ru": "Замороженные полуфабрикаты"
+          },
+          "unit": "pack",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "чучвара",
+            "пельмени",
+            "манти",
+            "котлета",
+            "полуфабрикат"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "grain_flour",
+      "order": 20,
+      "icon": "grain",
+      "names": {
+        "uz_Cyrl": "Дон ва ун",
+        "uz_Latn": "Don va un",
+        "ru": "Крупы и мука"
+      },
+      "groups": [
+        {
+          "id": "rice",
+          "order": 10,
+          "names": {
+            "uz_Cyrl": "Гуруч",
+            "uz_Latn": "Guruç",
+            "ru": "Рис"
+          },
+          "unit": "kg",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "гуруч",
+            "рис",
+            "девзира",
+            "лазер"
+          ],
+          "pairs": [
+            "carrot",
+            "onion",
+            "cottonseed_oil",
+            "beef"
+          ]
+        },
+        {
+          "id": "flour",
+          "order": 20,
+          "names": {
+            "uz_Cyrl": "Ун",
+            "uz_Latn": "Un",
+            "ru": "Мука"
+          },
+          "unit": "kg",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "ун",
+            "мука"
+          ],
+          "pairs": [
+            "sunflower_oil",
+            "chicken_eggs"
+          ]
+        },
+        {
+          "id": "bread",
+          "order": 30,
+          "names": {
+            "uz_Cyrl": "Нон",
+            "uz_Latn": "Non",
+            "ru": "Хлеб"
+          },
+          "unit": "piece",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "нон",
+            "хлеб",
+            "лепёшка",
+            "буханка"
+          ],
+          "pairs": [
+            "butter",
+            "cheese"
+          ]
+        },
+        {
+          "id": "pasta",
+          "order": 40,
+          "names": {
+            "uz_Cyrl": "Макарон",
+            "uz_Latn": "Makaron",
+            "ru": "Макароны"
+          },
+          "unit": "pack",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "макарон",
+            "макароны",
+            "вермишель",
+            "спагетти"
+          ],
+          "pairs": [
+            "cheese",
+            "tomato_paste"
+          ]
+        },
+        {
+          "id": "mung_bean",
+          "order": 50,
+          "names": {
+            "uz_Cyrl": "Мош",
+            "uz_Latn": "Moş",
+            "ru": "Маш"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": false,
+          "synonyms": [
+            "мош",
+            "маш"
+          ]
+        },
+        {
+          "id": "beans",
+          "order": 60,
+          "names": {
+            "uz_Cyrl": "Ловия",
+            "uz_Latn": "Loviya",
+            "ru": "Фасоль"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": false,
+          "synonyms": [
+            "ловия",
+            "фасоль"
+          ]
+        },
+        {
+          "id": "chickpea",
+          "order": 70,
+          "names": {
+            "uz_Cyrl": "Нўхат",
+            "uz_Latn": "Nöxat",
+            "ru": "Нут"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": false,
+          "synonyms": [
+            "нўхат",
+            "нут",
+            "горох"
+          ]
+        },
+        {
+          "id": "buckwheat",
+          "order": 80,
+          "names": {
+            "uz_Cyrl": "Гречка",
+            "uz_Latn": "Greçka",
+            "ru": "Гречка"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": false,
+          "synonyms": [
+            "гречка",
+            "гречиха"
+          ]
+        },
+        {
+          "id": "semolina",
+          "order": 90,
+          "names": {
+            "uz_Cyrl": "Манний ёрма",
+            "uz_Latn": "Manniy yorma",
+            "ru": "Манная крупа"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": false,
+          "synonyms": [
+            "манний",
+            "манка",
+            "манная"
+          ]
+        },
+        {
+          "id": "corn_grits",
+          "order": 100,
+          "names": {
+            "uz_Cyrl": "Жўхори ёрмаси",
+            "uz_Latn": "Jöxori yormasi",
+            "ru": "Кукурузная крупа"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": false,
+          "synonyms": [
+            "жўхори",
+            "кукуруза",
+            "кукурузная"
+          ]
+        },
+        {
+          "id": "oat_flakes",
+          "order": 110,
+          "names": {
+            "uz_Cyrl": "Сули ёрмаси",
+            "uz_Latn": "Suli yormasi",
+            "ru": "Овсяные хлопья"
+          },
+          "unit": "pack",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "сули",
+            "геркулес",
+            "овсянка",
+            "овсяные"
+          ]
+        },
+        {
+          "id": "wheat_grits",
+          "order": 120,
+          "names": {
+            "uz_Cyrl": "Бўғдой ёрмаси",
+            "uz_Latn": "Buğdoy yormasi",
+            "ru": "Пшеничная крупа"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": false,
+          "synonyms": [
+            "бўғдой",
+            "пшеница",
+            "пшеничная",
+            "булгур"
+          ]
+        },
+        {
+          "id": "pearl_barley",
+          "order": 130,
+          "names": {
+            "uz_Cyrl": "Перловка",
+            "uz_Latn": "Perlovka",
+            "ru": "Перловка"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": false,
+          "synonyms": [
+            "перловка",
+            "perlovka",
+            "перловая",
+            "арпа",
+            "arpa",
+            "арпа ёрмаси",
+            "ячмень",
+            "ячневая"
+          ]
+        },
+        {
+          "id": "funchoza",
+          "order": 140,
+          "names": {
+            "uz_Cyrl": "Фунчоза ва лапша",
+            "uz_Latn": "Funçoza va lapşa",
+            "ru": "Фунчоза и лапша"
+          },
+          "unit": "pack",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "фунчоза",
+            "funchoza",
+            "funçoza",
+            "фунчеза",
+            "лапша",
+            "lapsha",
+            "lapşa",
+            "рисовая лапша",
+            "крахмальная лапша"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "vegetables",
+      "order": 30,
+      "icon": "vegetable",
+      "names": {
+        "uz_Cyrl": "Сабзавотлар",
+        "uz_Latn": "Sabzavotlar",
+        "ru": "Овощи"
+      },
+      "groups": [
+        {
+          "id": "potato",
+          "order": 10,
+          "names": {
+            "uz_Cyrl": "Картошка",
+            "uz_Latn": "Kartoşka",
+            "ru": "Картофель"
+          },
+          "unit": "kg",
+          "step": 1,
+          "weighed": true,
+          "synonyms": [
+            "картошка",
+            "картофель",
+            "kartoshka"
+          ],
+          "pairs": [
+            "onion",
+            "sunflower_oil",
+            "cottonseed_oil"
+          ]
+        },
+        {
+          "id": "onion",
+          "order": 20,
+          "names": {
+            "uz_Cyrl": "Пиёз",
+            "uz_Latn": "Piyoz",
+            "ru": "Лук репчатый"
+          },
+          "unit": "kg",
+          "step": 1,
+          "weighed": true,
+          "synonyms": [
+            "пиёз",
+            "лук"
+          ],
+          "pairs": [
+            "potato",
+            "carrot"
+          ]
+        },
+        {
+          "id": "carrot",
+          "order": 30,
+          "names": {
+            "uz_Cyrl": "Сабзи",
+            "uz_Latn": "Sabzi",
+            "ru": "Морковь"
+          },
+          "unit": "kg",
+          "step": 1,
+          "weighed": true,
+          "synonyms": [
+            "сабзи",
+            "морковь",
+            "сариқ сабзи"
+          ],
+          "pairs": [
+            "onion",
+            "rice"
+          ]
+        },
+        {
+          "id": "tomato",
+          "order": 40,
+          "names": {
+            "uz_Cyrl": "Помидор",
+            "uz_Latn": "Pomidor",
+            "ru": "Помидоры"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": true,
+          "synonyms": [
+            "помидор",
+            "томат",
+            "помидоры"
+          ],
+          "pairs": [
+            "cucumber",
+            "greens"
+          ]
+        },
+        {
+          "id": "cucumber",
+          "order": 50,
+          "names": {
+            "uz_Cyrl": "Бодринг",
+            "uz_Latn": "Bodring",
+            "ru": "Огурцы"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": true,
+          "synonyms": [
+            "бодринг",
+            "огурец",
+            "огурцы"
+          ],
+          "pairs": [
+            "tomato",
+            "greens"
+          ]
+        },
+        {
+          "id": "cabbage",
+          "order": 60,
+          "names": {
+            "uz_Cyrl": "Карам",
+            "uz_Latn": "Karam",
+            "ru": "Капуста"
+          },
+          "unit": "kg",
+          "step": 1,
+          "weighed": true,
+          "synonyms": [
+            "карам",
+            "капуста"
+          ]
+        },
+        {
+          "id": "bell_pepper",
+          "order": 70,
+          "names": {
+            "uz_Cyrl": "Булғор қалампири",
+            "uz_Latn": "Bulğor qalampiri",
+            "ru": "Болгарский перец"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": true,
+          "synonyms": [
+            "булғор",
+            "қалампир",
+            "перец",
+            "болгарский"
+          ]
+        },
+        {
+          "id": "eggplant",
+          "order": 80,
+          "names": {
+            "uz_Cyrl": "Бақлажон",
+            "uz_Latn": "Baqlajon",
+            "ru": "Баклажаны"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": true,
+          "synonyms": [
+            "бақлажон",
+            "баклажан",
+            "синий"
+          ]
+        },
+        {
+          "id": "pumpkin",
+          "order": 90,
+          "names": {
+            "uz_Cyrl": "Қовоқ",
+            "uz_Latn": "Qovoq",
+            "ru": "Тыква"
+          },
+          "unit": "kg",
+          "step": 1,
+          "weighed": true,
+          "synonyms": [
+            "қовоқ",
+            "тыква"
+          ]
+        },
+        {
+          "id": "beet",
+          "order": 100,
+          "names": {
+            "uz_Cyrl": "Лавлаги",
+            "uz_Latn": "Lavlagi",
+            "ru": "Свёкла"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": true,
+          "synonyms": [
+            "лавлаги",
+            "свёкла",
+            "свекла"
+          ]
+        },
+        {
+          "id": "garlic",
+          "order": 110,
+          "names": {
+            "uz_Cyrl": "Саримсоқ",
+            "uz_Latn": "Sarimsoq",
+            "ru": "Чеснок"
+          },
+          "unit": "kg",
+          "step": 0.1,
+          "weighed": true,
+          "synonyms": [
+            "саримсоқ",
+            "чеснок"
+          ]
+        },
+        {
+          "id": "radish",
+          "order": 120,
+          "names": {
+            "uz_Cyrl": "Турп",
+            "uz_Latn": "Turp",
+            "ru": "Редька"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": true,
+          "synonyms": [
+            "турп",
+            "редька",
+            "редис"
+          ]
+        },
+        {
+          "id": "greens",
+          "order": 130,
+          "names": {
+            "uz_Cyrl": "Кўкатлар",
+            "uz_Latn": "Kökatlar",
+            "ru": "Зелень"
+          },
+          "unit": "bunch",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "кўкат",
+            "укроп",
+            "петрушка",
+            "кинза",
+            "райҳон",
+            "зелень"
+          ]
+        },
+        {
+          "id": "green_onion",
+          "order": 140,
+          "names": {
+            "uz_Cyrl": "Кўк пиёз",
+            "uz_Latn": "Kök piyoz",
+            "ru": "Зелёный лук"
+          },
+          "unit": "bunch",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "кўк пиёз",
+            "зелёный лук",
+            "перо"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fruits_melons",
+      "order": 40,
+      "icon": "fruit",
+      "names": {
+        "uz_Cyrl": "Мева ва полиз",
+        "uz_Latn": "Meva va poliz",
+        "ru": "Фрукты и бахчевые"
+      },
+      "groups": [
+        {
+          "id": "apple",
+          "order": 10,
+          "names": {
+            "uz_Cyrl": "Олма",
+            "uz_Latn": "Olma",
+            "ru": "Яблоки"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": true,
+          "synonyms": [
+            "олма",
+            "яблоко",
+            "яблоки"
+          ]
+        },
+        {
+          "id": "banana",
+          "order": 20,
+          "names": {
+            "uz_Cyrl": "Банан",
+            "uz_Latn": "Banan",
+            "ru": "Бананы"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": true,
+          "synonyms": [
+            "банан",
+            "бананы"
+          ]
+        },
+        {
+          "id": "grape",
+          "order": 30,
+          "names": {
+            "uz_Cyrl": "Узум",
+            "uz_Latn": "Uzum",
+            "ru": "Виноград"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": true,
+          "synonyms": [
+            "узум",
+            "виноград"
+          ]
+        },
+        {
+          "id": "pear",
+          "order": 40,
+          "names": {
+            "uz_Cyrl": "Нок",
+            "uz_Latn": "Nok",
+            "ru": "Груши"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": true,
+          "synonyms": [
+            "нок",
+            "груша",
+            "груши"
+          ]
+        },
+        {
+          "id": "pomegranate",
+          "order": 50,
+          "names": {
+            "uz_Cyrl": "Анор",
+            "uz_Latn": "Anor",
+            "ru": "Гранат"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": true,
+          "synonyms": [
+            "анор",
+            "гранат"
+          ]
+        },
+        {
+          "id": "lemon",
+          "order": 60,
+          "names": {
+            "uz_Cyrl": "Лимон",
+            "uz_Latn": "Limon",
+            "ru": "Лимоны"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": true,
+          "synonyms": [
+            "лимон",
+            "лимоны"
+          ]
+        },
+        {
+          "id": "orange",
+          "order": 70,
+          "names": {
+            "uz_Cyrl": "Апельсин",
+            "uz_Latn": "Apelsin",
+            "ru": "Апельсины"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": true,
+          "synonyms": [
+            "апельсин",
+            "апельсины"
+          ]
+        },
+        {
+          "id": "mandarin",
+          "order": 80,
+          "names": {
+            "uz_Cyrl": "Мандарин",
+            "uz_Latn": "Mandarin",
+            "ru": "Мандарины"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": true,
+          "synonyms": [
+            "мандарин",
+            "мандарины"
+          ]
+        },
+        {
+          "id": "persimmon",
+          "order": 90,
+          "names": {
+            "uz_Cyrl": "Хурмо",
+            "uz_Latn": "Xurmo",
+            "ru": "Хурма"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": true,
+          "synonyms": [
+            "хурмо",
+            "хурма"
+          ]
+        },
+        {
+          "id": "quince",
+          "order": 100,
+          "names": {
+            "uz_Cyrl": "Беҳи",
+            "uz_Latn": "Behi",
+            "ru": "Айва"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": true,
+          "synonyms": [
+            "беҳи",
+            "айва"
+          ]
+        },
+        {
+          "id": "melon",
+          "order": 110,
+          "names": {
+            "uz_Cyrl": "Қовун",
+            "uz_Latn": "Qovun",
+            "ru": "Дыня"
+          },
+          "unit": "piece",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "қовун",
+            "дыня"
+          ]
+        },
+        {
+          "id": "watermelon",
+          "order": 120,
+          "names": {
+            "uz_Cyrl": "Тарвуз",
+            "uz_Latn": "Tarvuz",
+            "ru": "Арбуз"
+          },
+          "unit": "piece",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "тарвуз",
+            "арбуз"
+          ]
+        },
+        {
+          "id": "peach",
+          "order": 130,
+          "names": {
+            "uz_Cyrl": "Шафтоли",
+            "uz_Latn": "Şaftoli",
+            "ru": "Персики"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": true,
+          "synonyms": [
+            "шафтоли",
+            "персик",
+            "персики"
+          ]
+        },
+        {
+          "id": "apricot",
+          "order": 140,
+          "names": {
+            "uz_Cyrl": "Ўрик",
+            "uz_Latn": "Örik",
+            "ru": "Абрикосы"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": true,
+          "synonyms": [
+            "ўрик",
+            "абрикос",
+            "курага"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "oil_spices",
+      "order": 50,
+      "icon": "oil",
+      "names": {
+        "uz_Cyrl": "Ёғ ва зиравор",
+        "uz_Latn": "Yoğ va ziravor",
+        "ru": "Масло и специи"
+      },
+      "groups": [
+        {
+          "id": "cottonseed_oil",
+          "order": 10,
+          "names": {
+            "uz_Cyrl": "Пахта ёғи",
+            "uz_Latn": "Paxta yoği",
+            "ru": "Хлопковое масло"
+          },
+          "unit": "l",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "пахта ёғи",
+            "хлопковое",
+            "масло",
+            "ёғ"
+          ]
+        },
+        {
+          "id": "sunflower_oil",
+          "order": 20,
+          "names": {
+            "uz_Cyrl": "Кунгабоқар ёғи",
+            "uz_Latn": "Kungaboqar yoği",
+            "ru": "Подсолнечное масло"
+          },
+          "unit": "l",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "кунгабоқар",
+            "подсолнечное",
+            "масло",
+            "ёғ"
+          ]
+        },
+        {
+          "id": "butter",
+          "order": 30,
+          "names": {
+            "uz_Cyrl": "Сариёғ",
+            "uz_Latn": "Sariyoğ",
+            "ru": "Сливочное масло"
+          },
+          "unit": "pack",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "сариёғ",
+            "сливочное",
+            "масло"
+          ]
+        },
+        {
+          "id": "sugar",
+          "order": 40,
+          "names": {
+            "uz_Cyrl": "Шакар",
+            "uz_Latn": "Şakar",
+            "ru": "Сахар"
+          },
+          "unit": "kg",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "шакар",
+            "сахар",
+            "новвот"
+          ]
+        },
+        {
+          "id": "salt",
+          "order": 50,
+          "names": {
+            "uz_Cyrl": "Туз",
+            "uz_Latn": "Tuz",
+            "ru": "Соль"
+          },
+          "unit": "pack",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "туз",
+            "соль"
+          ]
+        },
+        {
+          "id": "green_tea",
+          "order": 60,
+          "names": {
+            "uz_Cyrl": "Кўк чой",
+            "uz_Latn": "Kök çoy",
+            "ru": "Зелёный чай"
+          },
+          "unit": "pack",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "кўк чой",
+            "чой",
+            "зелёный чай",
+            "чай"
+          ],
+          "pairs": [
+            "sugar"
+          ]
+        },
+        {
+          "id": "black_tea",
+          "order": 70,
+          "names": {
+            "uz_Cyrl": "Қора чой",
+            "uz_Latn": "Qora çoy",
+            "ru": "Чёрный чай"
+          },
+          "unit": "pack",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "қора чой",
+            "чой",
+            "чёрный чай",
+            "чай"
+          ],
+          "pairs": [
+            "sugar",
+            "lemon"
+          ]
+        },
+        {
+          "id": "cumin",
+          "order": 80,
+          "names": {
+            "uz_Cyrl": "Зира",
+            "uz_Latn": "Zira",
+            "ru": "Зира"
+          },
+          "unit": "kg",
+          "step": 0.1,
+          "weighed": true,
+          "synonyms": [
+            "зира",
+            "кумин",
+            "зиравор"
+          ]
+        },
+        {
+          "id": "black_pepper",
+          "order": 90,
+          "names": {
+            "uz_Cyrl": "Қора мурч",
+            "uz_Latn": "Qora murç",
+            "ru": "Чёрный перец"
+          },
+          "unit": "pack",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "мурч",
+            "перец",
+            "зиравор"
+          ]
+        },
+        {
+          "id": "tomato_paste",
+          "order": 100,
+          "names": {
+            "uz_Cyrl": "Томат пастаси",
+            "uz_Latn": "Tomat pastasi",
+            "ru": "Томатная паста"
+          },
+          "unit": "piece",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "томат",
+            "паста",
+            "томатная"
+          ]
+        },
+        {
+          "id": "honey",
+          "order": 110,
+          "names": {
+            "uz_Cyrl": "Асал",
+            "uz_Latn": "Asal",
+            "ru": "Мёд"
+          },
+          "unit": "piece",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "асал",
+            "мёд",
+            "мед"
+          ]
+        },
+        {
+          "id": "jam",
+          "order": 120,
+          "names": {
+            "uz_Cyrl": "Мураббо",
+            "uz_Latn": "Murabbo",
+            "ru": "Варенье"
+          },
+          "unit": "piece",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "мураббо",
+            "варенье",
+            "джем",
+            "повидло"
+          ]
+        },
+        {
+          "id": "baking_soda",
+          "order": 130,
+          "names": {
+            "uz_Cyrl": "Сода ва қабартгич",
+            "uz_Latn": "Soda va qabartgiç",
+            "ru": "Сода и разрыхлитель"
+          },
+          "unit": "pack",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "сода",
+            "soda",
+            "ош содаси",
+            "oş sodasi",
+            "пищевая сода",
+            "пишевая сода",
+            "разрыхлитель",
+            "қабартгич",
+            "qabartgiç",
+            "qabartgich",
+            "ванилин",
+            "vanilin"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dairy",
+      "order": 60,
+      "icon": "dairy",
+      "names": {
+        "uz_Cyrl": "Сут маҳсулотлари",
+        "uz_Latn": "Sut mahsulotlari",
+        "ru": "Молочные продукты"
+      },
+      "groups": [
+        {
+          "id": "milk",
+          "order": 10,
+          "names": {
+            "uz_Cyrl": "Сут",
+            "uz_Latn": "Sut",
+            "ru": "Молоко"
+          },
+          "unit": "l",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "сут",
+            "молоко"
+          ],
+          "pairs": [
+            "bread"
+          ]
+        },
+        {
+          "id": "katyk",
+          "order": 20,
+          "names": {
+            "uz_Cyrl": "Қатиқ",
+            "uz_Latn": "Qatiq",
+            "ru": "Катык"
+          },
+          "unit": "l",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "қатиқ",
+            "катык"
+          ],
+          "pairs": [
+            "bread"
+          ]
+        },
+        {
+          "id": "kefir",
+          "order": 30,
+          "names": {
+            "uz_Cyrl": "Кефир",
+            "uz_Latn": "Kefir",
+            "ru": "Кефир"
+          },
+          "unit": "l",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "кефир"
+          ]
+        },
+        {
+          "id": "cream",
+          "order": 40,
+          "names": {
+            "uz_Cyrl": "Қаймоқ",
+            "uz_Latn": "Qaymoq",
+            "ru": "Каймак"
+          },
+          "unit": "piece",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "қаймоқ",
+            "каймак",
+            "сливки"
+          ]
+        },
+        {
+          "id": "sour_cream",
+          "order": 50,
+          "names": {
+            "uz_Cyrl": "Сметана",
+            "uz_Latn": "Smetana",
+            "ru": "Сметана"
+          },
+          "unit": "piece",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "сметана"
+          ]
+        },
+        {
+          "id": "suzma",
+          "order": 60,
+          "names": {
+            "uz_Cyrl": "Сузма",
+            "uz_Latn": "Suzma",
+            "ru": "Сузьма"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": true,
+          "synonyms": [
+            "сузма",
+            "сузьма"
+          ]
+        },
+        {
+          "id": "cottage_cheese",
+          "order": 70,
+          "names": {
+            "uz_Cyrl": "Творог",
+            "uz_Latn": "Tvorog",
+            "ru": "Творог"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": true,
+          "synonyms": [
+            "творог",
+            "сузма"
+          ],
+          "pairs": [
+            "sour_cream"
+          ]
+        },
+        {
+          "id": "cheese",
+          "order": 80,
+          "names": {
+            "uz_Cyrl": "Пишлоқ",
+            "uz_Latn": "Pişloq",
+            "ru": "Сыр"
+          },
+          "unit": "kg",
+          "step": 0.25,
+          "weighed": true,
+          "synonyms": [
+            "пишлоқ",
+            "сыр",
+            "брынза"
+          ]
+        },
+        {
+          "id": "yogurt",
+          "order": 90,
+          "names": {
+            "uz_Cyrl": "Йогурт",
+            "uz_Latn": "Yogurt",
+            "ru": "Йогурт"
+          },
+          "unit": "piece",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "йогурт"
+          ]
+        },
+        {
+          "id": "ice_cream",
+          "order": 100,
+          "names": {
+            "uz_Cyrl": "Музқаймоқ",
+            "uz_Latn": "Muzqaymoq",
+            "ru": "Мороженое"
+          },
+          "unit": "piece",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "музқаймоқ",
+            "мороженое",
+            "пломбир"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "eggs",
+      "order": 70,
+      "icon": "egg",
+      "names": {
+        "uz_Cyrl": "Тухум",
+        "uz_Latn": "Tuxum",
+        "ru": "Яйца"
+      },
+      "groups": [
+        {
+          "id": "chicken_eggs",
+          "order": 10,
+          "names": {
+            "uz_Cyrl": "Товуқ тухуми",
+            "uz_Latn": "Tovuq tuxumi",
+            "ru": "Куриные яйца"
+          },
+          "unit": "pack",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "тухум",
+            "яйцо",
+            "яйца"
+          ],
+          "pairs": [
+            "bread",
+            "butter"
+          ]
+        },
+        {
+          "id": "quail_eggs",
+          "order": 20,
+          "names": {
+            "uz_Cyrl": "Бедана тухуми",
+            "uz_Latn": "Bedana tuxumi",
+            "ru": "Перепелиные яйца"
+          },
+          "unit": "pack",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "бедана",
+            "перепелиные",
+            "яйца"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "drinks",
+      "order": 80,
+      "icon": "drink",
+      "names": {
+        "uz_Cyrl": "Ичимликлар",
+        "uz_Latn": "Içimliklar",
+        "ru": "Напитки"
+      },
+      "groups": [
+        {
+          "id": "drinking_water",
+          "order": 10,
+          "names": {
+            "uz_Cyrl": "Ичимлик суви",
+            "uz_Latn": "Içimlik suvi",
+            "ru": "Питьевая вода"
+          },
+          "unit": "piece",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "сув",
+            "вода",
+            "питьевая"
+          ]
+        },
+        {
+          "id": "mineral_water",
+          "order": 20,
+          "names": {
+            "uz_Cyrl": "Минерал сув",
+            "uz_Latn": "Mineral suv",
+            "ru": "Минеральная вода"
+          },
+          "unit": "piece",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "минерал",
+            "минералка",
+            "газли сув"
+          ]
+        },
+        {
+          "id": "soda",
+          "order": 30,
+          "names": {
+            "uz_Cyrl": "Газли ичимликлар",
+            "uz_Latn": "Gazli içimliklar",
+            "ru": "Газированные напитки"
+          },
+          "unit": "piece",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "газли",
+            "газировка",
+            "лимонад",
+            "кола"
+          ]
+        },
+        {
+          "id": "fruit_juice",
+          "order": 40,
+          "names": {
+            "uz_Cyrl": "Мева шарбатлари",
+            "uz_Latn": "Meva şarbatlari",
+            "ru": "Фруктовые соки"
+          },
+          "unit": "piece",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "шарбат",
+            "сок",
+            "соки"
+          ]
+        },
+        {
+          "id": "nectar",
+          "order": 50,
+          "names": {
+            "uz_Cyrl": "Нектарлар",
+            "uz_Latn": "Nektarlar",
+            "ru": "Нектары"
+          },
+          "unit": "piece",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "нектар",
+            "сок"
+          ]
+        },
+        {
+          "id": "compote",
+          "order": 60,
+          "names": {
+            "uz_Cyrl": "Компот ва морс",
+            "uz_Latn": "Kompot va mors",
+            "ru": "Компот и морс"
+          },
+          "unit": "piece",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "компот",
+            "морс"
+          ]
+        },
+        {
+          "id": "iced_tea",
+          "order": 70,
+          "names": {
+            "uz_Cyrl": "Совуқ чой",
+            "uz_Latn": "Sovuq çoy",
+            "ru": "Холодный чай"
+          },
+          "unit": "piece",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "совуқ чой",
+            "холодный чай",
+            "айс ти"
+          ]
+        },
+        {
+          "id": "coffee_drink",
+          "order": 80,
+          "names": {
+            "uz_Cyrl": "Тайёр кофели ичимликлар",
+            "uz_Latn": "Tayyor kofeli içimliklar",
+            "ru": "Готовые кофейные напитки"
+          },
+          "unit": "piece",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "кофе",
+            "капучино",
+            "латте"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "household",
+      "order": 90,
+      "icon": "household",
+      "names": {
+        "uz_Cyrl": "Уй-рўзғор ва гигиена",
+        "uz_Latn": "Uy-rözğor va gigiyena",
+        "ru": "Бытовая химия и гигиена"
+      },
+      "groups": [
+        {
+          "id": "soap",
+          "order": 10,
+          "names": {
+            "uz_Cyrl": "Совун",
+            "uz_Latn": "Sovun",
+            "ru": "Мыло"
+          },
+          "unit": "piece",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "совун",
+            "мыло"
+          ]
+        },
+        {
+          "id": "shampoo",
+          "order": 20,
+          "names": {
+            "uz_Cyrl": "Шампунь",
+            "uz_Latn": "Şampun",
+            "ru": "Шампунь"
+          },
+          "unit": "piece",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "шампунь",
+            "шампун"
+          ]
+        },
+        {
+          "id": "toothpaste",
+          "order": 30,
+          "names": {
+            "uz_Cyrl": "Тиш пастаси",
+            "uz_Latn": "Tiş pastasi",
+            "ru": "Зубная паста"
+          },
+          "unit": "piece",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "тиш",
+            "паста",
+            "зубная"
+          ]
+        },
+        {
+          "id": "laundry",
+          "order": 40,
+          "names": {
+            "uz_Cyrl": "Кир ювиш воситаси",
+            "uz_Latn": "Kir yuviş vositasi",
+            "ru": "Средство для стирки"
+          },
+          "unit": "pack",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "кир",
+            "порошок",
+            "стиральный",
+            "гель"
+          ]
+        },
+        {
+          "id": "dish_wash",
+          "order": 50,
+          "names": {
+            "uz_Cyrl": "Идиш ювиш воситаси",
+            "uz_Latn": "Idiş yuviş vositasi",
+            "ru": "Средство для посуды"
+          },
+          "unit": "piece",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "идиш",
+            "посуда",
+            "фейри"
+          ]
+        },
+        {
+          "id": "cleaner",
+          "order": 60,
+          "names": {
+            "uz_Cyrl": "Тозалаш воситаси",
+            "uz_Latn": "Tozalaş vositasi",
+            "ru": "Чистящее средство"
+          },
+          "unit": "piece",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "тозалаш",
+            "чистящее",
+            "хлорка",
+            "белизна"
+          ]
+        },
+        {
+          "id": "toilet_paper",
+          "order": 70,
+          "names": {
+            "uz_Cyrl": "Ҳожатхона қоғози",
+            "uz_Latn": "Hojatxona qoğozi",
+            "ru": "Туалетная бумага"
+          },
+          "unit": "pack",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "ҳожатхона",
+            "туалетная",
+            "бумага",
+            "қоғоз"
+          ]
+        },
+        {
+          "id": "napkins",
+          "order": 80,
+          "names": {
+            "uz_Cyrl": "Салфетка",
+            "uz_Latn": "Salfetka",
+            "ru": "Салфетки"
+          },
+          "unit": "pack",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "салфетка",
+            "салфетки"
+          ]
+        },
+        {
+          "id": "diapers",
+          "order": 90,
+          "names": {
+            "uz_Cyrl": "Болалар тагликлари",
+            "uz_Latn": "Bolalar tagliklari",
+            "ru": "Детские подгузники"
+          },
+          "unit": "pack",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "таглик",
+            "подгузник",
+            "памперс"
+          ]
+        },
+        {
+          "id": "trash_bags",
+          "order": 100,
+          "names": {
+            "uz_Cyrl": "Ахлат пакети",
+            "uz_Latn": "Axlat paketi",
+            "ru": "Мешки для мусора"
+          },
+          "unit": "pack",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "ахлат",
+            "пакет",
+            "мусор",
+            "мешки"
+          ]
+        },
+        {
+          "id": "small_household",
+          "order": 110,
+          "names": {
+            "uz_Cyrl": "Майда рўзғор буюмлари",
+            "uz_Latn": "Mayda rözğor buyumlari",
+            "ru": "Мелкие хозтовары"
+          },
+          "unit": "piece",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "гугурт",
+            "gugurt",
+            "спички",
+            "қўлқоп",
+            "qölqop",
+            "перчатки",
+            "резина қўлқоп",
+            "қопқоқ",
+            "qopqoq",
+            "крышка",
+            "крышки",
+            "банка қопқоғи",
+            "губка",
+            "gubka",
+            "зажигалка",
+            "прищепка"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "holiday_sweets",
+      "order": 100,
+      "icon": "holiday",
+      "names": {
+        "uz_Cyrl": "Байрам ва ширинликлар",
+        "uz_Latn": "Bayram va şirinliklar",
+        "ru": "Праздник и сладости"
+      },
+      "groups": [
+        {
+          "id": "cake",
+          "order": 10,
+          "names": {
+            "uz_Cyrl": "Торт",
+            "uz_Latn": "Tort",
+            "ru": "Торты"
+          },
+          "unit": "piece",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "торт",
+            "tort",
+            "торты",
+            "пирожное",
+            "туғилган кун"
+          ],
+          "pairs": [
+            "balloons_decor",
+            "disposable_tableware",
+            "fruit_juice",
+            "napkins",
+            "candies"
+          ]
+        },
+        {
+          "id": "candies",
+          "order": 20,
+          "names": {
+            "uz_Cyrl": "Конфетлар",
+            "uz_Latn": "Konfetlar",
+            "ru": "Конфеты"
+          },
+          "unit": "kg",
+          "step": 0.5,
+          "weighed": true,
+          "synonyms": [
+            "конфет",
+            "konfet",
+            "конфеты",
+            "ширинлик",
+            "şirinlik"
+          ],
+          "pairs": [
+            "black_tea",
+            "green_tea",
+            "cookies",
+            "chocolate"
+          ]
+        },
+        {
+          "id": "cookies",
+          "order": 30,
+          "names": {
+            "uz_Cyrl": "Печенье",
+            "uz_Latn": "Peçenye",
+            "ru": "Печенье"
+          },
+          "unit": "pack",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "печенье",
+            "печене",
+            "pecenye",
+            "peçenye",
+            "вафли",
+            "крекер"
+          ],
+          "pairs": [
+            "black_tea",
+            "green_tea",
+            "milk",
+            "candies"
+          ]
+        },
+        {
+          "id": "chocolate",
+          "order": 40,
+          "names": {
+            "uz_Cyrl": "Шоколад",
+            "uz_Latn": "Şokolad",
+            "ru": "Шоколад"
+          },
+          "unit": "piece",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "шоколад",
+            "şokolad",
+            "shokolad",
+            "плитка"
+          ],
+          "pairs": [
+            "candies",
+            "cookies",
+            "black_tea"
+          ]
+        },
+        {
+          "id": "disposable_tableware",
+          "order": 50,
+          "names": {
+            "uz_Cyrl": "Бир марталик идишлар",
+            "uz_Latn": "Bir martalik idişlar",
+            "ru": "Одноразовая посуда"
+          },
+          "unit": "pack",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "тарелка",
+            "стакан",
+            "идиш",
+            "idiş",
+            "tarelka",
+            "stakan",
+            "одноразовая",
+            "посуда",
+            "бир марталик"
+          ],
+          "pairs": [
+            "napkins",
+            "cake",
+            "fruit_juice",
+            "soda"
+          ]
+        },
+        {
+          "id": "balloons_decor",
+          "order": 60,
+          "names": {
+            "uz_Cyrl": "Шарлар ва безаклар",
+            "uz_Latn": "Şarlar va bezaklar",
+            "ru": "Шары и украшения"
+          },
+          "unit": "pack",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "шар",
+            "şar",
+            "шарлар",
+            "шары",
+            "безак",
+            "bezak",
+            "украшение",
+            "гирлянда",
+            "свечи",
+            "шам"
+          ],
+          "pairs": [
+            "cake",
+            "disposable_tableware",
+            "napkins"
+          ]
+        }
+      ]
+    }
+  ]
+}

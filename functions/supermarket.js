@@ -78,7 +78,12 @@ const SHORTAGE_TEXT = Object.freeze({
 });
 
 const LANGS = Object.freeze(['uz_Cyrl', 'uz_Latn', 'ru']);
-const UNITS = Object.freeze(['kg', 'l', 'piece', 'pack', 'bunch']);
+// Ўлчов бирликлари — ЯГОНА МАНБА `supermarket_units.json` (7-банд; мижоз паритет тести ҳам шуни ўқийди).
+// Эга 2026-11-28: ҳақиқий маҳсулотлар учун дона, кг, литр ва бошқа бирликлар (g, ml, box, m — PROPOSED рўйхат).
+const UNIT_DEFS = Object.freeze(require('./supermarket_units.json').units.map((u) => Object.freeze({
+  id: u.id, labels: Object.freeze({ ...u.labels }), aliases: Object.freeze([...(u.aliases || [])]),
+})));
+const UNITS = Object.freeze(UNIT_DEFS.map((u) => u.id));
 const STAGES = Object.freeze(['off', 'internal', 'pilot', 'public']);
 const SM_STATUSES = Object.freeze(['active', 'out_of_stock', 'hidden']);
 const DAYS = Object.freeze(['today', 'tomorrow']);
@@ -89,13 +94,23 @@ const TZ_OFFSET_MS = 5 * 3600000; // Asia/Tashkent
 const DAY_MS = 86400000;
 
 // Буюртма қатори учун эски кўриниш бирлиги (`items[].unit` — эски админ/курьер экранлари матн кутади).
-const UNIT_LABELS = Object.freeze({
-  kg: { uz_Cyrl: 'кг', uz_Latn: 'kg', ru: 'кг' },
-  l: { uz_Cyrl: 'л', uz_Latn: 'l', ru: 'л' },
-  piece: { uz_Cyrl: 'дона', uz_Latn: 'dona', ru: 'шт' },
-  pack: { uz_Cyrl: 'пачка', uz_Latn: 'paçka', ru: 'уп.' },
-  bunch: { uz_Cyrl: 'боғ', uz_Latn: 'boğ', ru: 'пучок' },
-});
+// Манба — supermarket_units.json (мижоз `sm_unit_<id>` билан бир хил; pack: илгари бу ерда «пачка» эди, мижоз «қадоқ»).
+const UNIT_LABELS = Object.freeze(Object.fromEntries(UNIT_DEFS.map((u) => [u.id, u.labels])));
+
+const UNIT_ALIAS_INDEX = (() => {
+  const m = new Map();
+  for (const u of UNIT_DEFS) for (const a of [u.id, ...u.aliases]) m.set(String(a).trim().toLowerCase(), u.id);
+  return m;
+})();
+
+/**
+ * Тоза: импорт/шакл матни → бирлик id ('кг', 'Литр', 'шт', 'kg' → 'kg'). Бўш → ''. Номаълум → null (UNIT_INVALID).
+ */
+function unitFromInput(raw) {
+  const s = String(raw == null ? '' : raw).trim().toLowerCase();
+  if (!s) return '';
+  return UNIT_ALIAS_INDEX.get(s) || UNIT_ALIAS_INDEX.get(s.replace(/\.$/, '')) || null;
+}
 
 const LIMITS = Object.freeze({
   name: 60, synonym: 40, synonyms: 20, packLabel: 40, maxBytes: 200 * 1024, maxErrors: 50,
@@ -2047,7 +2062,7 @@ module.exports = {
   stableStringify, isPlainObject, stepOk,
   DEBIT_NOTES, REMIND_TEXT, SHORTAGE_TEXT, SHORTAGE_ANSWER_MS, PAIRS_MAX, LIST_ID_RE, ID_RE, PRODUCT_ID_RE, LIMITS,
   MSG, UNITS, PACK_UNITS, OPERATOR_ROLES, REFUND_NOTES, STAGES, SM_STATUSES, LANGS, TAXONOMY_DOC, SETTINGS_DOC, HISTORY_COLLECTION, HISTORY_PREFIX,
-  TARIFF_VERSION, UNIT_LABELS, ORDER_ORIGINS,
+  TARIFF_VERSION, UNIT_LABELS, UNIT_DEFS, unitFromInput, ORDER_ORIGINS,
   // 3-босқич: курьер тўлови
   courierPayoutProblems, courierPayoutSnapshot, COURIER_PAYOUT_MODES,
 };

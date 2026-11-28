@@ -7,7 +7,9 @@
 'use strict';
 const assert = require('assert');
 const T = require('../tools/assign_supermarket_sample_groups');
-const TAX = require('../tools/data/supermarket_taxonomy_v2.json');
+// prod taxonomy/supermarket v1 = v3 файли мазмуни (2026-11-28 текширилди); v4 — +4 гуруҳ (эга «қўш», ҳужжат v2 бўлади).
+const TAX = require('../tools/data/supermarket_taxonomy_v3.json');
+const TAX4 = require('../tools/data/supermarket_taxonomy_v4.json');
 
 const results = [];
 const check = (name, fn) => {
@@ -35,9 +37,55 @@ check('ибора бир сўзли номдан устун: «… Лимон �
   assert.strictEqual(g('Имбир, Лимон, Мята таъмли TESS қора чойи'), 'black_tea');
 });
 
-check('ALIASES: семичка → sunflower_oil, мойка → dish_wash', () => {
+check('CONFIRMED (эга 2026-11-28): семичка → sunflower_oil, мойка → dish_wash, горох → chickpea, «Океан … гели» → laundry', () => {
   assert.strictEqual(g('Семичка мойи КРИСТАЛЛИНА'), 'sunflower_oil');
+  assert.strictEqual(g('АЛИФ семичка мойи'), 'sunflower_oil');
   assert.strictEqual(g('посуда мойка'), 'dish_wash');
+  assert.strictEqual(g('горох Натурелла'), 'chickpea');
+  assert.strictEqual(g('Океан, универсал ювиш гели, барча турга ишлатса бўлади 5 литр'), 'laundry');
+  assert.deepStrictEqual({ ...T.ALIASES }, { семичка: 'sunflower_oil', мойка: 'dish_wash' });
+});
+
+// ── Таксономия v4 (янги гуруҳлар; гуруҳ танлови PROPOSED) ──
+const IDX4 = T.buildIndex(TAX4);
+const g4 = (name) => T.matchProduct(name, IDX4).groupId;
+const r4 = (name) => T.matchProduct(name, IDX4).reason;
+// prod'даги 59 намунадан қолган 10 таси (2026-11-28 DRY RUN, номлар prod'дан айнан).
+const LEFT10 = {
+  'Банкалар учун металл қопқоқ 50 дона': 'small_household',
+  Гугурт: 'small_household',
+  'резина қўлқоп': 'small_household',
+  Перловка: 'pearl_barley',
+  'Пишевая сода': 'baking_soda',
+  Фунчоза: 'funchoza',
+  'Қуриқ қаймоқ': null,
+  'Тузланган бодиринг': null,
+  'тузланган қалампир': null,
+  'MILTER писта ёғи 5 литр': null,
+};
+
+check('v4 positive: 6 та гуруҳсиз намуна янги гуруҳга тушади', () => {
+  for (const [name, want] of Object.entries(LEFT10)) if (want) assert.strictEqual(g4(name), want, name);
+});
+
+check('v4: 4 таси ҳали ҳам тегилмайди (EXCLUDED тузланган/қуриқ; MILTER писта ёғи — NO_MATCH, эга ҳал қилади)', () => {
+  assert.strictEqual(r4('Қуриқ қаймоқ'), 'EXCLUDED:қуриқ');
+  assert.strictEqual(r4('Тузланган бодиринг'), 'EXCLUDED:тузланган');
+  assert.strictEqual(r4('тузланган қалампир'), 'EXCLUDED:тузланган');
+  assert.strictEqual(r4('MILTER писта ёғи 5 литр'), 'NO_MATCH');
+});
+
+check('v4 boundary/negative: ягона синоним (1 балл) етарли; умумий сўз ўғирламайди; эски 49 таси ўзгармайди', () => {
+  assert.strictEqual(T.matchProduct('қопқоқ', IDX4).score, 1); // чегара: ≥ 1
+  assert.strictEqual(g4('пищевая плёнка'), null); // «пищевая» ёлғиз синоним эмас — сода эмас
+  assert.strictEqual(g4('Кока кола газли'), 'soda'); // ичимлик «soda» гуруҳи baking_soda билан аралашмайди
+  const old49 = ['Хитой кўк чойи', 'МАКФА уни', 'GAP YO"Q пахта ёғи, 2 литр', 'Спагетти макарони', 'Хўжалик совуни', 'Aprel кир ювиш кукуни',
+    'Ҳожатхона қоғози 8 та рулон', 'Суюк порошок', 'Имбир, Лимон, Мята таъмли TESS қора чойи', 'Семичка мойи КРИСТАЛЛИНА', 'посуда мойка', 'горох Натурелла'];
+  for (const n of old49) assert.strictEqual(g4(n), g(n), n);
+});
+
+check('v3 (prod ҳозир): янги гуруҳлар йўқ — 6 таси NO_MATCH (таксономия кўтарилмагунча)', () => {
+  for (const [name, want] of Object.entries(LEFT10)) if (want) assert.strictEqual(r(name), 'NO_MATCH', name);
 });
 
 check('negative: қисқа калит сўз бошида — қўшимча эмас («универсал» ≠ «ун», «тузланган» ≠ «туз»)', () => {
@@ -106,6 +154,17 @@ check('planRollback: фақат скрипт ёзган қиймат ва нам
   assert.deepStrictEqual(p.skipped.map((s) => s.id), ['b', 'c', 'd']);
 });
 
-const passed = results.filter(Boolean).length;
-console.log(`\n${passed}/${results.length} passed`);
-process.exit(passed === results.length ? 0 : 1);
+(async () => {
+  // --taxonomy-file фақат DRY RUN: --apply / --rollback билан Firestore'га уланмасдан рад этилади.
+  try {
+    assert.strictEqual(T.parseArgs(['--project', 'p', '--taxonomy-file', 'v4.json']).taxonomyFile, 'v4.json');
+    for (const extra of [['--apply'], ['--rollback', 'b.json']]) {
+      await assert.rejects(T.main(['--project', 'demo-x', '--taxonomy-file', 'v4.json', ...extra]), /faqat DRY RUN/);
+    }
+    await assert.rejects(T.main(['--project', 'demo-x', '--taxonomy-file']), /fayli berilmadi/);
+    results.push(true); console.log('PASS - --taxonomy-file: фақат DRY RUN (apply/rollback рад)');
+  } catch (e) { results.push(false); console.log(`FAIL - --taxonomy-file guard :: ${e.message}`); }
+  const passed = results.filter(Boolean).length;
+  console.log(`\n${passed}/${results.length} passed`);
+  process.exit(passed === results.length ? 0 : 1);
+})();

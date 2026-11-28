@@ -307,6 +307,9 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   bool _deferredBootstrapped = false;
 
+  /// Splash тили (build'да аниқланади) — кейинги очилиш креативи шу тилда тайёрланади (тил бўйича расм).
+  String _splashLang = 'uz_Cyrl';
+
   @override
   void initState() {
     super.initState();
@@ -322,7 +325,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       isAnonymousAuth: widget.isAnonymousAuth,
     ));
     // Сессияда БИР марта: кечаги кўрсатишлар йиғмаси серверга + кейинги очилиш креативи кешга.
-    unawaited(SplashAdPrefetcher().run(districtId: GeoContext.active.districtId, regionId: GeoContext.active.regionId));
+    unawaited(SplashAdPrefetcher()
+        .run(districtId: GeoContext.active.districtId, regionId: GeoContext.active.regionId, lang: _splashLang));
   }
 
   @override
@@ -397,6 +401,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         builder: (context, localeNotifier, _) {
           final splashLang = LocaleUtils.contentLangCode(
               localeNotifier.locale ?? widget.initialLocale ?? LocaleUtils.resolveFromDevice());
+          _splashLang = splashLang;
           return AppLaunchSplash(
             onFinished: _onSplashFinished,
             launch: widget.splashLaunch,

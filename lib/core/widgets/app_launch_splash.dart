@@ -10,9 +10,11 @@ import '../theme/ava_tokens.dart';
 /// Илова очилишидаги РЕКЛАМА ЎРНИ (эга 2026-11-28; аввалги ~1.8 с лого анимацияси ўрнига).
 ///
 ///  * Аниқ [displayDuration] (3 с; эга 2026-11-28: 2 с → 3 с) кўринади, «Ўтказиб юбориш» тугмаси ЙЎҚ.
-///  * «Реклама бериш» тугмаси — [onAdvertise] (splash дарров ёпилади, кейин мавжуд йўл очилади).
+///  * Пастки «Реклама бериш» тугмаси ЙЎҚ (эга 2026-11-28). [onAdvertise] — намуна реклама ёки сукут матни (креатив
+///    йўқ) майдонининг исталган жойи босилганда (splash дарров ёпилади, кейин пуллик харид оқими).
 ///  * Креатив ФАҚАТ кешдан ([launch], `main()` да олдиндан ўқилган) — тармоқ кутилмайди; йўқ бўлса
 ///    сукут матни «Бу ерда сизнинг рекламангиз бўлиши мумкин».
+///  * Намуна (уй) реклама ([SplashAd.house]): босилса — «Реклама бериш» оқими; «Реклама» белгиси кўрсатилмайди.
 ///  * OS native launch screen ўзгармайди.
 ///
 /// Тил/биринчи кадр: [child] (`MaterialApp`) оверлей остида шаффоф ҳолда қурилади — таржималар шу 3 с
@@ -41,7 +43,7 @@ class AppLaunchSplash extends StatefulWidget {
   /// `uz_Cyrl` | `uz_Latn` | `ru`.
   final String lang;
 
-  /// «Реклама бериш» босилди (splash аллақачон ёпилган).
+  /// Намуна/сукут банери босилди — «Реклама бериш» оқими (splash аллақачон ёпилган).
   final VoidCallback? onAdvertise;
 
   /// Креатив босилди ва унда ҳавола бор (splash аллақачон ёпилган).
@@ -54,7 +56,9 @@ class AppLaunchSplash extends StatefulWidget {
   static const Duration displayDuration = Duration(seconds: 3);
 
   static const Key overlayKey = ValueKey('splash-ad-overlay');
-  static const Key advertiseKey = ValueKey('splash-ad-advertise');
+  /// Креатив майдони босиладиган бўлса — шу калит (намуна/сукут: «Реклама бериш»; ҳаволали креатив: ҳавола).
+  static const Key tapAreaKey = ValueKey('splash-ad-tap-area');
+  static const Key tapHintKey = ValueKey('splash-ad-tap-hint');
   static const Key imageKey = ValueKey('splash-ad-image');
   static const Key textKey = ValueKey('splash-ad-text');
   static const Key placeholderKey = ValueKey('splash-ad-placeholder');
@@ -159,9 +163,37 @@ class _SplashAdOverlay extends StatelessWidget {
     } else if (ad != null && text.isNotEmpty) {
       content = _Message(key: AppLaunchSplash.textKey, text: text, large: true);
     } else {
-      content = _Message(key: AppLaunchSplash.placeholderKey, text: SplashAdTexts.placeholder(lang));
+      // Кешда креатив йўқ — сукут матни + босиш ишораси (пастки тугма олиб ташланди, эга 2026-11-28).
+      content = Column(
+        key: AppLaunchSplash.placeholderKey,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _Message(text: SplashAdTexts.placeholder(lang)),
+          const SizedBox(height: 18),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.touch_app_rounded, color: AvaLight.brandInk, size: 22),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  SplashAdTexts.tapHint(lang),
+                  key: AppLaunchSplash.tapHintKey,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: AvaLight.brandInk, fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
     }
-    final tappable = ad != null && ad.linkUrl.startsWith('https://');
+    // Эга 2026-11-28: пастдаги «Реклама бериш» тугмаси ОЛИБ ТАШЛАНДИ. Пуллик харид экрани энди банернинг ўзидан:
+    //  * намуна (уй) реклама ёки сукут матни (креатив йўқ) — исталган жойи босилса «Реклама бериш» оқими;
+    //  * рекламачи креативи — аввалгидек: `https://` ҳаволаси бўлса ҳавола, бўлмаса босилмайди.
+    final house = ad != null && ad.house;
+    final advertises = ad == null || house;
+    final tappable = advertises || ad.linkUrl.startsWith('https://');
 
     return Material(
       color: AvaLight.brand,
@@ -182,7 +214,7 @@ class _SplashAdOverlay extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  if (ad != null)
+                  if (ad != null && !house)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
@@ -197,32 +229,20 @@ class _SplashAdOverlay extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 16),
-              // Ҳаволали креатив — бутун креатив майдони босилади (расм ҳали чизилмаган бўлса ҳам).
+              // Босиладиган креатив — бутун креатив майдони босилади (расм ҳали чизилмаган бўлса ҳам).
               Expanded(
                 child: tappable
-                    ? GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () => onOpenAd(ad),
-                        child: Center(child: content),
+                    ? Semantics(
+                        button: true,
+                        label: advertises ? SplashAdTexts.advertise(lang) : null,
+                        child: GestureDetector(
+                          key: AppLaunchSplash.tapAreaKey,
+                          behavior: HitTestBehavior.opaque,
+                          onTap: advertises ? onAdvertise : () => onOpenAd(ad),
+                          child: Center(child: content),
+                        ),
                       )
                     : Center(child: content),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: FilledButton.icon(
-                  key: AppLaunchSplash.advertiseKey,
-                  onPressed: onAdvertise,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AvaLight.brandInk,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                  ),
-                  icon: const Icon(Icons.campaign_rounded),
-                  label: Text(SplashAdTexts.advertise(lang)),
-                ),
               ),
             ],
           ),

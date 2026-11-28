@@ -28,7 +28,7 @@ class SplashAdsAdminScreen extends StatelessWidget {
           bottom: const TabBar(tabs: [
             Tab(text: 'Рекламалар'),
             Tab(key: SplashAdsAdminScreen.moderationTabKey, text: 'Модерация'),
-            Tab(key: SplashAdsAdminScreen.tariffTabKey, text: 'Тариф ва созлама'),
+            Tab(key: SplashAdsAdminScreen.tariffTabKey, text: 'Премиум тариф ва созлама'),
           ]),
         ),
         body: TabBarView(children: [
@@ -42,6 +42,8 @@ class SplashAdsAdminScreen extends StatelessWidget {
 
   static const moderationTabKey = Key('splash-admin-moderation');
   static const tariffTabKey = Key('splash-admin-tariff');
+  static const premiumTitleKey = Key('splash-admin-premium-title');
+  static const activeTariffKey = Key('splash-admin-active-tariff');
 }
 
 class _AdsTab extends StatelessWidget {
@@ -288,6 +290,26 @@ class _TariffTabState extends State<_TariffTab> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        // Эга 2026-11-28: «бу жой алоҳида пуллик реклама жойи, қиммат тарифда». Splash тарифи — ўз версияли
+        // жадвали (`splash_ad_tariffs`), Бош экран/AVA TV реклама тарифидан (`settings/app.tvAdPricing`) АЛОҲИДА.
+        const Text('Splash — алоҳида реклама жойи (премиум тариф)',
+            key: SplashAdsAdminScreen.premiumTitleKey, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+        const SizedBox(height: 4),
+        const Text(
+          'Илова очилишидаги 3 сониялик ўрин — ҳар очилишда биринчи кўринадиган энг қиммат реклама жойи. '
+          'Нархи Бош экран каруселидаги ва AVA TV «Реклама ва эълонлар» тарифларидан алоҳида белгиланади '
+          'ва улардан юқори бўлиши керак. Нархни фақат админ қўяди — тизимда сукут нарх йўқ.',
+          style: TextStyle(color: Colors.black87),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          s['tariff'] is Map
+              ? 'Фаол тариф: v${(s['tariff'] as Map)['version']} · кунига ${(s['tariff'] as Map)['perDay']}'
+              : 'Тариф ҳали белгиланмаган — пуллик харид ЁПИҚ.',
+          key: SplashAdsAdminScreen.activeTariffKey,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 12),
         const Text('Тариф (кунлик нарх, бутун сўм)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
         const Text(
           'Нарх = кунлик нарх × кун (туман даражасида × танланган туманлар сони). Ҳар сақлаш — янги ўзгармас версия; '
@@ -374,6 +396,7 @@ class _AdTile extends StatelessWidget {
     final districts = data['districts'] is List ? (data['districts'] as List).join(', ') : '';
     final regions = data['regionIds'] is List ? (data['regionIds'] as List).join(', ') : '';
     final paid = data['source'] == 'paid';
+    final house = data['house'] == true;
     final img = '${data['imageUrl'] ?? ''}';
     final now = DateTime.now();
     final running = active && s != null && e != null && !now.isBefore(s) && now.isBefore(e);
@@ -392,7 +415,7 @@ class _AdTile extends StatelessWidget {
           builder: (context, st) => Text(
             '${running ? 'Ҳозир кўринмоқда' : active ? 'Ёқилган (муддатдан ташқари)' : 'Ўчирилган'} · '
             '${s == null ? '—' : _fmtDate(s)} → ${e == null ? '—' : _fmtDate(e)} · '
-            '${paid ? 'ПУЛЛИК · ' : ''}ҳудуд: ${districts.isEmpty && regions.isEmpty ? 'барчаси' : [districts, regions].where((x) => x.isNotEmpty).join(' / ')} · оғирлик ${data['weight'] ?? 1} · '
+            '${paid ? 'ПУЛЛИК · ' : ''}${house ? 'НАМУНА · ' : ''}ҳудуд: ${districts.isEmpty && regions.isEmpty ? 'барчаси' : [districts, regions].where((x) => x.isNotEmpty).join(' / ')} · оғирлик ${data['weight'] ?? 1} · '
             '7 кун: ${st.data ?? '…'} марта',
           ),
         ),
@@ -470,6 +493,7 @@ class _SplashAdEditorState extends State<_SplashAdEditor> {
       ? (_d['endAt'] as Timestamp).toDate()
       : _today().add(const Duration(days: 7));
   late bool _active = _d['active'] == true;
+  late bool _house = _d['house'] == true;
   bool _busy = false;
 
   static DateTime _today() {
@@ -550,6 +574,7 @@ class _SplashAdEditorState extends State<_SplashAdEditor> {
       'priority': _d['priority'] is int ? _d['priority'] as int : 0,
       'weight': int.tryParse(_weight.text.trim()) ?? 0,
       'active': _active,
+      'house': _house,
     };
     setState(() => _busy = true);
     try {
@@ -627,6 +652,14 @@ class _SplashAdEditorState extends State<_SplashAdEditor> {
               value: _active,
               onChanged: (v) => setState(() => _active = v),
               title: const Text('Ёқилган'),
+            ),
+            SwitchListTile(
+              key: const ValueKey('splash-admin-house'),
+              contentPadding: EdgeInsets.zero,
+              value: _house,
+              onChanged: (v) => setState(() => _house = v),
+              title: const Text('Намуна реклама (AVA чорлови)'),
+              subtitle: const Text('Фақат ҳудудда бошқа реклама бўлмаганда кўрсатилади; банер босилса — пуллик «Реклама бериш» экрани.'),
             ),
           ]),
         ),

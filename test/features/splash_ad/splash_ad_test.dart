@@ -57,6 +57,8 @@ SplashAd _ad({
   DateTime? start,
   DateTime? end,
   String linkUrl = '',
+  bool house = false,
+  Map<String, String> imageUrls = const {},
 }) =>
     SplashAd(
       id: id,
@@ -69,6 +71,8 @@ SplashAd _ad({
       districts: districts,
       regionIds: regionIds,
       weight: weight,
+      house: house,
+      imageUrls: imageUrls,
     );
 
 Widget _app({
@@ -171,25 +175,24 @@ void main() {
       expect(finished, 1);
     });
 
-    testWidgets('сукут матни + «Реклама бериш»; ўтказиш тугмаси йўқ, фонни босиш ёпмайди', (t) async {
+    testWidgets('сукут матни + босиш ишораси; пастки «Реклама бериш» тугмаси ЙЎҚ (эга 2026-11-28), ўтказиш йўқ', (t) async {
       await t.pumpWidget(_app());
       expect(find.text('Бу ерда сизнинг рекламангиз бўлиши мумкин'), findsOneWidget);
-      expect(find.text('Реклама бериш'), findsOneWidget);
+      expect(find.text('Босинг — реклама беринг'), findsOneWidget);
+      expect(find.text('Реклама бериш'), findsNothing);
+      expect(find.byType(FilledButton), findsNothing);
       for (final s in ['Ўтказиб юбориш', 'O\'tkazib yuborish', 'Пропустить', 'Skip']) {
         expect(find.textContaining(s), findsNothing);
       }
       expect(find.byType(CloseButton), findsNothing);
       expect(find.byIcon(Icons.close), findsNothing);
-      await t.tap(find.byKey(AppLaunchSplash.placeholderKey));
-      await t.pump(const Duration(milliseconds: 500));
-      expect(find.byKey(AppLaunchSplash.overlayKey), findsOneWidget);
       await t.pump(const Duration(seconds: 3));
     });
 
-    testWidgets('«Реклама бериш» — splash дарров ёпилади ва onAdvertise чақирилади', (t) async {
+    testWidgets('сукут банернинг исталган жойи босилса — splash дарров ёпилади ва onAdvertise (пуллик харид)', (t) async {
       var adv = 0, finished = 0;
       await t.pumpWidget(_app(onAdvertise: () => adv++, onFinished: () => finished++));
-      await t.tap(find.byKey(AppLaunchSplash.advertiseKey));
+      await t.tapAt(t.getTopLeft(find.byKey(AppLaunchSplash.tapAreaKey)) + const Offset(10, 10)); // бурчак — матндан ташқари
       await t.pump();
       expect(adv, 1);
       expect(finished, 1);
@@ -201,12 +204,12 @@ void main() {
     testWidgets('3 тил: лотин (янги ҳарфлар) ва рус', (t) async {
       await t.pumpWidget(_app(lang: 'uz_Latn'));
       expect(find.text('Bu yerda sizning reklamangiz bölişi mumkin'), findsOneWidget);
-      expect(find.text('Reklama beriş'), findsOneWidget);
+      expect(find.text('Bosing — reklama bering'), findsOneWidget);
       await t.pump(const Duration(seconds: 3));
       await t.pumpWidget(const SizedBox());
       await t.pumpWidget(_app(lang: 'ru'));
       expect(find.text('Здесь может быть ваша реклама'), findsOneWidget);
-      expect(find.text('Разместить рекламу'), findsOneWidget);
+      expect(find.text('Нажмите, чтобы разместить рекламу'), findsOneWidget);
       await t.pump(const Duration(seconds: 3));
     });
 
@@ -505,6 +508,133 @@ void main() {
       await p.run(districtId: 'gurlan');
       expect((await cache.pendingBefore(_now)).length, 1);
       expect(await cache.loadForLaunch(now: _now, districtId: 'gurlan'), isNull);
+    });
+  });
+
+  group('Намуна (уй) реклама — фақат бошқа реклама йўқ бўлганда (эга 2026-11-28)', () {
+    const urls = {'uz_Cyrl': '$_img/cyr', 'uz_Latn': '$_img/lat', 'ru': '$_img/ru'};
+    SplashAd house() => _ad(id: 'ava_house_republic', imageUrl: '$_img/cyr', imageUrls: urls, house: true);
+
+    test('тил бўйича расм; йўқ тил — сукут imageUrl; forLang — расм аниқланган нусха (house сақланади)', () {
+      expect(house().imageUrlFor('uz_Latn'), '$_img/lat');
+      expect(house().imageUrlFor('ru'), '$_img/ru');
+      expect(house().imageUrlFor('en'), '$_img/cyr');
+      expect(_ad(imageUrl: _img).imageUrlFor('ru'), _img);
+      final f = house().forLang('ru');
+      expect([f.imageUrl, f.imageUrls, f.house, f.weight], ['$_img/ru', isEmpty, true, 1]);
+    });
+
+    test('кеш шакли: house ва imageUrls сақланади; эски кеш (майдонсиз) — оддий реклама', () {
+      final back = SplashAd.fromCacheMap(house().toCacheMap())!;
+      expect([back.house, back.imageUrls], [true, urls]);
+      final legacy = SplashAd.fromCacheMap(_ad().toCacheMap())!;
+      expect([legacy.house, legacy.imageUrls], [false, isEmpty]);
+      expect(_ad().toCacheMap().containsKey('house'), isFalse);
+    });
+
+    test('selectForCache: намуна чегарага кирмайди (8 пуллик + 1 намуна), энг кўпи 1 та', () {
+      final paid = [for (var i = 0; i < 9; i++) _ad(id: 'p$i', weight: 1000 + i)];
+      final out = SplashAd.selectForCache(
+          [house(), _ad(id: 'house2', house: true), ...paid], _now, '', '',
+          max: 8);
+      expect(out.where((a) => !a.house).length, 8);
+      expect(out.where((a) => a.house).map((a) => a.id), ['ava_house_republic']);
+      expect(out.first.id, 'p8', reason: 'пуллик оғирлик тартиби ўзгармайди');
+    });
+
+    test('очилиш: пуллик бор — намуна ҲЕЧ чиқмайди (40 очилиш); пуллик йўқ — фақат намуна', () async {
+      final store = _MemStore();
+      await SplashAdCache(store: store).saveAll([
+        SplashAdCached(house()),
+        SplashAdCached(_ad(id: 'paid', weight: 1)),
+      ]);
+      for (var i = 0; i < 40; i++) {
+        final l = await SplashAdCache(store: store).loadForLaunch(now: _now, districtId: 'gurlan');
+        expect(l?.ad.id, 'paid', reason: 'open $i');
+      }
+      // Пуллик муддати тугади — намуна кўринади (сукут матн эмас).
+      final later = _now.add(const Duration(days: 2));
+      await SplashAdCache(store: store).saveAll([
+        SplashAdCached(_ad(id: 'ava_house_republic', house: true, end: later.add(const Duration(days: 300)))),
+        SplashAdCached(_ad(id: 'paid', weight: 1)),
+      ]);
+      expect((await SplashAdCache(store: store).loadForLaunch(now: later, districtId: 'gurlan'))?.ad.id,
+          'ava_house_republic');
+    });
+
+    test('пуллик бошқа ҳудудда — бу ҳудудда намуна чиқади', () async {
+      final cache = SplashAdCache(store: _MemStore());
+      await cache.saveAll([SplashAdCached(house()), SplashAdCached(_ad(id: 'paid', districts: const ['xiva']))]);
+      expect((await cache.loadForLaunch(now: _now, districtId: 'gurlan'))?.ad.id, 'ava_house_republic');
+      expect((await cache.loadForLaunch(now: _now, districtId: 'xiva'))?.ad.id, 'paid');
+    });
+
+    test('prefetcher: илова тилидаги расм юкланади; тил ўзгарса — 3 соат кутмай қайта, янги тил расми', () async {
+      SharedPreferences.setMockInitialValues({});
+      final cache = SplashAdCache(store: _MemStore());
+      final got = <String>[];
+      final p = SplashAdPrefetcher(
+        cache: cache,
+        now: () => _now,
+        fetchAds: (_, __) async => [house()],
+        download: (u) async {
+          got.add(u);
+          return _png;
+        },
+        sendStats: (_) async {},
+      );
+      await p.run(districtId: 'gurlan', lang: 'uz_Latn');
+      expect(got, ['$_img/lat']);
+      await p.run(districtId: 'gurlan', lang: 'uz_Latn');
+      expect(got, ['$_img/lat'], reason: '3 соат ичида, тил ўша — тармоқ йўқ');
+      await p.run(districtId: 'gurlan', lang: 'ru');
+      expect(got, ['$_img/lat', '$_img/ru']);
+      final l = await cache.loadForLaunch(now: _now, districtId: 'gurlan');
+      expect([l?.ad.house, l?.ad.imageUrl, l?.imageBytes], [true, '$_img/ru', _png]);
+    });
+
+    testWidgets('splash: намуна — «Реклама» белгиси йўқ; креатив босилса «Реклама бериш» (ҳавола эмас)', (t) async {
+      var adv = 0;
+      SplashAd? opened;
+      await t.pumpWidget(_app(
+        launch: SplashAdLaunch(ad: house(), imageBytes: _png),
+        onAdvertise: () => adv++,
+        onOpenAd: (a) => opened = a,
+      ));
+      await t.pump();
+      expect(find.byKey(AppLaunchSplash.imageKey), findsOneWidget);
+      expect(find.text('Реклама'), findsNothing);
+      await t.tap(find.byKey(AppLaunchSplash.imageKey));
+      await t.pump();
+      expect(adv, 1);
+      expect(opened, isNull);
+      expect(find.byKey(AppLaunchSplash.overlayKey), findsNothing);
+    });
+
+    testWidgets('намуна майдонининг бурчаги (расмдан ташқари) ҳам — «Реклама бериш»', (t) async {
+      var adv = 0;
+      await t.pumpWidget(_app(launch: SplashAdLaunch(ad: house(), imageBytes: _png), onAdvertise: () => adv++));
+      await t.pump();
+      await t.tapAt(t.getTopLeft(find.byKey(AppLaunchSplash.tapAreaKey)) + const Offset(4, 4));
+      await t.pump();
+      expect(adv, 1);
+    });
+
+    testWidgets('пуллик креатив ҳаволасиз — босилмайди (аввалгидек), «Реклама бериш» ҳам чақирилмайди', (t) async {
+      var adv = 0;
+      SplashAd? opened;
+      await t.pumpWidget(_app(
+        launch: SplashAdLaunch(ad: _ad(imageUrl: _img), imageBytes: _png),
+        onAdvertise: () => adv++,
+        onOpenAd: (a) => opened = a,
+      ));
+      await t.pump();
+      expect(find.byKey(AppLaunchSplash.tapAreaKey), findsNothing);
+      await t.tap(find.byKey(AppLaunchSplash.imageKey));
+      await t.pump(const Duration(milliseconds: 500));
+      expect([adv, opened], [0, null]);
+      expect(find.byKey(AppLaunchSplash.overlayKey), findsOneWidget);
+      await t.pump(const Duration(seconds: 3));
     });
   });
 

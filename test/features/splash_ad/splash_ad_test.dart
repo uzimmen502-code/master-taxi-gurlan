@@ -175,25 +175,24 @@ void main() {
       expect(finished, 1);
     });
 
-    testWidgets('сукут матни + «Реклама бериш»; ўтказиш тугмаси йўқ, фонни босиш ёпмайди', (t) async {
+    testWidgets('сукут матни + босиш ишораси; пастки «Реклама бериш» тугмаси ЙЎҚ (эга 2026-11-28), ўтказиш йўқ', (t) async {
       await t.pumpWidget(_app());
       expect(find.text('Бу ерда сизнинг рекламангиз бўлиши мумкин'), findsOneWidget);
-      expect(find.text('Реклама бериш'), findsOneWidget);
+      expect(find.text('Босинг — реклама беринг'), findsOneWidget);
+      expect(find.text('Реклама бериш'), findsNothing);
+      expect(find.byType(FilledButton), findsNothing);
       for (final s in ['Ўтказиб юбориш', 'O\'tkazib yuborish', 'Пропустить', 'Skip']) {
         expect(find.textContaining(s), findsNothing);
       }
       expect(find.byType(CloseButton), findsNothing);
       expect(find.byIcon(Icons.close), findsNothing);
-      await t.tap(find.byKey(AppLaunchSplash.placeholderKey));
-      await t.pump(const Duration(milliseconds: 500));
-      expect(find.byKey(AppLaunchSplash.overlayKey), findsOneWidget);
       await t.pump(const Duration(seconds: 3));
     });
 
-    testWidgets('«Реклама бериш» — splash дарров ёпилади ва onAdvertise чақирилади', (t) async {
+    testWidgets('сукут банернинг исталган жойи босилса — splash дарров ёпилади ва onAdvertise (пуллик харид)', (t) async {
       var adv = 0, finished = 0;
       await t.pumpWidget(_app(onAdvertise: () => adv++, onFinished: () => finished++));
-      await t.tap(find.byKey(AppLaunchSplash.advertiseKey));
+      await t.tapAt(t.getTopLeft(find.byKey(AppLaunchSplash.tapAreaKey)) + const Offset(10, 10)); // бурчак — матндан ташқари
       await t.pump();
       expect(adv, 1);
       expect(finished, 1);
@@ -205,12 +204,12 @@ void main() {
     testWidgets('3 тил: лотин (янги ҳарфлар) ва рус', (t) async {
       await t.pumpWidget(_app(lang: 'uz_Latn'));
       expect(find.text('Bu yerda sizning reklamangiz bölişi mumkin'), findsOneWidget);
-      expect(find.text('Reklama beriş'), findsOneWidget);
+      expect(find.text('Bosing — reklama bering'), findsOneWidget);
       await t.pump(const Duration(seconds: 3));
       await t.pumpWidget(const SizedBox());
       await t.pumpWidget(_app(lang: 'ru'));
       expect(find.text('Здесь может быть ваша реклама'), findsOneWidget);
-      expect(find.text('Разместить рекламу'), findsOneWidget);
+      expect(find.text('Нажмите, чтобы разместить рекламу'), findsOneWidget);
       await t.pump(const Duration(seconds: 3));
     });
 
@@ -610,6 +609,32 @@ void main() {
       expect(adv, 1);
       expect(opened, isNull);
       expect(find.byKey(AppLaunchSplash.overlayKey), findsNothing);
+    });
+
+    testWidgets('намуна майдонининг бурчаги (расмдан ташқари) ҳам — «Реклама бериш»', (t) async {
+      var adv = 0;
+      await t.pumpWidget(_app(launch: SplashAdLaunch(ad: house(), imageBytes: _png), onAdvertise: () => adv++));
+      await t.pump();
+      await t.tapAt(t.getTopLeft(find.byKey(AppLaunchSplash.tapAreaKey)) + const Offset(4, 4));
+      await t.pump();
+      expect(adv, 1);
+    });
+
+    testWidgets('пуллик креатив ҳаволасиз — босилмайди (аввалгидек), «Реклама бериш» ҳам чақирилмайди', (t) async {
+      var adv = 0;
+      SplashAd? opened;
+      await t.pumpWidget(_app(
+        launch: SplashAdLaunch(ad: _ad(imageUrl: _img), imageBytes: _png),
+        onAdvertise: () => adv++,
+        onOpenAd: (a) => opened = a,
+      ));
+      await t.pump();
+      expect(find.byKey(AppLaunchSplash.tapAreaKey), findsNothing);
+      await t.tap(find.byKey(AppLaunchSplash.imageKey));
+      await t.pump(const Duration(milliseconds: 500));
+      expect([adv, opened], [0, null]);
+      expect(find.byKey(AppLaunchSplash.overlayKey), findsOneWidget);
+      await t.pump(const Duration(seconds: 3));
     });
   });
 

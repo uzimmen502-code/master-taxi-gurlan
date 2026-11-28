@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// Splash креатив майдони (эга 2026-11-28: рекламачи учун аниқ ўлчам). Креатив `BoxFit.contain` билан
 /// шу майдонга жойлашади (КЕСИЛМАЙДИ). Майдон = экран − SafeArea (статус/навигация) − 40 dp эн ва
-/// ≈150 dp бўй (AVA сарлавҳа, оралиқлар, «Реклама бериш» тугмаси).
+/// ≈85 dp бўй (AVA сарлавҳа ва оралиқлар; пастки «Реклама бериш» тугмаси эга 2026-11-28 олиб ташлаган).
 /// Бу тест ҳисоботдаги спецификацияни қулфлайди: layout ўзгарса — спецификация ҳам янгиланади.
 Future<Size> _creativeBox(WidgetTester t, Size screen, {double top = 0, double bottom = 0}) async {
   t.view.physicalSize = screen;
@@ -34,8 +34,8 @@ void main() {
     final b = await _creativeBox(t, const Size(360, 800), top: 24, bottom: 48);
     final chrome = 800 - 72 - b.height;
     expect(b.width, 320);
-    // Сарлавҳа (AVA 26 pt) + 16 + 16 + тугма 50 + 16 юқори + 20 пастки ҳошия.
-    expect(chrome, inInclusiveRange(145, 160));
+    // Сарлавҳа (AVA 26 pt) + 16 оралиқ + 16 юқори + 20 пастки ҳошия (тугма йўқ).
+    expect(chrome, inInclusiveRange(75, 95));
     // ignore: avoid_print
     print('splash creative box 360x800: ${b.width}x${b.height} chrome=$chrome');
   });

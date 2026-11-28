@@ -276,6 +276,12 @@ class SplashAdTexts {
     'uz_Latn': 'Reklama beriş',
     'ru': 'Разместить рекламу',
   };
+  /// Креатив йўқда банер остидаги босиш ишораси (пастки тугма олиб ташланди, эга 2026-11-28).
+  static const Map<String, String> _tapHint = {
+    'uz_Cyrl': 'Босинг — реклама беринг',
+    'uz_Latn': 'Bosing — reklama bering',
+    'ru': 'Нажмите, чтобы разместить рекламу',
+  };
   static const Map<String, String> _adLabel = {
     'uz_Cyrl': 'Реклама',
     'uz_Latn': 'Reklama',
@@ -311,6 +317,7 @@ class SplashAdTexts {
   static String creativeSpec(String lang) => _of(_creativeSpec, lang);
   static String placeholder(String lang) => _of(_placeholder, lang);
   static String advertise(String lang) => _of(_advertise, lang);
+  static String tapHint(String lang) => _of(_tapHint, lang);
   static String adLabel(String lang) => _of(_adLabel, lang);
   static String chatDraft(String lang) => _of(_chatDraft, lang);
   static String needLogin(String lang) => _of(_needLogin, lang);

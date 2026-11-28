@@ -236,6 +236,7 @@ module.exports = {
   topUpReadiness,
   makeFinanceNotifier,
   makeCardChangeNotifier,
+  broadcastToFinance,
   cardLast4,
   sweepExpiredTopUps,
   parseDepositPayload,

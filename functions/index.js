@@ -98,6 +98,12 @@ const { attachCourierPayout } = require('./courier_payout');
 attachCourierPayout(exports, {
   functions, db, admin, canonicalUid, settlementLedger, requireCallerRoles,
 });
+// Ҳамён инвариантлари (W-1, 3-босқич): кунлик 04:00 — I-1/I-2/I-3/I-3F, ҳисобот `ledger_reconcile_runs/{сана}`,
+// фарқ бўлса WALLET_PROJECTION_DRIFT log + молияга хабар. Фақат ўқийди, тузатмайди (wallet_invariants.js).
+const { attachWalletInvariants } = require('./wallet_invariants');
+attachWalletInvariants(exports, {
+  functions, db, admin, notifyUserInApp, sendAdminTelegram: (text) => sendAnomalyTelegramMessage(text),
+});
 // Mijoz tasdig'i — «Oldim» / «Berdim» (D2/D7, ega qarori 2026-10-16): AVA kuryeri
 // oqimlarida kuryer qadamini mijoz O'Z qurilmasida tasdiqlaydi. Sozlama faqat server:
 // `server_config/customer_confirm` (standart OFF). Modul yadrolari `registerHandler`

@@ -829,11 +829,8 @@ function attachRealty(exports, deps) {
               });
             }
             const bonusCtx = await prepareWalletDebit(t, userRef.id, ledgerOpId);
-            t.update(userRef, {
-              bonusBalance: admin.firestore.FieldValue.increment(-price),
-              balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            });
-            settlementLedger.commitBonusInTx(t, bonusCtx, {
+            // Ягона ёзиш йўли (W-1): журнал + bonusBalance (increment, update) + wallet_ledger.
+            settlementLedger.walletPost(t, bonusCtx, {
               delta: -price,
               kind: 'realty_tier_purchase',
               refType: 'realty_listing',
@@ -841,15 +838,15 @@ function attachRealty(exports, deps) {
               meta: { tier, days },
               postedBy: uid,
               postedRole: 'client',
-            });
-            t.set(userRef.collection('wallet_ledger').doc(), {
-              type: 'realty_tier_purchase',
-              amount: price,
-              debitCredit: 'debit',
-              note: `Кўчмас мулк (${tier}) — ${days} кун`,
-              refType: 'realty_listing',
-              refId: listingId,
-              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+              userWrite: 'update',
+              walletLedgerType: 'realty_tier_purchase',
+              walletAmount: price,
+              walletLedger: {
+                debitCredit: 'debit',
+                note: `Кўчмас мулк (${tier}) — ${days} кун`,
+                refType: 'realty_listing',
+                refId: listingId,
+              },
             });
           }
 
@@ -983,11 +980,8 @@ function attachRealty(exports, deps) {
               });
             }
             const bonusCtx = await prepareWalletDebit(t, userRef.id, ledgerOpId);
-            t.update(userRef, {
-              bonusBalance: admin.firestore.FieldValue.increment(-price),
-              balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            });
-            settlementLedger.commitBonusInTx(t, bonusCtx, {
+            // Ягона ёзиш йўли (W-1).
+            settlementLedger.walletPost(t, bonusCtx, {
               delta: -price,
               kind: 'realty_package_purchase',
               refType: 'realty_package',
@@ -995,15 +989,15 @@ function attachRealty(exports, deps) {
               meta: { size },
               postedBy: uid,
               postedRole: 'client',
-            });
-            t.set(userRef.collection('wallet_ledger').doc(), {
-              type: 'realty_package_purchase',
-              amount: price,
-              debitCredit: 'debit',
-              note: `Кўчмас мулк ахборот пакети — ${size} объект`,
-              refType: 'realty_package',
-              refId: `${size}`,
-              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+              userWrite: 'update',
+              walletLedgerType: 'realty_package_purchase',
+              walletAmount: price,
+              walletLedger: {
+                debitCredit: 'debit',
+                note: `Кўчмас мулк ахборот пакети — ${size} объект`,
+                refType: 'realty_package',
+                refId: `${size}`,
+              },
             });
           }
 
@@ -1227,11 +1221,8 @@ function attachRealty(exports, deps) {
               });
             }
             const bonusCtx = await prepareWalletDebit(t, userRef.id, ledgerOpId);
-            t.update(userRef, {
-              bonusBalance: admin.firestore.FieldValue.increment(-plan.price),
-              balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            });
-            settlementLedger.commitBonusInTx(t, bonusCtx, {
+            // Ягона ёзиш йўли (W-1).
+            settlementLedger.walletPost(t, bonusCtx, {
               delta: -plan.price,
               kind: 'realty_pro_purchase',
               refType: 'realty_pro',
@@ -1239,16 +1230,16 @@ function attachRealty(exports, deps) {
               meta: { planId: plan.id, objects: plan.objects, days: plan.days },
               postedBy: uid,
               postedRole: 'client',
-            });
-            t.set(userRef.collection('wallet_ledger').doc(), {
-              type: 'realty_pro_purchase',
-              amount: plan.price,
-              debitCredit: 'debit',
-              note: `Риэлтор пакети ${plan.id} — ${plan.objects} объект, `
-                + `${plan.days} кун`,
-              refType: 'realty_pro',
-              refId: plan.id,
-              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+              userWrite: 'update',
+              walletLedgerType: 'realty_pro_purchase',
+              walletAmount: plan.price,
+              walletLedger: {
+                debitCredit: 'debit',
+                note: `Риэлтор пакети ${plan.id} — ${plan.objects} объект, `
+                  + `${plan.days} кун`,
+                refType: 'realty_pro',
+                refId: plan.id,
+              },
             });
           }
 

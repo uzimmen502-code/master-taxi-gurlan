@@ -1231,17 +1231,14 @@ function attachBusinessOrders(exportsObj, deps) {
       if (walletPrep.jExists) {
         walletPaid = fee;
       } else if (walletPrep.pcPrev >= fee) {
-        settlementLedger.commitBonusInTx(t, walletPrep, {
+        // Ягона ёзиш йўли (W-1): мижоз → курьер (counterparty), учала омбор битта чақирувда.
+        const row = { module: MODULE_ID, refType: 'order', refId: orderId, meta: {}, createdBy: 'server' };
+        settlementLedger.walletPost(t, walletPrep, {
           delta: -fee, kind: 'business_delivery_fee', refType: 'order', refId: orderId,
           meta: { module: MODULE_ID, courierTail: tail4(courierId) }, postedBy: customerUid, postedRole: 'client',
+          walletLedgerType: 'business_delivery_debit', walletLedger: row,
+          counterparty: { walletLedgerType: 'business_delivery_credit', walletLedger: row },
         });
-        const cRef = db.collection('users').doc(customerUid);
-        const kRef = db.collection('users').doc(courierId);
-        // Кўзгу — ресторан `restDelivery_` билан бир хил: increment + wallet_ledger.
-        t.set(cRef, { bonusBalance: inc(-fee), balanceUpdatedAt: ts() }, { merge: true });
-        t.set(cRef.collection('wallet_ledger').doc(), { type: 'business_delivery_debit', amount: -fee, module: MODULE_ID, refType: 'order', refId: orderId, meta: {}, createdAt: ts(), createdBy: 'server' });
-        t.set(kRef, { bonusBalance: inc(fee), balanceUpdatedAt: ts() }, { merge: true });
-        t.set(kRef.collection('wallet_ledger').doc(), { type: 'business_delivery_credit', amount: fee, module: MODULE_ID, refType: 'order', refId: orderId, meta: {}, createdAt: ts(), createdBy: 'server' });
         walletPaid = fee;
       } else {
         deliveryPaymentMethod = 'cash';

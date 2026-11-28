@@ -246,6 +246,40 @@ Finance Center
    - Audit Trail: журнал таби `ts`/`postedBy`/`postedRole`/`refType` кўрсатади;
      "Истиснолар" таби `ledger_exceptions` (deferred камомад) ни кўрсатади.
 
+## 14.1 Ҳамён инвариантлари ва тарихий фарқлар (W-1, 2026-11-28)
+
+**What / why / date / impact (46-банд).** Эга 2026-11-28: «Ҳисоб дафтар жуда тоза ва мукаммал бўлсин».
+
+**Базавий сана (CONFIRMED, код):** `2026-06-28T08:44:00Z` — `tools/settlement_opening_balances.js`
+(`opening:{uid}`, `mirrorBonus:false`). Ундан олдинги `wallet_ledger` тарихи ledger'да йўқ.
+
+**Кунлик текширув** `walletInvariantDailyCheck` (04:00 Тошкент, `wallet_invariants.js`) — нол толерантлик,
+ФАҚАТ ўқийди ва `ledger_reconcile_runs/{сана}` ёзади (rules: фақат superadmin/finance/auditor ўқийди):
+
+| Код | Инвариант |
+|---|---|
+| I-1 | `bonusBalance == passenger_credit:{uid}` (ҳисобсиз bonusBalance≠0 ва userсиз ҳисоб ҳам) |
+| I-2 | ҳар журнал ёзуви тўғри; Σdr==Σcr; Σактив==Σмажбурият; ҳар ҳисоб == журнал йиғиндиси; ҳисоб тури |
+| I-3 | `bonusBalance == opening + Σ wallet_ledger (createdAt ≥ база)` |
+| I-3F | `bonusBalance == Σ БАРЧА wallet_ledger` (тўлиқ тарих) |
+| A | манфий / бутун бўлмаган қиймат / `createdAt`сиз тарих қатори |
+
+wallet_ledger белги қоидаси: `order_payment_*` → 0; юқори даражадаги `debitCredit:'debit'` → −|amount|;
+`'credit'` → +|amount|; қолгани — `amount` белгиси билан.
+
+**Тарихий фарқлар (prod, 2026-11-28, фақат ўқиш билан топилган):**
+
+| # | Ҳамён | Инвариант | Фарқ | Сабаб | Тузатиш (PROPOSED, тарих ЎЧИРИЛМАЙДИ) | Восита |
+|---|---|---|---|---|---|---|
+| H-1 | `***8777` | I-1 | +19 562 | 2026-07-27 икки буюртма бекор қайтими журналсиз (07-27 даги жонли версия калит ёзмаган — INFERRED) | `bonus:order_cancel_refund_{orderId}` (жонли калит) Dr admin_clearing / Cr passenger_credit, bonusBalance'га тегилмайди; ёзишдан кейин I-1/I-2/I-3 текширувидан ўтмаса exit 2 | `tools/fix_wallet_8777_cancel_refund.js` |
+| H-2 | `***8777` | I-3F | −1 500 | базагача давр: тарих Σ 23 672, opening 22 172 — 1 500 тарихсиз ечилган | `wallet_ledger/pre_ledger_adjustment_v1` −1 500, `createdAt` = база − 1 с, `recordedAt` = ҳақиқий вақт | `tools/wallet_history_corrections.js` |
+| H-3 | `***3355` | I-3F | −153 211 601 | 2026-05 нон буюртмаларида курьер киритган тест қийматлари (`change_accrued` 100 000 000 …), кейин bonusBalance тарихсиз камайтирилган (INFERRED) | худди H-2 каби битта тузатувчи ёзув; 98 та эски қатор сақланади | `tools/wallet_history_corrections.js` |
+| H-4 | 8 та opening ҳамён | — | — | `wallet_ledger`да очилиш (`opening_balance`) қатори йўқ | **Қўшилмайди**: базагача тарих билан икки марта ҳисобланарди. H-2/H-3 дан кейин ҳар ҳамёнда Σ(базагача тарих) == opening — очилиш тарихдан тўлиқ келиб чиқади | — |
+
+Тузатувчи ёзувнинг тури `admin_adjust` (иловада таржима қилинган ёрлиқ бор), `correction:true`,
+`meta.kind:'pre_ledger_adjustment'`. Қайтариш — ўчириш эмас, тескари ёзув (`…_reversal`).
+Икки восита ҳам dry-run стандарт, backup, транзакцияда STALE текшируви, идемпотент. **Prod'га ёзиш — эга рухсати.**
+
 ## 15. Келажак (V2+)
 
 - Offline Settlement (Local Queue → Reconnect → Cloud Confirm).

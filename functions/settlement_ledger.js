@@ -320,7 +320,7 @@ async function prepareBonusInTx(tx, db, uid, options = {}) {
     tx.get(jRef), tx.get(pcRef), tx.get(fundRef),
   ]);
   return {
-    uid, pcId, pcRef, fundRef, jRef, fundingAccount, idempotencyKey,
+    db, uid, pcId, pcRef, fundRef, jRef, fundingAccount, idempotencyKey,
     jExists: jSnap.exists,
     pcPrev: pcSnap.exists ? (pcSnap.data().balance || 0) : 0,
     fundPrev: fundSnap.exists ? (fundSnap.data().balance || 0) : 0,
@@ -374,6 +374,102 @@ function commitBonusInTx(tx, ctx, input = {}) {
     updatedAt: ts,
   }, { merge: true });
   return { idempotent: false, pcBalance: pcNext };
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Ҳамён ЯГОНА ёзиш йўли (W-1, 2-босқич): walletPost.
+//
+// Учала омбор БИТТА чақирувда, айни транзакцияда:
+//   1) journal_entries/bonus:{key} + ledger_accounts (commitBonusInTx);
+//   2) users/{uid}.bonusBalance (increment ёки транзакцияда ўқилган қолдиқдан мутлақ қиймат);
+//   3) users/{uid}/wallet_ledger/{детерминистик id} (фойдаланувчи тарихи).
+// Агар funding ҳисоби бошқа passenger_credit бўлса (ҳамёндан ҳамёнга: мижоз → курьер/ресторан), қарама-қарши
+// томоннинг bonusBalance + wallet_ledger ҳам ёзилади (`counterparty`).
+// Журнал аллақачон бор (jExists) — ҲЕЧ НАРСА ёзилмайди: пул икки марта юрмайди, учала омбор ажралмайди.
+//
+// Ишлатиш: READ фазасида `prepareWalletPost` (= prepareBonusInTx), WRITE фазасида `walletPost`.
+// Кўчирилган модуллар bonusBalance/wallet_ledger'га ўзи ЁЗМАЙДИ (test/wallet_single_path_lint.test.js).
+// ─────────────────────────────────────────────────────────────────────
+
+/** READ фазаси — prepareBonusInTx билан бир хил (ctx.db, ctx.uid ичида). */
+const prepareWalletPost = prepareBonusInTx;
+
+/** wallet_ledger детерминистик id'си: журнал калитидан (`/` Firestore id'да тақиқ). */
+function walletLedgerIdFor(idempotencyKey) {
+  return `wl_${String(idempotencyKey).replace(/\//g, '_')}`;
+}
+
+function mirrorWalletInTx(tx, db, {
+  uid, delta, nextBalance = null, balanceUpdatedAt = true, userWrite = 'set',
+  walletLedgerType = null, walletLedger = {}, walletAmount = null, walletLedgerId,
+}) {
+  const userRef = db.collection('users').doc(uid);
+  const patch = {
+    bonusBalance: Number.isInteger(nextBalance) ? nextBalance : admin.firestore.FieldValue.increment(delta),
+  };
+  if (balanceUpdatedAt) patch.balanceUpdatedAt = admin.firestore.FieldValue.serverTimestamp();
+  if (userWrite === 'update') tx.update(userRef, patch);
+  else tx.set(userRef, patch, { merge: true });
+  if (walletLedgerType) {
+    tx.set(userRef.collection('wallet_ledger').doc(walletLedgerId), {
+      type: walletLedgerType,
+      amount: walletAmount === null ? delta : walletAmount,
+      ...walletLedger,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  }
+}
+
+/**
+ * WRITE фазаси. Қаранг: юқоридаги изоҳ.
+ *   delta            — passenger_credit:{ctx.uid} ўзгариши (кредит +, ечим −), нолдан фарқли бутун сон
+ *   kind/refType/refId/meta/postedBy/postedRole — журнал ёзуви (commitBonusInTx)
+ *   walletLedgerType — тарих тури; null бўлса тарих қатори ёзилмайди
+ *   walletLedger     — тарих қаторининг қўшимча майдонлари (module, meta, createdBy, note, debitCredit …)
+ *   walletAmount     — тарихдаги amount (стандарт: delta; масалан realty: мусбат + debitCredit 'debit')
+ *   walletLedgerId   — стандарт: walletLedgerIdFor(ctx.idempotencyKey)
+ *   nextBalance      — берилса bonusBalance шу мутлақ қийматга (чақирувчи қолдиқни ШУ транзакцияда ўқиган)
+ *   balanceUpdatedAt — стандарт true; userWrite 'set'(merge) | 'update'
+ *   selfMirror       — false: фақат журнал (+counterparty); ўз проекцияси `mirrorWalletInTx` билан йиғма ёзилади
+ *   counterparty     — funding = passenger_credit:X бўлганда: { walletLedgerType, walletLedger, walletAmount,
+ *                      walletLedgerId, balanceUpdatedAt, nextBalance } (стандарт delta = −delta)
+ * Қайтаради: { applied, idempotent, pcBalance }.
+ */
+function walletPost(tx, ctx, input = {}) {
+  if (!ctx || !ctx.db || !ctx.uid) throw new Error('walletPost: ctx from prepareWalletPost required');
+  if (ctx.jExists) return { applied: false, idempotent: true, pcBalance: ctx.pcPrev };
+  const {
+    delta, kind, refType = '', refId = '', meta = {}, postedBy = 'system', postedRole = 'system',
+    walletLedgerType = null, walletLedger = {}, walletAmount = null, walletLedgerId,
+    nextBalance = null, balanceUpdatedAt = true, userWrite = 'set', selfMirror = true, counterparty = null,
+  } = input;
+  if (!kind) throw new Error('walletPost: kind required');
+  const r = commitBonusInTx(tx, ctx, { delta, kind, refType, refId, meta, postedBy, postedRole });
+  if (selfMirror) {
+    mirrorWalletInTx(tx, ctx.db, {
+      uid: ctx.uid, delta, nextBalance, balanceUpdatedAt, userWrite,
+      walletLedgerType, walletLedger, walletAmount,
+      walletLedgerId: walletLedgerId || walletLedgerIdFor(ctx.idempotencyKey),
+    });
+  }
+  if (counterparty) {
+    if (!ctx.fundingAccount.startsWith('passenger_credit:')) {
+      throw new Error('walletPost: counterparty requires passenger_credit funding');
+    }
+    const cp = counterparty;
+    mirrorWalletInTx(tx, ctx.db, {
+      uid: ownerUidOf(ctx.fundingAccount),
+      delta: -delta,
+      nextBalance: Number.isInteger(cp.nextBalance) ? cp.nextBalance : null,
+      balanceUpdatedAt: cp.balanceUpdatedAt !== false,
+      userWrite: cp.userWrite || 'set',
+      walletLedgerType: cp.walletLedgerType || null,
+      walletLedger: cp.walletLedger || {},
+      walletAmount: cp.walletAmount === undefined ? null : cp.walletAmount,
+      walletLedgerId: cp.walletLedgerId || walletLedgerIdFor(`${ctx.idempotencyKey}:cp`),
+    });
+  }
+  return { applied: true, idempotent: false, pcBalance: r.pcBalance };
 }
 
 /**
@@ -543,13 +639,33 @@ async function reconcile(db) {
     }
   });
 
+  // Проекция: ҳисоб эгалари — getAll пакетлари (N+1 ўрнига, 100 тадан).
   const mismatches = [];
-  for (const a of pcAccounts) {
-    const u = await db.collection('users').doc(a.uid).get();
-    const bonus = u.exists ? (u.data().bonusBalance || 0) : 0;
-    if (bonus !== a.balance) {
-      mismatches.push({ uid: a.uid, ledger: a.balance, bonusBalance: bonus });
-    }
+  const pcUids = new Set();
+  for (let i = 0; i < pcAccounts.length; i += 100) {
+    const chunk = pcAccounts.slice(i, i + 100);
+    const snaps = await db.getAll(...chunk.map((a) => db.collection('users').doc(a.uid)));
+    snaps.forEach((u, j) => {
+      const a = chunk[j];
+      pcUids.add(a.uid);
+      const bonus = u.exists ? (u.data().bonusBalance || 0) : 0;
+      if (bonus !== a.balance) {
+        mismatches.push({ uid: a.uid, ledger: a.balance, bonusBalance: bonus });
+      }
+    });
+  }
+  // Ҳисоби ЙЎҚ, лекин bonusBalance ≠ 0 — аввал кўринмасди (ledger'сиз пул). Саҳифалаб.
+  let cursor = null;
+  for (;;) {
+    let q = db.collection('users').where('bonusBalance', '!=', 0).orderBy('bonusBalance').limit(500);
+    if (cursor) q = q.startAfter(cursor);
+    const snap = await q.get();
+    snap.docs.forEach((d) => {
+      if (pcUids.has(d.id)) return;
+      mismatches.push({ uid: d.id, ledger: 0, bonusBalance: (d.data() || {}).bonusBalance, noAccount: true });
+    });
+    if (snap.size < 500) break;
+    cursor = snap.docs[snap.docs.length - 1];
   }
 
   return {
@@ -756,6 +872,10 @@ module.exports = {
   prepareBonusInTx,
   commitBonusInTx,
   commitBonusInBatch,
+  prepareWalletPost,
+  walletPost,
+  mirrorWalletInTx,
+  walletLedgerIdFor,
   getConfig,
   floatZone,
   settlementEnabled,

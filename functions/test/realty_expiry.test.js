@@ -23,6 +23,9 @@ const ledgerCalls = [];
 const settlementLedger = {
   prepareBonusInTx: async (t, db, uid, o) => ({ uid, o, jExists: false }),
   commitBonusInTx: (t, ctx, input) => { ledgerCalls.push(input); },
+  // W-1: харидлар ягона йўл `walletPost` орқали (журнал + bonusBalance + wallet_ledger). Ҳақиқий ёзувлар
+  // `realty_submit_cf.test.js` (emulator) ва ҳамён характеризациясида текширилади; бу ерда — фақат чақирув.
+  walletPost: (t, ctx, input) => { ledgerCalls.push(input); return { applied: true }; },
 };
 
 // ---------------------------------------------------------------- fake db

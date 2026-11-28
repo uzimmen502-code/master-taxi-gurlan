@@ -100,7 +100,7 @@ const NOTICE = Object.freeze({
   },
   rejected: {
     uz_Cyrl: { title: 'Реклама рад этилди', body: 'Сабаб: {reason}. {amount} сўм ҳамёнингизга қайтарилди.' },
-    uz_Latn: { title: 'Reklama rad etildi', body: "Sabab: {reason}. {amount} so'm hamyoningizga qaytarildi." },
+    uz_Latn: { title: 'Reklama rad etildi', body: "Sabab: {reason}. {amount} söm hamyoningizga qaytarildi." },
     ru: { title: 'Реклама отклонена', body: 'Причина: {reason}. {amount} сум возвращены в кошелёк.' },
   },
 });

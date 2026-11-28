@@ -16,6 +16,8 @@
  *   node functions/tools/migrate_geo_latin_alphabet.js --project <id>                 # DRY RUN
  *   node functions/tools/migrate_geo_latin_alphabet.js --project <id> --apply         # ёзиш
  *   node functions/tools/migrate_geo_latin_alphabet.js --project <id> --rollback <f>  # rollback DRY RUN (+ --apply)
+ *   Кафе-ресторан номлари (эга 2026-11-28): юқоридагилардан бирига `--target restaurants` қўшилади
+ *   (`restaurants/{rid}.name`; backup `restaurant_latin_alphabet_<project>_<ts>.json`; rollback ҳам `--target restaurants`).
  *   ADC йўқ машинада: $env:GCLOUD_ACCESS_TOKEN = (gcloud auth print-access-token) — Firestore REST (токен лог'га чиқмайди).
  *   Эмулятор: FIRESTORE_EMULATOR_HOST=127.0.0.1:<port> ... --project demo-xxx
  *
@@ -30,9 +32,19 @@ const path = require('path');
 const { convertText } = require('./uz_latin_alphabet');
 
 const PAGE = 400;
-const COLLECTIONS = Object.freeze(['geo_regions', 'geo_districts']);
-const FIELD = 'name';
-const KIND = 'geo_latin_alphabet_migration';
+/**
+ * Нишонлар (`--target`, сукут `geo` — аввалги хатти-ҳаракат ЎЗГАРМАГАН).
+ * `restaurants` (эга 2026-11-28, дубликат аудити 18-банд): кафе-ресторан номи (`restaurants/{rid}.name`, эга
+ * киритган ЯГОНА майдон — кирилл ёки лотин). Фақат лотин сўзлар ўзгаради, кирилл тегилмайди; бренд/хорижий
+ * сўзлар `uz_latin_alphabet.js` EXCLUDE рўйхатида. DRY RUN рўйхатини эга кўриб чиқади (бренд номи бўлса —
+ * apply қилинмайди ёки EXCLUDE'га қўшилади).
+ */
+const TARGETS = Object.freeze({
+  geo: Object.freeze({ collections: Object.freeze(['geo_regions', 'geo_districts']), field: 'name', kind: 'geo_latin_alphabet_migration', prefix: 'geo_latin_alphabet' }),
+  restaurants: Object.freeze({ collections: Object.freeze(['restaurants']), field: 'name', kind: 'restaurant_latin_alphabet_migration', prefix: 'restaurant_latin_alphabet' }),
+});
+const COLLECTIONS = TARGETS.geo.collections;
+const FIELD = TARGETS.geo.field;
 const BACKUP_DIR = path.join(__dirname, 'backup');
 
 function parseArgs(argv) {
@@ -41,7 +53,17 @@ function parseArgs(argv) {
     if (i < 0) return undefined;
     return argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[i + 1] : '';
   };
-  return { apply: argv.includes('--apply'), project: val('--project'), rollback: val('--rollback') };
+  return {
+    apply: argv.includes('--apply'), project: val('--project'), rollback: val('--rollback'), target: val('--target') || 'geo',
+  };
+}
+
+function targetOf(args) {
+  const name = (args && args.target) || 'geo';
+  if (!Object.prototype.hasOwnProperty.call(TARGETS, name)) {
+    throw new Error(`--target ${name} noma'lum (${Object.keys(TARGETS).join(', ')})`);
+  }
+  return TARGETS[name];
 }
 
 /** Тоза: битта ҳужжат учун ёзув ёки null. doc: {collection, id, name, updateTime}. */
@@ -68,7 +90,7 @@ function planRollback(backupDocs, current) {
 
 // ─── Firestore қатлами: Admin SDK ёки REST ───
 
-function sdkStore(project) {
+function sdkStore(project, field = FIELD) {
   const admin = require('firebase-admin');
   if (!admin.apps.length) {
     if (process.env.FIRESTORE_EMULATOR_HOST) admin.initializeApp({ projectId: project });
@@ -85,7 +107,7 @@ function sdkStore(project) {
         const snap = await q.get();
         for (const doc of snap.docs) {
           const d = doc.data() || {};
-          yield { collection, id: doc.id, updateTime: doc.updateTime, name: d[FIELD] };
+          yield { collection, id: doc.id, updateTime: doc.updateTime, name: d[field] };
         }
         if (snap.size < PAGE) break;
         last = snap.docs[snap.docs.length - 1];
@@ -96,21 +118,21 @@ function sdkStore(project) {
       const snaps = refs.length ? await db.getAll(...refs) : [];
       return snaps.map((s) => ({
         collection, id: s.id, exists: s.exists, updateTime: s.exists ? s.updateTime : null,
-        name: s.exists ? (s.data() || {})[FIELD] : undefined,
+        name: s.exists ? (s.data() || {})[field] : undefined,
       }));
     },
     /** writes: [{collection, id, updateTime, after}] */
     async commit(writes) {
       const batch = db.batch();
       for (const w of writes) {
-        batch.update(db.collection(w.collection).doc(w.id), { [FIELD]: w.after }, { lastUpdateTime: w.updateTime });
+        batch.update(db.collection(w.collection).doc(w.id), { [field]: w.after }, { lastUpdateTime: w.updateTime });
       }
       await batch.commit();
     },
   };
 }
 
-function restStore(project, token) {
+function restStore(project, token, field = FIELD) {
   const root = `projects/${project}/databases/(default)/documents`;
   const base = `https://firestore.googleapis.com/v1/${root}`;
   const headers = { Authorization: `Bearer ${token}`, 'x-goog-user-project': project, 'Content-Type': 'application/json' };
@@ -135,7 +157,7 @@ function restStore(project, token) {
         for (const r of rows) {
           yield {
             collection, id: r.document.name.split('/').pop(), updateTime: r.document.updateTime,
-            name: str((r.document.fields || {})[FIELD]),
+            name: str((r.document.fields || {})[field]),
           };
         }
         if (rows.length < PAGE) break;
@@ -146,14 +168,14 @@ function restStore(project, token) {
       if (!ids.length) return [];
       const out = await post(`${base}:batchGet`, { documents: ids.map((id) => `${root}/${collection}/${id}`) });
       return out.map((r) => (r.found
-        ? { collection, id: r.found.name.split('/').pop(), exists: true, updateTime: r.found.updateTime, name: str((r.found.fields || {})[FIELD]) }
+        ? { collection, id: r.found.name.split('/').pop(), exists: true, updateTime: r.found.updateTime, name: str((r.found.fields || {})[field]) }
         : { collection, id: String(r.missing).split('/').pop(), exists: false, updateTime: null, name: undefined }));
     },
     async commit(writes) {
       await post(`${base}:commit`, {
         writes: writes.map((w) => ({
-          update: { name: `${root}/${w.collection}/${w.id}`, fields: { [FIELD]: { stringValue: w.after } } },
-          updateMask: { fieldPaths: [FIELD] },
+          update: { name: `${root}/${w.collection}/${w.id}`, fields: { [field]: { stringValue: w.after } } },
+          updateMask: { fieldPaths: [field] },
           currentDocument: { updateTime: w.updateTime },
         })),
       });
@@ -183,9 +205,9 @@ async function commitInChunks(store, writes, label) {
   return { done, failedChunks };
 }
 
-async function verify(store, writes) {
+async function verify(store, writes, collections = COLLECTIONS) {
   let ok = 0;
-  for (const col of COLLECTIONS) {
+  for (const col of collections) {
     const ws = writes.filter((w) => w.collection === col);
     for (let i = 0; i < ws.length; i += 100) {
       const part = ws.slice(i, i + 100);
@@ -198,9 +220,10 @@ async function verify(store, writes) {
 }
 
 async function migrate(store, args, { backupDir = BACKUP_DIR, now = Date.now() } = {}) {
-  console.log(`${args.apply ? 'APPLY' : 'DRY RUN'} — loyiha ${args.project} (${store.label}); maydon: ${FIELD}`);
+  const tgt = targetOf(args);
+  console.log(`${args.apply ? 'APPLY' : 'DRY RUN'} — loyiha ${args.project} (${store.label}); nishon: ${args.target || 'geo'}; maydon: ${tgt.field}`);
   const plan = [];
-  for (const col of COLLECTIONS) {
+  for (const col of tgt.collections) {
     let scanned = 0;
     let picked = 0;
     for await (const doc of store.listAll(col)) {
@@ -217,26 +240,27 @@ async function migrate(store, args, { backupDir = BACKUP_DIR, now = Date.now() }
   if (!plan.length) { console.log('Yoziladigan hujjat yo\'q.'); return { planned: 0, done: 0 }; }
 
   fs.mkdirSync(backupDir, { recursive: true });
-  const file = path.join(backupDir, `geo_latin_alphabet_${args.project}_${new Date(now).toISOString().replace(/[:.]/g, '-')}.json`);
+  const file = path.join(backupDir, `${tgt.prefix}_${args.project}_${new Date(now).toISOString().replace(/[:.]/g, '-')}.json`);
   fs.writeFileSync(file, JSON.stringify({
-    kind: KIND, project: args.project, field: FIELD, createdAt: new Date(now).toISOString(),
+    kind: tgt.kind, project: args.project, field: tgt.field, createdAt: new Date(now).toISOString(),
     docs: plan.map((p) => ({ collection: p.collection, id: p.id, before: p.before, after: p.after, updateTime: isoOf(p.updateTime) })),
   }, null, 1));
   console.log(`Backup: ${file}`);
 
   const res = await commitInChunks(store, plan, 'yozildi');
-  const verified = await verify(store, plan);
+  const verified = await verify(store, plan, tgt.collections);
   console.log(`Natija: yozildi=${res.done}/${plan.length}, tekshiruv=${verified}, xato chunk=${res.failedChunks}`);
-  console.log(`ROLLBACK: node functions/tools/migrate_geo_latin_alphabet.js --project ${args.project} --rollback "${file}" --apply`);
+  console.log(`ROLLBACK: node functions/tools/migrate_geo_latin_alphabet.js --project ${args.project}${args.target && args.target !== 'geo' ? ` --target ${args.target}` : ''} --rollback "${file}" --apply`);
   if (res.failedChunks) process.exitCode = 1;
   return { planned: plan.length, done: res.done, verified, backup: file };
 }
 
 async function rollback(store, args) {
   const bk = JSON.parse(fs.readFileSync(path.resolve(args.rollback), 'utf8'));
-  if (bk.kind !== KIND || bk.project !== args.project) throw new Error('Backup boshqa loyiha/tur uchun');
+  const tgt = targetOf(args);
+  if (bk.kind !== tgt.kind || bk.project !== args.project) throw new Error('Backup boshqa loyiha/tur uchun (--target ?)');
   const current = [];
-  for (const col of COLLECTIONS) {
+  for (const col of tgt.collections) {
     const ids = bk.docs.filter((d) => d.collection === col).map((d) => d.id);
     for (let i = 0; i < ids.length; i += 100) current.push(...await store.getMany(col, ids.slice(i, i + 100)));
   }
@@ -244,7 +268,7 @@ async function rollback(store, args) {
   console.log(`ROLLBACK ${args.apply ? 'APPLY' : 'DRY RUN'} — qaytariladi: ${writes.length}; o'tkazib yuborildi (keyin o'zgargan/yo'q): ${skipped}`);
   if (!args.apply) return { planned: writes.length, skipped };
   const res = await commitInChunks(store, writes, 'qaytarildi');
-  const verified = await verify(store, writes);
+  const verified = await verify(store, writes, tgt.collections);
   console.log(`Natija: qaytarildi=${res.done}/${writes.length}, tekshiruv=${verified}`);
   if (res.failedChunks) process.exitCode = 1;
   return { planned: writes.length, done: res.done, verified, skipped };
@@ -254,9 +278,10 @@ async function main(argv = process.argv.slice(2)) {
   const args = parseArgs(argv);
   if (!args.project) throw new Error('--project <id> majburiy');
   if (args.rollback === '') throw new Error('--rollback <backup.json> fayli berilmadi');
+  const tgt = targetOf(args);
   const store = (!process.env.FIRESTORE_EMULATOR_HOST && process.env.GCLOUD_ACCESS_TOKEN)
-    ? restStore(args.project, process.env.GCLOUD_ACCESS_TOKEN)
-    : sdkStore(args.project);
+    ? restStore(args.project, process.env.GCLOUD_ACCESS_TOKEN, tgt.field)
+    : sdkStore(args.project, tgt.field);
   return args.rollback ? rollback(store, args) : migrate(store, args);
 }
 
@@ -264,4 +289,4 @@ if (require.main === module) {
   main().catch((e) => { console.error(e.message || e); process.exit(1); });
 }
 
-module.exports = { parseArgs, planDoc, planRollback, migrate, rollback, main, sdkStore, COLLECTIONS, FIELD };
+module.exports = { parseArgs, planDoc, planRollback, migrate, rollback, main, sdkStore, COLLECTIONS, FIELD, TARGETS, targetOf };

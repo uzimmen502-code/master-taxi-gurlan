@@ -53,7 +53,9 @@ const quiet = async (fn) => { const l = console.log; console.log = () => {}; try
 
 (async () => {
   await check('parseArgs: --project majburiy main da; --rollback faylsiz → xato', async () => {
-    assert.deepStrictEqual(M.parseArgs(['--project', 'p', '--apply']), { apply: true, project: 'p', rollback: undefined });
+    assert.deepStrictEqual(M.parseArgs(['--project', 'p', '--apply']), { apply: true, project: 'p', rollback: undefined, target: 'geo' });
+    assert.strictEqual(M.parseArgs(['--project', 'p', '--target', 'restaurants']).target, 'restaurants');
+    await assert.rejects(M.main(['--project', 'p', '--target', 'nope']), /noma'lum/);
     await assert.rejects(M.main([]), /--project/);
     await assert.rejects(M.main(['--project', 'p', '--rollback']), /--rollback/);
   });
@@ -112,6 +114,35 @@ const quiet = async (fn) => { const l = console.log; console.log = () => {}; try
     assert.strictEqual(r.done, 0);
     assert.strictEqual(s.db.get('geo_districts/shovot').name, 'Shovot tumani');
     process.exitCode = 0;
+  });
+
+  // ── --target restaurants (ega 2026-11-28, audit 18-band): restaurants/{rid}.name; kirill/brend tegilmaydi ──
+  const RSEED = {
+    'restaurants/r1': { name: "Sho'rva uyi", status: 'approved' },
+    'restaurants/r2': { name: 'Чойхона Гурлан' },
+    'restaurants/r3': { name: 'Chayxana Telegram' },
+    'restaurants/r4': { name: 'KFC' },
+    'geo_districts/shovot': { name: 'Shovot tumani' }, // geo — bu nishonda tegilmaydi
+  };
+  await check('restaurants: faqat restaurants.name; kirill va EXCLUDE brend tegilmaydi; backup turi/nomi alohida; rollback', async () => {
+    const s = memStore(RSEED);
+    const dir = tmp();
+    const dry = await quiet(() => M.migrate(s, { project: 'demo', apply: false, target: 'restaurants' }, { backupDir: dir }));
+    assert.strictEqual(dry.planned, 2);
+    const r = await quiet(() => M.migrate(s, { project: 'demo', apply: true, target: 'restaurants' }, { backupDir: dir, now: 0 }));
+    assert.deepStrictEqual([r.planned, r.done, r.verified], [2, 2, 2]);
+    assert.strictEqual(s.db.get('restaurants/r1').name, 'Şörva uyi');
+    assert.strictEqual(s.db.get('restaurants/r2').name, 'Чойхона Гурлан');
+    assert.strictEqual(s.db.get('restaurants/r3').name, 'Çayxana Telegram');
+    assert.strictEqual(s.db.get('restaurants/r4').name, 'KFC');
+    assert.strictEqual(s.db.get('geo_districts/shovot').name, 'Shovot tumani');
+    assert.match(path.basename(r.backup), /^restaurant_latin_alphabet_demo_/);
+    assert.strictEqual(JSON.parse(fs.readFileSync(r.backup, 'utf8')).kind, 'restaurant_latin_alphabet_migration');
+    // geo backup bilan restaurants rollback — rad (tur boshqa).
+    await assert.rejects(quiet(() => M.rollback(s, { project: 'demo', rollback: r.backup, apply: false })), /boshqa loyiha\/tur/);
+    const rb = await quiet(() => M.rollback(s, { project: 'demo', rollback: r.backup, apply: true, target: 'restaurants' }));
+    assert.deepStrictEqual([rb.done, rb.skipped], [2, 0]);
+    assert.strictEqual(s.db.get('restaurants/r1').name, "Sho'rva uyi");
   });
 
   if (process.env.FIRESTORE_EMULATOR_HOST) {

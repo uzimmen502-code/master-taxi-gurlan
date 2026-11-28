@@ -34,6 +34,7 @@
 const crypto = require('crypto');
 const R = require('./wholesale_import_rules');
 const X = require('./wholesale_import_xlsx');
+const moderationModes = require('./moderation_modes');
 const IMG = require('./wholesale_import_images');
 
 const BATCHES = 'wholesale_imports';
@@ -143,8 +144,7 @@ function attachWholesaleImport(exportsObj, deps) {
   }
 
   async function autoApproveOn() {
-    const s = await db.collection('settings').doc('app').get();
-    return (s.data() || {}).wholesaleProductAutoApprove === true;
+    return moderationModes.readModeAuto(db, 'wholesaleProduct'); // yagona o'quvchi (moderation_modes.js)
   }
 
   function decodeFile(b64) {

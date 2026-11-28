@@ -541,6 +541,16 @@ service cloud.firestore {
               .data.get('tvAutoApprove', false) == true;
     }
 
+    // `settings/app` dagi moderatsiya rejimi maydonlari — klient to'g'ridan-to'g'ri yoza olmaydi (faqat CF + audit).
+    // Manba: functions/moderation_modes.js (MODERATION_MODES + RETIRED_MODES). Yangi rejim qo'shilsa — shu yerga ham.
+    function moderationModeSettingKeys() {
+      return ['datingAutoApprove', 'marketAutoApprove', 'jobsAutoApprove', 'tvAutoApprove',
+              'shopItemAutoApprove', 'wholesaleProductAutoApprove', 'wholesaleSellerAutoApprove',
+              'realtyAutoApprove', 'producerVerifyAutoApprove', 'supermarketPartnerAutoApprove',
+              'deviceBindingAutoApprove', 'restaurantAutoApprove',
+              'shopItemAutoApproveUpdatedAt', 'shopItemAutoApproveUpdatedBy'];
+    }
+
     function tvClipLikeCountNow() {
       return ('likeCount' in resource.data && resource.data.likeCount is int)
           ? resource.data.likeCount
@@ -2238,6 +2248,13 @@ service cloud.firestore {
           && docId != 'courier_task_payout'
           && docId != 'supermarket'
           && (docId != 'anomaly_settings' || isSuperAdmin())
+          // Moderatsiya rejimlari (AVTO/QO'LDA, `*AutoApprove`) — faqat CF `adminSetModerationMode` (+ eski
+          // `adminSet*AutoApprove`) audit bilan yozadi (ega 2026-11-28, audit C-1, 41-band). Ro'yxat =
+          // functions/moderation_modes.js ALL_MODE_FIELDS (+ UpdatedAt/UpdatedBy). Tekshiruv:
+          // functions/test/moderation_modes_rules.test.js
+          && (docId != 'app' || !request.resource.data.diff(
+                resource == null ? {} : resource.data).affectedKeys()
+                .hasAny(moderationModeSettingKeys()))
           && (
             docId != 'prices'
             || !request.resource.data.diff(

@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 
 const { encode: geohashEncode } = require('./geo_hash');
+const moderationModes = require('./moderation_modes');
 const {
   isValidIdemKey, idemDocId, idemMatches, storageBucketsFor,
   checkImageUrls, countActiveFromDocs,
@@ -494,7 +495,7 @@ function attachRealty(exports, deps) {
     const ownerName = (String(d.ownerName || '').trim()
       || String(user.name || '').trim()).slice(0, 80);
 
-    const autoApprove = appSetting(app, 'realtyAutoApprove', true) !== false;
+    const autoApprove = moderationModes.isModeAuto(app, 'realty'); // yo'q = AVTO (moderation_modes.js)
     // Уйнинг ўз тумани (D-GEO-11); юборилмаса/номаълум — эганинг тумани.
     const geo = await propertyGeoStamp(uid, d);
     const expiresAt = admin.firestore.Timestamp.fromDate(
@@ -634,7 +635,7 @@ function attachRealty(exports, deps) {
     // Модерация ёқиқ бўлса, таҳрирланган эълон қайта текширувга тушади —
     // акс ҳолда тасдиқдан ўтган матнни кейин алмаштириб юбориш мумкин эди.
     const app = await appDoc();
-    const autoApprove = appSetting(app, 'realtyAutoApprove', true) !== false;
+    const autoApprove = moderationModes.isModeAuto(app, 'realty'); // yo'q = AVTO (moderation_modes.js)
     const nextStatus = current.status === 'blocked'
       ? 'blocked'
       : (autoApprove ? 'active' : 'pending');

@@ -38,6 +38,7 @@
 const { stableStringify, PRICE_UNITS } = require('./market_taxonomy');
 const { normalizeLang, langOfPhone } = require('./notif_i18n');
 const marketAdRetired = require('./market_ad_retired');
+const moderationModes = require('./moderation_modes');
 
 const MODULE = 'market_moderation';
 const ADMIN_ROLES = Object.freeze(['admin', 'superadmin']);
@@ -177,7 +178,7 @@ function planShopItemWrite(before, after, nowMs) {
 // ── Авто-тасдиқ (эга 2026-11-19): `settings/app.shopItemAutoApprove` ──
 // true → эга эълони модерациясиз `active` (create / expired таҳрири / renew); active таҳрири — active қолади.
 // Йўқ/false/бошқа тур → аввалги қўлда модерация. `marketAutoApprove` (ads cheap_product) — БОШҚА калит, тегилмайди.
-// Калитни админ клиенти тўғридан-тўғри ёзади (rules: settings/app — isAdmin).
+// Калитни админ `adminSetModerationMode` (mode `shopItem`, audit) орқали ёзади (2026-11-28, аудит C-1).
 const AUTO_APPROVE_KEY = 'shopItemAutoApprove';
 const AUTO_APPROVE_TTL_MS = 60 * 1000;
 const AUTO_ACTOR = 'auto';
@@ -187,9 +188,9 @@ function resetAutoApproveCache() {
   if (autoApproveCache) autoApproveCache.reset();
 }
 
-/** Созламалар ҳужжатидан қиймат (тоза): фақат аниқ `true` ёқади. */
+/** Созламалар ҳужжатидан қиймат (тоза): фақат аниқ `true` ёқади. Ягона қоида — moderation_modes.js (`shopItem`). */
 function shopItemAutoApproveOf(settings) {
-  return !!settings && settings[AUTO_APPROVE_KEY] === true;
+  return moderationModes.isModeAuto(settings, 'shopItem');
 }
 
 /**

@@ -20,7 +20,7 @@ const MARKET_ADS_RETIRED = true;
 
 const MARKET_AD_RETIRED_MESSAGES = Object.freeze({
   uz_Cyrl: 'Бу бўлимга эълон бериш ёпилди. Маҳсулотни «＋» орқали қўшинг.',
-  uz_Latn: "Bu bo'limga e'lon berish yopildi. Mahsulotni «＋» orqali qo'shing.",
+  uz_Latn: "Bu bölimga e'lon beriş yopildi. Mahsulotni «＋» orqali qöşing.",
   ru: 'Подача объявлений в этот раздел закрыта. Добавьте товар через «＋».',
 });
 

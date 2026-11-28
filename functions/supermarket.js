@@ -30,6 +30,7 @@ const { normalizeLang, langOfPhone } = require('./notif_i18n');
 // Мавжуд рағбат тизими (feat/incentives-srv e0985429 — жонли нусха; бу ердан фақат тоза/tx ёрдамчилар ишлатилади).
 const incentivesLib = require('./incentives');
 const moduleGate = require('./module_gate');
+const moderationModes = require('./moderation_modes');
 // Байрам саватчаси (эга 2026-11-26) — holiday.js бу модулни талаб қилади, шунинг учун кеч юкланади (айланма require йўқ).
 let holidayMod = null;
 const hol = () => holidayMod || (holidayMod = require('./holiday'));
@@ -1975,8 +1976,7 @@ function attachSupermarket(exportsObj, deps) {
     throw fail('permission-denied', 'PARTNER_NOT_APPROVED');
   }
   async function partnerAutoApprove() {
-    const s = await db.collection(APP_SETTINGS_DOC[0]).doc(APP_SETTINGS_DOC[1]).get();
-    return ((s.data() || {}).supermarketPartnerAutoApprove) === true;
+    return moderationModes.readModeAuto(db, 'supermarketPartner'); // yagona o'quvchi (moderation_modes.js)
   }
 
   /** Ҳамкор ўз таклифини яратади/таҳрирлайди: { sku, offer } (харид нархи/таъминотчи йўқ). */
@@ -2047,9 +2047,11 @@ function attachSupermarket(exportsObj, deps) {
   exportsObj.adminSetSupermarketPartnerAutoApprove = functions.https.onCall(async (data, context) => {
     const actor = await requireAdmin(context);
     const enabled = data && data.enabled === true;
-    await db.collection(APP_SETTINGS_DOC[0]).doc(APP_SETTINGS_DOC[1]).set({ supermarketPartnerAutoApprove: enabled }, { merge: true });
-    await db.collection(ADMIN_AUDIT).add({ kind: 'supermarket_partner_auto_approve', actor, enabled, at: ts() });
-    return { ok: true, enabled };
+    // Yagona yozuvchi: settings/app maydoni + admin_audit (kind moderation_mode_set); bir xil qiymat — noop.
+    const res = await moderationModes.setModerationModeTx(db, admin, {
+      mode: 'supermarketPartner', enabled, actor, source: 'adminSetSupermarketPartnerAutoApprove',
+    });
+    return { ok: true, enabled, changed: res.changed };
   });
 
   /**

@@ -313,6 +313,10 @@ async function main() {
       () => assertSucceeds(settings(as(ADMIN), 'anomaly_settings').get()));
   await check('settings/app: admin hamon yozadi (regressiya yo\'q)',
       () => assertSucceeds(settings(as(ADMIN), 'app').set(
+          {platformFeaturedAuto: true}, {merge: true})));
+  // 2026-11-28 (audit C-1): `*AutoApprove` — faqat CF `adminSetModerationMode` (audit).
+  await check('settings/app: admin jobsAutoApprove ni to\'g\'ridan-to\'g\'ri yoza olmaydi (faqat CF)',
+      () => assertFails(settings(as(ADMIN), 'app').set(
           {jobsAutoApprove: true}, {merge: true})));
   await check('settings/app: hamma o\'qiydi (ilova)',
       () => assertSucceeds(settings(unauth(), 'app').get()));

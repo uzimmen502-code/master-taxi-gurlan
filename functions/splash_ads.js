@@ -555,15 +555,22 @@ function attachSplashAds(exportsObj, deps) {
       const bonusCtx = await settlementLedger.prepareBonusInTx(t, db, user.id, { idempotencyKey: `splash_pay_${orderId}` });
       const balance = balanceOf(us.exists ? us.data() : {});
       if (price.amount > balance) throw fail('failed-precondition', 'INSUFFICIENT_BALANCE', { amount: price.amount, balance });
-      // ── ЁЗИШ ──
-      t.set(userRef, { bonusBalance: balance - price.amount, balanceUpdatedAt: ts() }, { merge: true });
-      t.set(userRef.collection('wallet_ledger').doc(`splash_pay_${orderId}`), {
-        type: 'purchase_debit', amount: -price.amount, module: 'splash_ad', refType: 'splash_ad_order', refId: orderId,
-        meta: { days: c.days, areaLevel: c.areaLevel, tariffVersion: tariff.version }, createdAt: ts(), createdBy: key,
-      });
-      settlementLedger.commitBonusInTx(t, bonusCtx, {
+      // Журнал бор, буюртма йўқ — аномалия (буюртма ўчирилган?): аввал bonusBalance журналсиз қайта ечиларди,
+      // энди рад (на икки марта ечиш, на текин буюртма). Оддий йўлда бу ҳолат бўлмайди (бир транзакция).
+      if (bonusCtx.jExists) {
+        log({ action: 'splashAdPurchase', result: 'refused', errorCode: 'JOURNAL_EXISTS', orderId });
+        throw fail('failed-precondition', 'INVALID_REQUEST', { errorCode: 'JOURNAL_EXISTS' });
+      }
+      // ── ЁЗИШ ── Ягона ёзиш йўли (W-1): журнал + bonusBalance (мутлақ, шу транзакцияда ўқилган) + wallet_ledger.
+      settlementLedger.walletPost(t, bonusCtx, {
         delta: -price.amount, kind: 'purchase_debit', refType: 'splash_ad_order', refId: orderId,
         meta: { module: 'splash_ad' }, postedBy: key, postedRole: 'user',
+        nextBalance: balance - price.amount,
+        walletLedgerType: 'purchase_debit', walletLedgerId: `splash_pay_${orderId}`,
+        walletLedger: {
+          module: 'splash_ad', refType: 'splash_ad_order', refId: orderId,
+          meta: { days: c.days, areaLevel: c.areaLevel, tariffVersion: tariff.version }, createdBy: key,
+        },
       });
       t.create(orderRef, {
         uid: key, walletDocId: user.id, status: 'pending', clientRequestId: crid,
@@ -659,14 +666,13 @@ function attachSplashAds(exportsObj, deps) {
       // ── ЁЗИШ ──
       let walletRefund = 0;
       if (bonusCtx && !bonusCtx.jExists) {
-        t.set(userRef, { bonusBalance: balanceOf(us && us.data()) + amount, balanceUpdatedAt: ts() }, { merge: true });
-        settlementLedger.commitBonusInTx(t, bonusCtx, {
+        // Ягона ёзиш йўли (W-1).
+        settlementLedger.walletPost(t, bonusCtx, {
           delta: amount, kind: 'splash_ad_reject_refund', refType: 'splash_ad_order', refId: orderId,
           meta: { module: 'splash_ad' }, postedBy: actor, postedRole: 'admin',
-        });
-        t.set(userRef.collection('wallet_ledger').doc(`splash_refund_${orderId}`), {
-          type: 'splash_ad_reject_refund', amount, module: 'splash_ad', refType: 'splash_ad_order', refId: orderId,
-          meta: { reason }, createdAt: ts(), createdBy: actor,
+          nextBalance: balanceOf(us && us.data()) + amount,
+          walletLedgerType: 'splash_ad_reject_refund', walletLedgerId: `splash_refund_${orderId}`,
+          walletLedger: { module: 'splash_ad', refType: 'splash_ad_order', refId: orderId, meta: { reason }, createdBy: actor },
         });
         walletRefund = amount;
       }

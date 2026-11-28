@@ -1,0 +1,131 @@
+<!doctype html>
+<!--
+  «Splash реклама» — НАМУНА (уй) креативи v2 (эга 2026-11-28).
+  Эга: «фақат Лотин тили етарли»; «расм фони асосий фондан бошқача бўлсин, лекин кўзни кесадиган даражада бўлмасин»;
+  «пастдаги тугмани олиб ташла … банернинг исталган жойи босилганда Пуллик реклама бериш экрани очилсин»;
+  «мегафон расми — Бош экрандаги Мегафон расмидан» (assets/images/home/banner_megaphone_v1.webp, ўнгга ойнали — бош
+  экран каруселидагидек; нусхаси шу папкада).
+  1080×1920 px (9:16) — `SplashAdTexts.creativeSpec`: BoxFit.contain, матн четдан ≥ 60 px ичкарида.
+  Фон: splash фони апельсин (#FFA500) — креатив ИЛИҚ КРЕМ (тинч, контраст юмшоқ), апельсин фақат урғу.
+  Рақам/даъво ЙЎҚ: фақат кодда тасдиқланган имкониятлар (ҳар очилишда кўрсатиш, 1/3/5/7 кун, туман/вилоят/республика).
+  Расмга `render.js` айлантиради (Chrome headless, янги боғлиқлик йўқ). Шрифт — иловадаги Inter.
+-->
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<title>AVA splash house ad</title>
+<style>
+  @font-face { font-family: 'Inter'; font-weight: 500; src: url('../../../assets/fonts/Inter-Medium.ttf'); }
+  @font-face { font-family: 'Inter'; font-weight: 600; src: url('../../../assets/fonts/Inter-SemiBold.ttf'); }
+  @font-face { font-family: 'Inter'; font-weight: 700; src: url('../../../assets/fonts/Inter-Bold.ttf'); }
+  @font-face { font-family: 'Inter'; font-weight: 800; src: url('../../../assets/fonts/Inter-ExtraBold.ttf'); }
+  :root {
+    --brand: #FFA500; --brand-text: #A84D08; --ink: #171717; --ink2: #4A4036;
+    --cream-hi: #FFFBF3; --cream: #FFF4E2; --cream-lo: #FBE8C8; --line: #EADBC0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1080px; height: 1920px; overflow: hidden; background: var(--cream); }
+  body { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; color: var(--ink); }
+  .stage {
+    position: relative; width: 1080px; height: 1920px; overflow: hidden;
+    background:
+      radial-gradient(820px 820px at 50% 22%, rgba(255,165,0,.16), rgba(255,165,0,0) 70%),
+      linear-gradient(180deg, var(--cream-hi) 0%, var(--cream) 55%, var(--cream-lo) 100%);
+  }
+  /* Нозик эфир тўлқинлари — мегафон атрофида, жуда паст контраст */
+  .waves { position: absolute; left: 540px; top: 520px; width: 0; height: 0; }
+  .waves i { position: absolute; border-radius: 50%; border: 5px solid rgba(168,77,8,.06); transform: translate(-50%, -50%); }
+  .content {
+    position: absolute; inset: 120px 84px 130px 84px;
+    display: flex; flex-direction: column; align-items: center; justify-content: space-between; text-align: center;
+  }
+  .content > *, .group > * { flex-shrink: 0; }
+  .group { display: flex; flex-direction: column; align-items: center; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 20px;
+    background: var(--ink); color: var(--brand);
+    font-weight: 800; font-size: 40px; letter-spacing: 6px;
+    padding: 22px 46px 22px 36px; border-radius: 999px;
+  }
+  .pill .dot { width: 22px; height: 22px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 0 8px rgba(255,165,0,.25); }
+  .meg { margin-top: 40px; width: 560px; height: 437px; transform: scaleX(-1); filter: drop-shadow(0 28px 34px rgba(168,77,8,.22)); }
+  h1 { font-weight: 800; letter-spacing: -2px; line-height: 1.04; display: flex; flex-direction: column; align-items: center; }
+  h1 .ln { display: block; white-space: nowrap; }
+  h1 .hl {
+    display: inline-block; background: var(--brand); color: var(--ink);
+    padding: 6px 34px 16px; border-radius: 28px; margin: 18px 0 20px; transform: rotate(-1.5deg);
+    box-shadow: 0 16px 30px rgba(230,138,0,.28);
+  }
+  .sub { margin-top: 48px; font-weight: 600; font-size: 52px; line-height: 1.28; max-width: 900px; color: var(--ink2); }
+  .chips { margin-top: 46px; display: flex; flex-direction: column; gap: 20px; align-items: center; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 20px;
+    background: #FFFFFF; border: 3px solid var(--line);
+    font-weight: 700; font-size: 44px; padding: 20px 40px; border-radius: 999px; white-space: nowrap;
+  }
+  .chip svg { width: 46px; height: 46px; flex: none; }
+  /* Босиш ишораси — тугма эмас, юмшоқ матн: бутун банер босилади */
+  .hint { display: inline-flex; align-items: center; gap: 22px; color: var(--brand-text); font-weight: 700; font-size: 48px; }
+  .hint svg { width: 64px; height: 64px; flex: none; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="waves" id="waves"></div>
+  <div class="content">
+    <div class="group">
+      <div class="pill"><span class="dot"></span><span>REKLAMA ÖRNI</span></div>
+      <img class="meg" src="banner_megaphone_v1.webp" alt="">
+    </div>
+    <div class="group">
+      <h1 id="headline">
+        <span class="ln">Bu yerda</span>
+        <span class="ln">sizning</span>
+        <span class="ln hl">reklamangiz</span>
+        <span class="ln">bölişi mumkin</span>
+      </h1>
+      <p class="sub">Ilova har oçilganda biznesingiz birinçi körinadi</p>
+      <div class="chips">
+        <span class="chip">
+          <svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z" fill="#A84D08"/></svg>
+          <span>Tuman · viloyat · respublika</span>
+        </span>
+        <span class="chip">
+          <svg viewBox="0 0 24 24"><path d="M7 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7zm-2 8h14v10H5V10z" fill="#A84D08"/></svg>
+          <span>1 · 3 · 5 · 7 kun</span>
+        </span>
+      </div>
+    </div>
+    <div class="hint">
+      <!-- Бармоқ билан босиш белгиси -->
+      <svg viewBox="0 0 24 24"><path d="M9 11.24V7.5a2.5 2.5 0 0 1 5 0v3.74c1.21-.81 2-2.18 2-3.74C16 5.01 13.99 3 11.5 3S7 5.01 7 7.5c0 1.56.79 2.93 2 3.74zm9.84 4.63l-4.54-2.26c-.17-.07-.35-.11-.54-.11H13v-6c0-.83-.67-1.5-1.5-1.5S10 6.67 10 7.5v10.74l-3.43-.72c-.08-.01-.15-.03-.24-.03-.31 0-.59.13-.79.33l-.79.8 4.94 4.94c.27.27.65.44 1.06.44h6.79c.75 0 1.33-.55 1.44-1.28l.75-5.27c.01-.07.02-.14.02-.2 0-.62-.38-1.16-.91-1.38z" fill="#A84D08"/></svg>
+      <span>Bosing — reklama bering</span>
+    </div>
+  </div>
+</div>
+<script>
+  const w = document.getElementById('waves');
+  for (const d of [620, 900, 1200]) {
+    const i = document.createElement('i');
+    i.style.width = i.style.height = d + 'px';
+    w.appendChild(i);
+  }
+  // Сарлавҳа: энг катта шрифт; ҳеч бир қатор 912 px дан ошмасин; гуруҳлар орасида ≥ 48 px бўш жой.
+  const h = document.getElementById('headline');
+  const MAX_W = 912;
+  (async () => {
+    await document.fonts.ready;
+    await new Promise((r) => { const im = document.querySelector('.meg'); im.complete ? r() : (im.onload = im.onerror = r); });
+    let size = 132;
+    const apply = () => { h.style.fontSize = size + 'px'; };
+    apply();
+    const widest = () => Math.max(...[...h.children].map((c) => c.getBoundingClientRect().width));
+    while (size > 70 && widest() > MAX_W) { size -= 2; apply(); }
+    const content = document.querySelector('.content');
+    const used = () => [...content.children].reduce((s, c) => s + c.getBoundingClientRect().height, 0);
+    while (size > 70 && content.clientHeight - used() < 2 * 48) { size -= 2; apply(); }
+    document.body.setAttribute('data-ready', '1');
+  })();
+</script>
+</body>
+</html>

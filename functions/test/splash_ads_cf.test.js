@@ -100,6 +100,56 @@ async function main() {
     assert.ok(/^[A-Za-z0-9]{20}$/.test(auto.adId));
   });
 
+  const IMG_L = (l) => `https://firebasestorage.googleapis.com/v0/b/x.appspot.com/o/platform_images%2Fsplash_ads%2Fhouse_${l}.png?alt=media`;
+  const HOUSE = {
+    id: 'ava_house_republic', title: 'AVA намуна', text: { uz_Cyrl: 'Бу ерда сизнинг рекламангиз бўлиши мумкин' },
+    imageUrl: IMG_L('uz_Cyrl'), imageUrls: { ru: IMG_L('ru'), uz_Cyrl: IMG_L('uz_Cyrl'), uz_Latn: IMG_L('uz_Latn') },
+    linkUrl: '', startAtMs: NOW - 3600000, endAtMs: NOW + 365 * 86400000, priority: 0, weight: 1, active: true, house: true,
+  };
+
+  await check('V2 validateAd: намуна (house) ва тил расмлари — positive / negative / boundary', async () => {
+    const ok = s.validateAd(HOUSE);
+    assert.ok(ok.ok, JSON.stringify(ok.errors));
+    assert.strictEqual(ok.clean.house, true);
+    assert.deepStrictEqual(Object.keys(ok.clean.imageUrls), ['uz_Cyrl', 'uz_Latn', 'ru']); // LANGS тартиби
+    assert.strictEqual(s.validateAd(AD).clean.house, undefined); // юборилмаган — upsert мавжудини сақлайди
+    assert.strictEqual(s.validateAd(AD).clean.imageUrls, undefined);
+    assert.deepStrictEqual(s.validateAd({ ...HOUSE, house: 'yes' }).errors, ['house']);
+    assert.deepStrictEqual(s.validateAd({ ...HOUSE, imageUrls: { en: IMG_L('en') } }).errors, ['imageUrls']);
+    assert.deepStrictEqual(s.validateAd({ ...HOUSE, imageUrls: { ru: 'https://evil.example/a.png' } }).errors, ['imageUrls']);
+    assert.deepStrictEqual(s.validateAd({ ...HOUSE, imageUrls: ['x'] }).errors, ['imageUrls']);
+    assert.deepStrictEqual(s.validateAd({ ...HOUSE, imageUrl: '' }).errors, ['imageUrl']); // эски мижоз учун сукут расм шарт
+    assert.deepStrictEqual(s.validateAd({ ...HOUSE, imageUrls: { ru: '' } }).clean.imageUrls, {}); // бўш — эътиборсиз
+    const f = s.adminAdFields(ok.clean, admin.firestore.Timestamp);
+    assert.deepStrictEqual([f.house, f.source, f.areaKeys, f.visible], [true, 'admin', ['all'], true]);
+  });
+
+  await check('C1b adminUpsertSplashAd: намуна сақланади; эски форма (house/imageUrls юбормайди) уларни йўқотмайди', async () => {
+    const r = await call('adminUpsertSplashAd', { ad: HOUSE }, ADMIN);
+    assert.deepStrictEqual([r.changed, r.version], [true, 1]);
+    let d = await get('splash_ads/ava_house_republic');
+    assert.deepStrictEqual([d.house, d.source, d.weight, d.areaKeys], [true, 'admin', 1, ['all']]);
+    assert.strictEqual(d.imageUrls.uz_Latn, IMG_L('uz_Latn'));
+    // Эски админ формаси: house/imageUrls йўқ, расм ўша — ўзгариш йўқ (идемпотент).
+    const legacy = { ...HOUSE };
+    delete legacy.house;
+    delete legacy.imageUrls;
+    assert.strictEqual((await call('adminUpsertSplashAd', { ad: legacy }, ADMIN)).changed, false);
+    // Эски форма матнни ўзгартирди — house ва тил расмлари сақланади.
+    await call('adminUpsertSplashAd', { ad: { ...legacy, text: { uz_Cyrl: 'Янги матн' } } }, ADMIN);
+    d = await get('splash_ads/ava_house_republic');
+    assert.deepStrictEqual([d.house, Object.keys(d.imageUrls).length, d.version], [true, 3, 2]);
+    // Админ асосий расмни алмаштирди — эски тил расмлари олиб ташланади (янги расм ҳамма тилда).
+    await call('adminUpsertSplashAd', { ad: { ...legacy, text: { uz_Cyrl: 'Янги матн' }, imageUrl: IMG } }, ADMIN);
+    d = await get('splash_ads/ava_house_republic');
+    assert.deepStrictEqual([d.house, d.imageUrls, d.imageUrl], [true, {}, IMG]);
+    // Аниқ house:false — оддий админ рекламага айланади.
+    await call('adminUpsertSplashAd', { ad: { ...legacy, text: { uz_Cyrl: 'Янги матн' }, imageUrl: IMG, house: false } }, ADMIN);
+    assert.strictEqual((await get('splash_ads/ava_house_republic')).house, false);
+    const a = (await audits('splash_ad_set')).filter((x) => /ava_house_republic/.test(x.target));
+    assert.strictEqual(a.length, 4);
+  });
+
   await check('C2 adminDeleteSplashAd: рухсат, аудит (аввалги ҳолат), идемпотент', async () => {
     await expectCode(call('adminDeleteSplashAd', { id: 'cola_dec' }, USER), 'PERMISSION_DENIED');
     const r = await call('adminDeleteSplashAd', { id: 'cola_dec', reason: 'муддат тугади' }, ADMIN);

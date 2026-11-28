@@ -1082,6 +1082,7 @@ service cloud.firestore {
     // Туғилган кун ва байрам саватчаси (эга 2026-11-26): ёзиш фақат CF (adminUpsertHolidayOccasion/Basket, admin_audit).
     // `visible` — сервер ҳисоблайди (байрам public + сават active). internal тестерлар — getHolidayCatalog орқали.
     // holiday_birthday_index / holiday_reminder_log / holiday_reminder_runs — қоида йўқ = ёпиқ (фақат CF).
+    // birthday_prompt_state / birthday_prompt_runs (эга 2026-11-28, ҳафталик «туғилган кунни киритинг») — қоида йўқ = ёпиқ.
     match /holiday_occasions/{id} {
       allow read: if isAdmin() || (isAuth() && resource.data.visible == true);
       allow write: if false;
@@ -2224,8 +2225,11 @@ service cloud.firestore {
           && docId != 'wallet_bot'
           && docId != 'courier_task_payout'
           && docId != 'courier_service_fee'
-          && (docId != 'supermarket' || isAdmin());
+          && (docId != 'supermarket' || isAdmin())
+          && (docId != 'birthday_prompt' || isAdmin());
       // `supermarket` — testerIds (телефонлар): мижоз ўқимайди (`getSupermarketAccess`), админ ўқийди; ёзиш фақат CF.
+      // `birthday_prompt` (эга 2026-11-28) — internalPhones (телефонлар): мижоз ўқимайди, ёзиш фақат CF
+      // `adminSetBirthdayPromptSettings` (версия + admin_audit). Тест: functions/test/birthday_prompt_rules.test.js
       // prices/app/anomaly — фақат isAdmin (олдин очиқ update бўлган).
       // `prices` ичидаги маҳаллий такси тарифи — фақат CF
       // `adminSetLocalTaxiPrices` (версия + тарих, эга қарори 2026-10-07);
@@ -2247,6 +2251,7 @@ service cloud.firestore {
           && docId != 'courier_service_fee'
           && docId != 'courier_task_payout'
           && docId != 'supermarket'
+          && docId != 'birthday_prompt'
           && (docId != 'anomaly_settings' || isSuperAdmin())
           // Moderatsiya rejimlari (AVTO/QO'LDA, `*AutoApprove`) — faqat CF `adminSetModerationMode` (+ eski
           // `adminSet*AutoApprove`) audit bilan yozadi (ega 2026-11-28, audit C-1, 41-band). Ro'yxat =

@@ -831,14 +831,21 @@ function attachCarInsurance(exportsObj, deps) {
       if (!p.sufficient) throw fail('failed-precondition', 'INSUFFICIENT_BALANCE', { walletDue: p.walletDue, balance });
       // ── ЁЗИШ ──
       if (p.walletDue > 0) {
-        t.set(userRef, { bonusBalance: balance - p.walletDue, balanceUpdatedAt: ts() }, { merge: true });
-        t.set(userRef.collection('wallet_ledger').doc(`insurance_pay_${requestId}`), {
-          type: 'purchase_debit', amount: -p.walletDue, module: 'insurance', refType: 'insurance_request', refId: requestId,
-          meta: { policyType: r.policyType, termMonths: r.termMonths, tariffVersion: r.tariffVersion }, createdAt: ts(), createdBy: key,
-        });
-        settlementLedger.commitBonusInTx(t, bonusCtx, {
+        // Журнал бор, сўров эса ҳали тўланмаган — аномалия: аввал bonusBalance журналсиз қайта ечиларди, энди рад.
+        if (bonusCtx.jExists) {
+          console.error(JSON.stringify({ action: 'insurancePay', result: 'refused', errorCode: 'JOURNAL_EXISTS', requestId }));
+          throw fail('failed-precondition', 'REQUEST_CLOSED', { errorCode: 'JOURNAL_EXISTS' });
+        }
+        // Ягона ёзиш йўли (W-1): журнал + bonusBalance (мутлақ, шу транзакцияда ўқилган) + wallet_ledger.
+        settlementLedger.walletPost(t, bonusCtx, {
           delta: -p.walletDue, kind: 'purchase_debit', refType: 'insurance_request', refId: requestId,
           meta: { module: 'insurance' }, postedBy: key, postedRole: 'user',
+          nextBalance: balance - p.walletDue,
+          walletLedgerType: 'purchase_debit', walletLedgerId: `insurance_pay_${requestId}`,
+          walletLedger: {
+            module: 'insurance', refType: 'insurance_request', refId: requestId,
+            meta: { policyType: r.policyType, termMonths: r.termMonths, tariffVersion: r.tariffVersion }, createdBy: key,
+          },
         });
       }
       inc.applyIncentiveSpendInTx(t, db, admin, { uid: walletDocId, grants, plan: p.plan, orderId: requestId });
@@ -1214,14 +1221,13 @@ function attachCarInsurance(exportsObj, deps) {
       let walletRefund = 0;
       if (bonusCtx && !bonusCtx.jExists) {
         const bal = parseInt(String(((us && us.data()) || {}).bonusBalance ?? 0), 10) || 0;
-        t.set(userRef, { bonusBalance: bal + walletPaid, balanceUpdatedAt: ts() }, { merge: true });
-        settlementLedger.commitBonusInTx(t, bonusCtx, {
+        // Ягона ёзиш йўли (W-1).
+        settlementLedger.walletPost(t, bonusCtx, {
           delta: walletPaid, kind: 'insurance_cancel_refund', refType: 'insurance_request', refId: requestId,
           meta: { module: 'insurance' }, postedBy: actor, postedRole: 'agent',
-        });
-        t.set(userRef.collection('wallet_ledger').doc(`insurance_refund_${requestId}`), {
-          type: 'insurance_cancel_refund', amount: walletPaid, module: 'insurance', refType: 'insurance_request', refId: requestId,
-          meta: { reason }, createdAt: ts(), createdBy: actor,
+          nextBalance: bal + walletPaid,
+          walletLedgerType: 'insurance_cancel_refund', walletLedgerId: `insurance_refund_${requestId}`,
+          walletLedger: { module: 'insurance', refType: 'insurance_request', refId: requestId, meta: { reason }, createdBy: actor },
         });
         walletRefund = walletPaid;
       }

@@ -7,7 +7,7 @@
 'use strict';
 const assert = require('assert');
 const T = require('../tools/assign_supermarket_sample_groups');
-// prod taxonomy/supermarket v1 = v3 файли мазмуни (2026-11-28 текширилди); v4 — +4 гуруҳ (эга «қўш», ҳужжат v2 бўлади).
+// prod taxonomy/supermarket v1 = v3 файли мазмуни (2026-11-28 текширилди); v4 — +5 гуруҳ (эга «қўш» / «ҳа», ҳужжат v2 бўлади).
 const TAX = require('../tools/data/supermarket_taxonomy_v3.json');
 const TAX4 = require('../tools/data/supermarket_taxonomy_v4.json');
 
@@ -43,7 +43,7 @@ check('CONFIRMED (эга 2026-11-28): семичка → sunflower_oil, мойк
   assert.strictEqual(g('посуда мойка'), 'dish_wash');
   assert.strictEqual(g('горох Натурелла'), 'chickpea');
   assert.strictEqual(g('Океан, универсал ювиш гели, барча турга ишлатса бўлади 5 литр'), 'laundry');
-  assert.deepStrictEqual({ ...T.ALIASES }, { семичка: 'sunflower_oil', мойка: 'dish_wash' });
+  assert.deepStrictEqual({ ...T.ALIASES }, { семичка: 'sunflower_oil', мойка: 'dish_wash', 'писта ёғи': 'sunflower_oil', 'писта мойи': 'sunflower_oil' });
 });
 
 // ── Таксономия v4 (янги гуруҳлар; гуруҳ танлови PROPOSED) ──
@@ -58,21 +58,25 @@ const LEFT10 = {
   Перловка: 'pearl_barley',
   'Пишевая сода': 'baking_soda',
   Фунчоза: 'funchoza',
-  'Қуриқ қаймоқ': null,
-  'Тузланган бодиринг': null,
-  'тузланган қалампир': null,
-  'MILTER писта ёғи 5 литр': null,
+  'Қуриқ қаймоқ': 'preserves_pickles',
+  'Тузланган бодиринг': 'preserves_pickles',
+  'тузланган қалампир': 'preserves_pickles',
+  'MILTER писта ёғи 5 литр': 'sunflower_oil',
 };
 
-check('v4 positive: 6 та гуруҳсиз намуна янги гуруҳга тушади', () => {
+check('v4 positive: 10 та гуруҳсиз намунанинг ҳаммаси гуруҳга тушади (эга 2026-11-28 «ҳа»)', () => {
   for (const [name, want] of Object.entries(LEFT10)) if (want) assert.strictEqual(g4(name), want, name);
 });
 
-check('v4: 4 таси ҳали ҳам тегилмайди (EXCLUDED тузланган/қуриқ; MILTER писта ёғи — NO_MATCH, эга ҳал қилади)', () => {
-  assert.strictEqual(r4('Қуриқ қаймоқ'), 'EXCLUDED:қуриқ');
-  assert.strictEqual(r4('Тузланган бодиринг'), 'EXCLUDED:тузланган');
-  assert.strictEqual(r4('тузланган қалампир'), 'EXCLUDED:тузланган');
-  assert.strictEqual(r4('MILTER писта ёғи 5 литр'), 'NO_MATCH');
+check('v4: тузланган/қуриқ — фақат «Консерва ва тузламалар» (янги бодиринг/қалампир/қаймоқ эмас); MILTER — CONFIRMED alias', () => {
+  assert.strictEqual(g4('тузланган қалампир'), 'preserves_pickles'); // bell_pepper эмас
+  assert.strictEqual(g4('Тузланган бодиринг'), 'preserves_pickles'); // cucumber эмас
+  assert.strictEqual(g4('Қуриқ қаймоқ'), 'preserves_pickles'); // cream эмас
+  assert.strictEqual(T.matchProduct('Қуриқ қаймоқ', IDX4).categoryId, 'oil_spices');
+  assert.strictEqual(g4('Бодринг'), 'cucumber'); // янги бодринг — аввалгидек
+  assert.strictEqual(g4('Булғор қалампири'), 'bell_pepper');
+  assert.ok(T.matchProduct('MILTER писта ёғи 5 литр', IDX4).via.includes('alias:писта ёғи'));
+  assert.strictEqual(g4('маринадланган помидор'), 'preserves_pickles'); // tomato эмас
 });
 
 check('v4 boundary/negative: ягона синоним (1 балл) етарли; умумий сўз ўғирламайди; эски 49 таси ўзгармайди', () => {
@@ -84,8 +88,12 @@ check('v4 boundary/negative: ягона синоним (1 балл) етарли
   for (const n of old49) assert.strictEqual(g4(n), g(n), n);
 });
 
-check('v3 (prod ҳозир): янги гуруҳлар йўқ — 6 таси NO_MATCH (таксономия кўтарилмагунча)', () => {
-  for (const [name, want] of Object.entries(LEFT10)) if (want) assert.strictEqual(r(name), 'NO_MATCH', name);
+check('v3 (prod ҳозир): янги гуруҳлар йўқ — 6 таси NO_MATCH, 3 таси EXCLUDED; MILTER alias v3 да ҳам ишлайди', () => {
+  for (const [name, want] of Object.entries(LEFT10)) {
+    if (want === 'preserves_pickles') assert.ok(r(name).startsWith('EXCLUDED:'), name);
+    else if (want === 'sunflower_oil') assert.strictEqual(g(name), 'sunflower_oil', name);
+    else assert.strictEqual(r(name), 'NO_MATCH', name);
+  }
 });
 
 check('negative: қисқа калит сўз бошида — қўшимча эмас («универсал» ≠ «ун», «тузланган» ≠ «туз»)', () => {
@@ -104,7 +112,7 @@ check('negative: EXCLUDE (тузланган/қуриқ) — автомат мо
 check('negative: NO_MATCH ва AMBIGUOUS (фақат умумий сўз «ёғ») — тегилмайди', () => {
   assert.strictEqual(r('Гугурт'), 'NO_MATCH');
   assert.strictEqual(r('Банкалар учун металл қопқоқ 50 дона'), 'NO_MATCH');
-  const m = T.matchProduct('MILTER писта ёғи 5 литр', IDX);
+  const m = T.matchProduct('MILTER писта ёғи 5 литр', T.buildIndex(TAX, {})); // alias'сиз
   assert.strictEqual(m.groupId, null);
   assert.strictEqual(m.reason, 'NO_MATCH'); // 0.5 + 0.5 — ҳар бири < 1
   const tie = T.buildIndex({ categories: [{ id: 'c', groups: [{ id: 'a1', names: { uz_Cyrl: 'Олма' } }, { id: 'a2', names: { uz_Cyrl: 'Нок' } }] }] });

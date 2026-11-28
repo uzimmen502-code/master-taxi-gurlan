@@ -1224,6 +1224,39 @@
             "ванилин",
             "vanilin"
           ]
+        },
+        {
+          "id": "preserves_pickles",
+          "order": 140,
+          "names": {
+            "uz_Cyrl": "Консерва ва тузламалар",
+            "uz_Latn": "Konserva va tuzlamalar",
+            "ru": "Консервы и соления"
+          },
+          "unit": "piece",
+          "step": 1,
+          "weighed": false,
+          "synonyms": [
+            "консерва",
+            "konserva",
+            "консервы",
+            "тузлама",
+            "tuzlama",
+            "тузланган",
+            "tuzlangan",
+            "соления",
+            "солёные",
+            "маринад",
+            "marinad",
+            "маринадланган",
+            "маринованные",
+            "қуриқ",
+            "quriq",
+            "қуриқ қаймоқ",
+            "quriq qaymoq",
+            "қуритилган",
+            "quritilgan"
+          ]
         }
       ]
     },

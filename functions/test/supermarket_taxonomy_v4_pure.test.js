@@ -21,17 +21,19 @@ const NEW = {
   funchoza: { cat: 'grain_flour', unit: 'pack/1/false', names: { uz_Cyrl: 'Фунчоза ва лапша', uz_Latn: 'Funçoza va lapşa', ru: 'Фунчоза и лапша' } },
   baking_soda: { cat: 'oil_spices', unit: 'pack/1/false', names: { uz_Cyrl: 'Сода ва қабартгич', uz_Latn: 'Soda va qabartgiç', ru: 'Сода и разрыхлитель' } },
   small_household: { cat: 'household', unit: 'piece/1/false', names: { uz_Cyrl: 'Майда рўзғор буюмлари', uz_Latn: 'Mayda rözğor buyumlari', ru: 'Мелкие хозтовары' } },
+  // Эга 2026-11-28 «ҳа» (номи эганики; бўлим/бирлик PROPOSED): Қуриқ қаймоқ, тузланган бодиринг/қалампир.
+  preserves_pickles: { cat: 'oil_spices', unit: 'piece/1/false', names: { uz_Cyrl: 'Консерва ва тузламалар', uz_Latn: 'Konserva va tuzlamalar', ru: 'Консервы и соления' } },
 };
 
-check('T1 v4 валидатордан ўтади; 10 бўлим / 100 гуруҳ; ҳажм чегарада', () => {
+check('T1 v4 валидатордан ўтади; 10 бўлим / 101 гуруҳ; ҳажм чегарада', () => {
   const r = sm.validateSupermarketTaxonomy(sm.trimDeep(clone(TAX4)));
   assert.ok(r.ok, r.errors.join(','));
   assert.strictEqual(TAX4.categories.length, 10);
-  assert.strictEqual(TAX4.categories.reduce((n, c) => n + c.groups.length, 0), 100);
+  assert.strictEqual(TAX4.categories.reduce((n, c) => n + c.groups.length, 0), 101);
   assert.ok(Buffer.byteLength(JSON.stringify(TAX4), 'utf8') < 200 * 1024);
 });
 
-check('T2 v3 (prod v1) ЎЗГАРМАГАН — фақат 4 гуруҳ мавжуд бўлимлар охирига қўшилди', () => {
+check('T2 v3 (prod v1) ЎЗГАРМАГАН — фақат 5 гуруҳ мавжуд бўлимлар охирига қўшилди', () => {
   assert.deepStrictEqual(TAX4.categories.map((c) => c.id), TAX3.categories.map((c) => c.id));
   TAX3.categories.forEach((c3, i) => {
     const c4 = TAX4.categories[i];
@@ -41,7 +43,7 @@ check('T2 v3 (prod v1) ЎЗГАРМАГАН — фақат 4 гуруҳ мавж
     assert.deepStrictEqual(g4.slice(0, g3.length), g3, `${c3.id} эски гуруҳлар`);
   });
   const d = diffTaxonomy(TAX3.categories, TAX4.categories);
-  assert.deepStrictEqual(d.addedGroups.sort(), ['grain_flour/funchoza', 'grain_flour/pearl_barley', 'household/small_household', 'oil_spices/baking_soda']);
+  assert.deepStrictEqual(d.addedGroups.sort(), ['grain_flour/funchoza', 'grain_flour/pearl_barley', 'household/small_household', 'oil_spices/baking_soda', 'oil_spices/preserves_pickles']);
   for (const k of ['addedCategories', 'removedCategories', 'changedCategories', 'removedGroups', 'changedGroups']) assert.deepStrictEqual(d[k], [], k);
 });
 
@@ -66,9 +68,9 @@ check('T4 гуруҳ id ягона (drinks/soda ≠ baking_soda); янги си�
   for (const id of Object.keys(NEW)) for (const s of sm.findGroup(TAX4, id).group.synonyms) assert.ok(!oldWords.has(s.toLowerCase()), `${id}: «${s}» эски гуруҳда бор`);
 });
 
-check('T5 rollback аниқланади: v4 → v3 фарқи — 4 гуруҳ removed (seed --upgrade --allow-remove талаб қилади)', () => {
+check('T5 rollback аниқланади: v4 → v3 фарқи — 5 гуруҳ removed (seed --upgrade --allow-remove талаб қилади)', () => {
   const d = diffTaxonomy(TAX4.categories, TAX3.categories);
-  assert.strictEqual(d.removedGroups.length, 4);
+  assert.strictEqual(d.removedGroups.length, 5);
   assert.deepStrictEqual(d.addedGroups, []);
 });
 
@@ -87,7 +89,7 @@ check('T6 нотўғри шакл рад: такрор id, номаълум би
 check('T7 version ҳужжатлари: v1 → v2 (seed --upgrade шакли), тарих — тўлиқ нусха', () => {
   const v = sm.buildTaxonomyVersionDocs({ categories: TAX4.categories, version: 2, previousVersion: 1, actor: 'seed', ts: null });
   assert.strictEqual(v.doc.version, 2);
-  assert.strictEqual(v.doc.categories.reduce((n, c) => n + c.groups.length, 0), 100);
+  assert.strictEqual(v.doc.categories.reduce((n, c) => n + c.groups.length, 0), 101);
   assert.strictEqual(sm.stableStringify(v.history.categories), sm.stableStringify(TAX4.categories));
 });
 

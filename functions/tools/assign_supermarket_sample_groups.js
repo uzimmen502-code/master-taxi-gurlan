@@ -49,16 +49,21 @@ const BACKUP_DIR = path.join(__dirname, 'backup');
  * CONFIRMED (эга 2026-11-28: «тўғри»): «семичка мойи» → sunflower_oil, «мойка» → dish_wash; таксономия синоними орқали
  * «горох» → chickpea ва «Океан … ювиш гели» → laundry (synonym «гель») ҳам тасдиқланган.
  * Таксономия v2 (supermarket_taxonomy_v4.json, эга 2026-11-28 «қўш») янги гуруҳлари ўз синонимлари билан мос келади:
- * Перловка → pearl_barley, Фунчоза → funchoza, Пишевая сода → baking_soda, Гугурт / резина қўлқоп / банка қопқоғи → small_household.
+ * Перловка → pearl_barley, Фунчоза → funchoza, Пишевая сода → baking_soda, Гугурт / резина қўлқоп / банка қопқоғи → small_household,
+ * Қуриқ қаймоқ / тузланган бодиринг / тузланган қалампир → preserves_pickles («Консерва ва тузламалар», эга «ҳа»).
+ * CONFIRMED (эга 2026-11-28 «Ҳа»): «писта ёғи» (MILTER) → sunflower_oil.
  */
 const ALIASES = Object.freeze({
   семичка: 'sunflower_oil',
   мойка: 'dish_wash',
+  'писта ёғи': 'sunflower_oil',
+  'писта мойи': 'sunflower_oil',
 });
 
 /**
- * Номда шу сўз бўлса автомат мослаштирилмайди (EXCLUDED → фақат `--map` билан): тузланган/қуритилган маҳсулот янги
- * (тортиладиган) сабзавот ёки совуқ сут гуруҳига тушиб қолмасин («тузланган қалампир» ≠ «Булғор қалампири»).
+ * Номда шу сўз бўлса янги (тортиладиган) сабзавот ёки совуқ сут гуруҳига тушмайди («тузланган қалампир» ≠ «Булғор
+ * қалампири»): фақат калити ўзи шу сўзни ўз ичига олган гуруҳлар ҳисобланади (таксономия v2 да — preserves_pickles,
+ * синонимлари «тузланган», «қуриқ», ...). Бундай гуруҳ йўқ бўлса — EXCLUDED (фақат `--map` билан).
  */
 const EXCLUDE = Object.freeze(['тузланган', 'консерва', 'маринад', 'маринадланган', 'қуриқ', 'қуритилган']);
 
@@ -137,10 +142,10 @@ function buildIndex(taxonomy, aliases = ALIASES) {
 function matchProduct(name, index) {
   const tokens = tokenize(name);
   const excluded = tokens.find((t) => EXCLUDE.includes(t));
-  if (excluded) return { groupId: null, reason: `EXCLUDED:${excluded}`, candidates: [] };
   const score = new Map();
   const via = new Map();
   for (const k of index.keys) {
+    if (excluded && !k.phrase.some((w) => EXCLUDE.includes(w))) continue; // фақат консерва/тузлама калитлари
     if (!phraseIn(tokens, k.phrase)) continue;
     score.set(k.groupId, (score.get(k.groupId) || 0) + k.weight);
     if (!via.has(k.groupId)) via.set(k.groupId, []);
@@ -148,6 +153,7 @@ function matchProduct(name, index) {
   }
   const ranked = [...score.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   const candidates = ranked.map(([g, s]) => `${g}:${s}`);
+  if (excluded && (!ranked.length || ranked[0][1] < 1)) return { groupId: null, reason: `EXCLUDED:${excluded}`, candidates };
   if (!ranked.length || ranked[0][1] < 1) return { groupId: null, reason: 'NO_MATCH', candidates };
   if (ranked.length > 1 && ranked[1][1] === ranked[0][1]) return { groupId: null, reason: 'AMBIGUOUS', candidates };
   const g = index.groups[ranked[0][0]];

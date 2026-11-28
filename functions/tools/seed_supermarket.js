@@ -16,7 +16,7 @@
  *   Prod ADC йўқ бўлса: $env:GCLOUD_ACCESS_TOKEN = (gcloud auth print-access-token)  → REST commit.
  *
  * Файл номи ≠ ҳужжат версияси: prod taxonomy/supermarket v1 = supermarket_taxonomy_v3.json мазмуни (2026-11-28 текширилди);
- * supermarket_taxonomy_v4.json (+4 гуруҳ, эга 2026-11-28 «қўш») → ҳужжат v2:
+ * supermarket_taxonomy_v4.json (+5 гуруҳ, эга 2026-11-28 «қўш» / «ҳа») → ҳужжат v2:
  *   node functions/tools/seed_supermarket.js --upgrade --taxonomy-file functions/tools/data/supermarket_taxonomy_v4.json \
  *     --expected-version 1 --project <id> [--apply]
  */
